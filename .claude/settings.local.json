@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install *)",
+      "Bash(npm run *)",
+      "Bash(py -0p)",
+      "Bash(py --list-paths)",
+      "Bash(py -3.11 --version)",
+      "Bash(py -3.11 -m venv .venv)",
+      "Bash(.venv/Scripts/python.exe -m pip install -q --upgrade pip)",
+      "Bash(.venv/Scripts/python.exe -m pip install -q -r requirements.txt)",
+      "Bash(.venv/Scripts/python.exe -m alembic upgrade head --sql)",
+      "Bash(.venv/Scripts/python.exe -m compileall -q .)",
+      "Bash(.venv/Scripts/python.exe -c \"import main; print\\('routes:', len\\(main.app.routes\\)\\); print\\('IMPORT_OK'\\)\")"
+    ]
+  }
+}
