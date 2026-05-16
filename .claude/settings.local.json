@@ -1,0 +1,32 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install *)",
+      "Bash(npm run *)",
+      "Bash(py -0p)",
+      "Bash(py --list-paths)",
+      "Bash(py -3.11 --version)",
+      "Bash(py -3.11 -m venv .venv)",
+      "Bash(.venv/Scripts/python.exe -m pip install -q --upgrade pip)",
+      "Bash(.venv/Scripts/python.exe -m pip install -q -r requirements.txt)",
+      "Bash(.venv/Scripts/python.exe -m alembic upgrade head --sql)",
+      "Bash(.venv/Scripts/python.exe -m compileall -q .)",
+      "Bash(.venv/Scripts/python.exe -c \"import main; print\\('routes:', len\\(main.app.routes\\)\\); print\\('IMPORT_OK'\\)\")",
+      "Bash(.venv/Scripts/python.exe -m py_compile scripts/seed_demo.py)",
+      "Bash(docker compose *)",
+      "Bash(.venv/Scripts/python.exe -m pip install -q \"arq==0.26.3\" \"redis==5.2.1\" \"slowapi==0.1.9\")",
+      "Bash(.venv/Scripts/python.exe -m compileall -q services routers models alembic queue_app.py main.py scripts)",
+      "Bash(.venv/Scripts/python.exe -c \"import main, queue_app; print\\('routes:', len\\(main.app.routes\\)\\); print\\('worker fns:', [f.__name__ for f in queue_app.WorkerSettings.functions]\\); print\\('IMPORT_OK'\\)\")",
+      "Bash(curl -s -X POST http://localhost:8000/webhooks/generic/6j3CTZJ7rJr_NnneqTxmW79QP6FzS5gV -H 'Content-Type: application/json' -d '{\"sender_id\":\"t1\",\"message\":\"كم سعر السماعة بلوتوث؟\"}')",
+      "Bash(python -c \"import sys,json;d=json.load\\(sys.stdin\\);[print\\(m['role'],'=>',m['content']\\) for m in d['messages'] if m['role']=='assistant']\")",
+      "Bash(curl -s -X POST http://localhost:8000/webhooks/generic/6j3CTZJ7rJr_NnneqTxmW79QP6FzS5gV -H \"Content-Type: application/json\" -d '{\"sender_id\":\"dbg2\",\"message\":\"بكم السماعة بلوتوث برو؟\"}')",
+      "Bash(python -c \"import sys,json;print\\('REPLY:',json.load\\(sys.stdin\\)['reply'][:200]\\)\")",
+      "Bash(curl -s http://localhost:8000/health)",
+      "Bash(echo \"health: $\\(curl -s http://localhost:8000/health\\)\")",
+      "Bash(curl -s -m 5 http://localhost:8000/health)",
+      "Bash(grep -ivE \"sqlalchemy.engine|^\\\\s*$\")",
+      "Bash(openssl rand *)",
+      "Bash(python -c \"import secrets;print\\(secrets.token_hex\\(32\\)\\)\")"
+    ]
+  }
+}

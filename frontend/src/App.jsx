@@ -1,0 +1,58 @@
+import { Navigate, Route, Routes } from "react-router-dom";
+import Navbar from "./components/Navbar.jsx";
+import { useAuth } from "./context/AuthContext.jsx";
+import AdminPage from "./pages/AdminPage.jsx";
+import BookingsPage from "./pages/BookingsPage.jsx";
+import ChannelsPage from "./pages/ChannelsPage.jsx";
+import ChatPage from "./pages/ChatPage.jsx";
+import DashboardPage from "./pages/DashboardPage.jsx";
+import DeliveryPage from "./pages/DeliveryPage.jsx";
+import EscalationsPage from "./pages/EscalationsPage.jsx";
+import LoginPage from "./pages/LoginPage.jsx";
+import OffersPage from "./pages/OffersPage.jsx";
+import PaymentSettingsPage from "./pages/PaymentSettingsPage.jsx";
+import PoliciesPage from "./pages/PoliciesPage.jsx";
+import RegisterPage from "./pages/RegisterPage.jsx";
+import TrainingPage from "./pages/TrainingPage.jsx";
+
+function Shell({ children }) { return <><Navbar />{children}</>; }
+
+function Protected({ children, role }) {
+  const { user, loading } = useAuth();
+  if (loading) return <div className="flex h-screen items-center justify-center text-gray-500">جاري التحميل…</div>;
+  if (!user) return <Navigate to="/login" replace />;
+  if (role && user.role !== role) return <Navigate to="/" replace />;
+  return <Shell>{children}</Shell>;
+}
+
+function PublicOnly({ children }) {
+  const { user, loading } = useAuth();
+  if (loading) return null;
+  if (user) return <Navigate to="/" replace />;
+  return children;
+}
+
+function Home() {
+  const { user } = useAuth();
+  return user?.role === "admin" ? <AdminPage /> : <DashboardPage />;
+}
+
+export default function App() {
+  return (
+    <Routes>
+      <Route path="/login" element={<PublicOnly><LoginPage /></PublicOnly>} />
+      <Route path="/register" element={<PublicOnly><RegisterPage /></PublicOnly>} />
+      <Route path="/" element={<Protected><Home /></Protected>} />
+      <Route path="/delivery" element={<Protected role="client"><DeliveryPage /></Protected>} />
+      <Route path="/escalations" element={<Protected role="client"><EscalationsPage /></Protected>} />
+      <Route path="/policies" element={<Protected role="client"><PoliciesPage /></Protected>} />
+      <Route path="/offers" element={<Protected role="client"><OffersPage /></Protected>} />
+      <Route path="/bookings" element={<Protected role="client"><BookingsPage /></Protected>} />
+      <Route path="/payments" element={<Protected role="client"><PaymentSettingsPage /></Protected>} />
+      <Route path="/training" element={<Protected role="client"><TrainingPage /></Protected>} />
+      <Route path="/channels" element={<Protected role="client"><ChannelsPage /></Protected>} />
+      <Route path="/chat" element={<Protected role="client"><ChatPage /></Protected>} />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  );
+}
