@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import ForeignKey, String, Text, func
+from sqlalchemy import Boolean, ForeignKey, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -60,6 +60,11 @@ class Message(Base):
     media_type: Mapped[str | None] = mapped_column(String(20), nullable=True)  # text|image|audio
     media_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     tool_calls: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    # False for inbound user messages still waiting to be answered (debounce
+    # buffer). Assistant/tool rows are created already-processed.
+    processed: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default="true", index=True
+    )
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
     session: Mapped["ChatSession"] = relationship(back_populates="messages")

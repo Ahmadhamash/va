@@ -1,0 +1,23 @@
+{
+	email {$ACME_EMAIL}
+}
+
+{$DOMAIN} {
+	encode zstd gzip
+
+	# API + webhooks + uploads → backend
+	@api path /auth/* /items/* /chat/* /admin/* /style/* /channels/* /webhooks/* /widget/* /uploads/* /health /docs /redoc /openapi.json
+	handle @api {
+		reverse_proxy backend:8000
+	}
+
+	# Everything else → the React SPA (nginx)
+	handle {
+		reverse_proxy frontend:3000
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		-Server
+	}
+}

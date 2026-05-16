@@ -1,7 +1,8 @@
 """Inbound routing + outbound delivery for external messaging channels.
 
-Inbound platform message → resolve client + per-end-user session →
-`process_message` (same DB-only/function-calling brain) → send reply back.
+- Messenger / Instagram / widget: message is buffered (processed=False) and a
+  debounced worker job is scheduled; the worker answers the whole batch once.
+- Generic webhook: synchronous request/response (no debounce — it's an API).
 """
 import hashlib
 import hmac
@@ -12,7 +13,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models import ChannelIntegration, ChatSession, User
-from services.ai_service import process_message
+from services.ai_service import process_message, save_message
+from services.queue_service import schedule_session
 
 logger = logging.getLogger("messaging")
 
@@ -22,8 +24,6 @@ GRAPH_API = "https://graph.facebook.com/v21.0"
 def verify_meta_signature(
     app_secret: str | None, raw_body: bytes, signature_header: str | None
 ) -> bool:
-    """Validate X-Hub-Signature-256. If no app_secret is configured we skip
-    (acceptable for local/dev), otherwise the signature must match."""
     if not app_secret:
         return True
     if not signature_header or not signature_header.startswith("sha256="):
@@ -70,17 +70,41 @@ async def _get_or_create_session(
     return session
 
 
-async def handle_inbound_text(
+async def _client_for(integration: ChannelIntegration, db: AsyncSession) -> User | None:
+    client = await db.get(User, integration.user_id)
+    if client is None or not client.is_active:
+        return None
+    return client
+
+
+async def enqueue_inbound(
+    integration: ChannelIntegration,
+    external_user_id: str,
+    text: str,
+    db: AsyncSession,
+) -> ChatSession | None:
+    """Buffer an inbound message and schedule debounced processing."""
+    client = await _client_for(integration, db)
+    if client is None:
+        return None
+    session = await _get_or_create_session(
+        client, integration.platform, external_user_id, db
+    )
+    await save_message(session.id, "user", text, "text", None, db, processed=False)
+    await schedule_session(session.id, db)
+    return session
+
+
+async def sync_reply(
     integration: ChannelIntegration,
     external_user_id: str,
     text: str,
     db: AsyncSession,
 ) -> str:
-    """Run an inbound channel message through the assistant; returns the reply."""
-    client = await db.get(User, integration.user_id)
-    if client is None or not client.is_active:
+    """Synchronous answer for the generic webhook (request/response)."""
+    client = await _client_for(integration, db)
+    if client is None:
         return "This assistant is currently unavailable."
-
     session = await _get_or_create_session(
         client, integration.platform, external_user_id, db
     )
@@ -101,11 +125,9 @@ async def send_meta_message(
     text: str,
     platform: str = "messenger",
 ) -> None:
-    """Send a reply via Meta Graph (Messenger & Instagram share this endpoint)."""
     if not page_access_token:
-        logger.warning("No page_access_token configured; cannot send reply")
+        logger.warning("No page_access_token; cannot send reply")
         return
-    url = f"{GRAPH_API}/me/messages"
     payload = {
         "recipient": {"id": recipient_id},
         "message": {"text": text[:1900]},
@@ -114,13 +136,11 @@ async def send_meta_message(
     try:
         async with httpx.AsyncClient(timeout=15) as http:
             resp = await http.post(
-                url,
+                f"{GRAPH_API}/me/messages",
                 params={"access_token": page_access_token},
                 json=payload,
             )
             if resp.status_code >= 400:
-                logger.error(
-                    "Meta send failed (%s): %s", resp.status_code, resp.text
-                )
+                logger.error("Meta send failed (%s): %s", resp.status_code, resp.text)
     except Exception:  # noqa: BLE001
         logger.exception("Meta send error")

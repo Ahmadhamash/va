@@ -1,9 +1,16 @@
+import { API_BASE } from "../services/api";
+
+function imgSrc(url) {
+  if (!url) return null;
+  return url.startsWith("/") ? `${API_BASE}${url}` : url;
+}
+
 export default function ItemCard({ item, onEdit, onDelete, onToggle }) {
   return (
-    <div className="bg-white rounded-xl shadow p-5 flex flex-col">
+    <div className="bg-white rounded-xl shadow-sm hover:shadow-md transition-shadow p-5 flex flex-col">
       {item.image_url ? (
         <img
-          src={item.image_url}
+          src={imgSrc(item.image_url)}
           alt={item.name}
           className="h-36 w-full object-cover rounded-md mb-3"
           onError={(e) => {

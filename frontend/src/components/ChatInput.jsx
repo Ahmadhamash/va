@@ -129,7 +129,8 @@ export default function ChatInput({ onSend, disabled }) {
           onChange={(e) => setText(e.target.value)}
           placeholder={disabled ? "Assistant is thinking…" : "Type a message…"}
           disabled={disabled}
-          className="flex-1 rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:bg-gray-100"
+          dir="auto"
+          className="flex-1 rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:bg-gray-100"
         />
 
         <button

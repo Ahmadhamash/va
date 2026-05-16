@@ -1,17 +1,44 @@
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import func, select
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from config import settings as env_settings
 from database import get_db
 from middleware.auth_middleware import get_current_admin
-from models import ChatSession, Item, Message, StyleSample, User
+from models import (
+    ChannelIntegration,
+    ChatSession,
+    Item,
+    Message,
+    StyleSample,
+    User,
+)
 from schemas.chat import MessageOut, SessionOut
 from schemas.item import ItemOut
-from schemas.user import ActiveUpdate, ClientSummary, PersonaUpdate, UserOut
+from schemas.settings import SettingsOut, SettingsUpdate, StatsOut
+from schemas.user import (
+    ActiveUpdate,
+    ClientCreate,
+    ClientSummary,
+    PasswordReset,
+    PersonaUpdate,
+    UserOut,
+)
+from services.auth_service import hash_password
+from services.settings_service import get_settings_row, invalidate_cache
 
 router = APIRouter(prefix="/admin", tags=["admin"])
+
+
+def _mask_key(key: str | None) -> str:
+    if not key:
+        return ""
+    key = key.strip()
+    if len(key) <= 8:
+        return "•" * len(key)
+    return f"{key[:3]}…{key[-4:]}"
 
 
 async def _get_client(client_id: uuid.UUID, db: AsyncSession) -> User:
@@ -28,6 +55,7 @@ async def _get_client(client_id: uuid.UUID, db: AsyncSession) -> User:
 
 @router.get("/clients", response_model=list[ClientSummary])
 async def list_clients(
+    q: str | None = Query(default=None, description="Search name/email/username"),
     _: User = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
 ):
@@ -58,6 +86,15 @@ async def list_clients(
         .where(User.role == "client")
         .order_by(User.created_at.desc())
     )
+    if q and q.strip():
+        pattern = f"%{q.strip()}%"
+        stmt = stmt.where(
+            or_(
+                User.username.ilike(pattern),
+                User.email.ilike(pattern),
+                User.business_name.ilike(pattern),
+            )
+        )
 
     rows = (await db.execute(stmt)).all()
     out: list[ClientSummary] = []
@@ -178,3 +215,138 @@ async def client_session_messages(
         .order_by(Message.created_at.asc())
     )
     return list(rows.scalars().all())
+
+
+# ─── Platform stats ──────────────────────────────────────────────────────────
+@router.get("/stats", response_model=StatsOut)
+async def stats(
+    _: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    clients = await db.scalar(
+        select(func.count()).select_from(User).where(User.role == "client")
+    )
+    active = await db.scalar(
+        select(func.count())
+        .select_from(User)
+        .where(User.role == "client", User.is_active.is_(True))
+    )
+    items = await db.scalar(select(func.count()).select_from(Item))
+    sessions = await db.scalar(select(func.count()).select_from(ChatSession))
+    messages = await db.scalar(select(func.count()).select_from(Message))
+    style = await db.scalar(select(func.count()).select_from(StyleSample))
+    channels = await db.scalar(
+        select(func.count()).select_from(ChannelIntegration)
+    )
+    by_channel_rows = await db.execute(
+        select(ChatSession.channel, func.count()).group_by(ChatSession.channel)
+    )
+    return StatsOut(
+        clients=clients or 0,
+        active_clients=active or 0,
+        items=items or 0,
+        sessions=sessions or 0,
+        messages=messages or 0,
+        style_samples=style or 0,
+        channels=channels or 0,
+        sessions_by_channel={c: n for c, n in by_channel_rows.all()},
+    )
+
+
+# ─── Client provisioning ─────────────────────────────────────────────────────
+@router.post("/clients", response_model=UserOut, status_code=status.HTTP_201_CREATED)
+async def create_client(
+    payload: ClientCreate,
+    _: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    exists = await db.execute(
+        select(User).where(
+            or_(User.username == payload.username, User.email == payload.email)
+        )
+    )
+    if exists.scalar_one_or_none() is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Username or email already registered",
+        )
+    client = User(
+        username=payload.username,
+        email=payload.email,
+        hashed_password=hash_password(payload.password),
+        business_name=payload.business_name,
+        ai_persona=payload.ai_persona,
+        role="client",
+    )
+    db.add(client)
+    await db.commit()
+    await db.refresh(client)
+    return client
+
+
+@router.post("/clients/{client_id}/reset-password", response_model=UserOut)
+async def reset_client_password(
+    client_id: uuid.UUID,
+    payload: PasswordReset,
+    _: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    client = await _get_client(client_id, db)
+    client.hashed_password = hash_password(payload.new_password)
+    await db.commit()
+    await db.refresh(client)
+    return client
+
+
+# ─── Platform settings (API key / model / debounce) ──────────────────────────
+@router.get("/settings", response_model=SettingsOut)
+async def get_platform_settings(
+    _: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    row = await get_settings_row(db)
+    db_key = (row.openai_api_key or "").strip()
+    if db_key:
+        source, masked = "database", _mask_key(db_key)
+    elif env_settings.OPENAI_API_KEY:
+        source, masked = "env", _mask_key(env_settings.OPENAI_API_KEY)
+    else:
+        source, masked = "none", ""
+    return SettingsOut(
+        openai_api_key_masked=masked,
+        key_source=source,
+        ai_model=row.ai_model,
+        debounce_seconds=row.debounce_seconds,
+    )
+
+
+@router.put("/settings", response_model=SettingsOut)
+async def update_platform_settings(
+    payload: SettingsUpdate,
+    _: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    row = await get_settings_row(db)
+    if payload.openai_api_key is not None:
+        row.openai_api_key = payload.openai_api_key.strip() or None
+    if payload.ai_model is not None:
+        row.ai_model = payload.ai_model.strip() or "gpt-4o"
+    if payload.debounce_seconds is not None:
+        row.debounce_seconds = payload.debounce_seconds
+    await db.commit()
+    await db.refresh(row)
+    invalidate_cache()
+
+    db_key = (row.openai_api_key or "").strip()
+    if db_key:
+        source, masked = "database", _mask_key(db_key)
+    elif env_settings.OPENAI_API_KEY:
+        source, masked = "env", _mask_key(env_settings.OPENAI_API_KEY)
+    else:
+        source, masked = "none", ""
+    return SettingsOut(
+        openai_api_key_masked=masked,
+        key_source=source,
+        ai_model=row.ai_model,
+        debounce_seconds=row.debounce_seconds,
+    )

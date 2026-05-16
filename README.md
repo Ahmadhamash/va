@@ -21,10 +21,26 @@ widget**.
 |-------|------|
 | Backend | FastAPI · Python 3.11 · async SQLAlchemy 2 · Alembic |
 | Database | PostgreSQL 16 |
+| Queue | Redis + ARQ worker (debounced async processing) |
 | Auth | JWT (python-jose) · bcrypt |
 | AI | OpenAI GPT-4o (text + vision) · Whisper · function calling |
 | Frontend | React 18 · Vite · Tailwind CSS · React Router |
-| Infra | Docker · docker-compose · nginx (frontend) |
+| Infra | Docker · docker-compose · nginx · Caddy (auto-HTTPS, prod) |
+
+## Scale & reliability
+
+- **Message debouncing**: a customer who splits one question across several
+  messages ("كم" / "سعر" / "السماعة") is answered once. Inbound channel
+  messages are buffered; an 8-second (configurable) Redis-coalesced ARQ job
+  answers the whole batch — only the last message's job does the work.
+- **Async worker**: Messenger/Instagram/widget replies are produced off the
+  request path by the `worker` service, so the API stays responsive with many
+  concurrent stores. Horizontally scalable (run more `worker`/`backend`).
+- **Generic webhook** stays synchronous request/response (it's an API).
+- **Runtime config**: the admin rotates the OpenAI key / model / debounce from
+  the dashboard (DB-backed, overrides `.env`, no redeploy).
+- **Hardening**: Redis-backed rate limiting (tighter on auth), security
+  headers, body-size guard, non-root containers, multi-worker uvicorn.
 
 ## Quick start (Docker — one command)
 
@@ -153,13 +169,38 @@ docker-compose.yml
 .env.example
 ```
 
-## Notes / production hardening
+## Production deployment (Docker + Caddy, auto-HTTPS)
+
+On any VPS with Docker + a domain whose DNS A record points at the server:
+
+```bash
+git clone <repo> && cd <repo>
+cp .env.prod.example .env
+#   set DOMAIN, ACME_EMAIL, OPENAI_API_KEY, and strong
+#   SECRET_KEY (openssl rand -hex 32) + DB password
+docker compose -f docker-compose.prod.yml up -d --build
+
+# create the platform admin
+docker compose -f docker-compose.prod.yml exec backend \
+  python -m scripts.create_admin --username admin --email you@x.com --password '••••'
+```
+
+- Caddy obtains/renews Let's Encrypt certs automatically and routes
+  `https://DOMAIN` → SPA, API/webhook/upload paths → backend.
+- Only ports 80/443 are public; db/redis/backend/worker are internal.
+- Scale out: `docker compose -f docker-compose.prod.yml up -d --scale worker=3
+  --scale backend=2` (rate limits & debounce are Redis-shared, so this is safe).
+- Meta webhooks now have a real HTTPS URL — no ngrok needed in prod.
+
+## Notes / hardening
 
 - Uploads validated by **MIME type + extension**, size-capped, stored under
-  `uploads/{user_id}/…` and served read-only from `/uploads`.
-- Async SQLAlchemy with `pool_size=20, max_overflow=40`.
-- Chat history capped at the last 20 turns per session to bound token usage.
-- Internal errors are logged and never leaked to clients.
-- To swap local storage for S3, replace `services/file_service.py`
-  (`save_upload` / `resolve_path` / `encode_image_base64`).
+  `uploads/{user_id}/…`; product images via `POST /items/{id}/image`.
+- Async SQLAlchemy `pool_size=20, max_overflow=40`; 4 uvicorn workers.
+- Chat history capped at the last 20 turns per session.
+- Redis-backed rate limiting, security-headers + body-size middleware,
+  non-root containers, internal errors never leaked.
+- Arabic/Latin mixing fixed end-to-end (prompt rule + `dir="auto"` /
+  `unicode-bidi:plaintext` in the UI and widget).
+- To swap local storage for S3, replace `services/file_service.py`.
 ```

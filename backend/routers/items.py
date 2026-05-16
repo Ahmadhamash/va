@@ -1,6 +1,14 @@
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    HTTPException,
+    Query,
+    UploadFile,
+    status,
+)
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -8,6 +16,7 @@ from database import get_db
 from middleware.auth_middleware import get_current_user
 from models import Item, User
 from schemas.item import ItemCreate, ItemOut, ItemUpdate
+from services.file_service import save_upload
 
 router = APIRouter(prefix="/items", tags=["items"])
 
@@ -103,6 +112,26 @@ async def delete_item(
     item = await _get_owned_item(item_id, current_user, db)
     await db.delete(item)
     await db.commit()
+
+
+@router.post("/{item_id}/image", response_model=ItemOut)
+async def upload_item_image(
+    item_id: uuid.UUID,
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    item = await _get_owned_item(item_id, current_user, db)
+    rel_path, media_type = await save_upload(file, current_user.id)
+    if media_type != "image":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only image files are allowed for products",
+        )
+    item.image_url = f"/uploads/{rel_path}"
+    await db.commit()
+    await db.refresh(item)
+    return item
 
 
 @router.patch("/{item_id}/toggle", response_model=ItemOut)

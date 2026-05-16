@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     # OpenAI
     OPENAI_API_KEY: str = ""
 
+    # Redis / task queue
+    REDIS_URL: str = "redis://localhost:6379/0"
+
     # Auth
     SECRET_KEY: str = "change-this-to-a-random-string-at-least-32-characters-long"
     ALGORITHM: str = "HS256"

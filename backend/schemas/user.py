@@ -57,3 +57,15 @@ class ClientSummary(BaseModel):
 
 class ActiveUpdate(BaseModel):
     is_active: bool
+
+
+class ClientCreate(BaseModel):
+    username: str = Field(min_length=3, max_length=50)
+    email: EmailStr
+    password: str = Field(min_length=6, max_length=128)
+    business_name: str | None = Field(default=None, max_length=255)
+    ai_persona: str | None = Field(default=None, max_length=4000)
+
+
+class PasswordReset(BaseModel):
+    new_password: str = Field(min_length=6, max_length=128)

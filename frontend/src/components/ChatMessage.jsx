@@ -25,7 +25,13 @@ export default function ChatMessage({ message }) {
           <audio controls src={mediaSrc} className="mb-2 w-56" />
         )}
         {message.content && (
-          <p className="whitespace-pre-wrap break-words">{message.content}</p>
+          <p
+            dir="auto"
+            className="whitespace-pre-wrap break-words leading-relaxed"
+            style={{ unicodeBidi: "plaintext" }}
+          >
+            {message.content}
+          </p>
         )}
         {!message.content && message.media_type === "audio" && (
           <p className="italic opacity-70">Voice message</p>

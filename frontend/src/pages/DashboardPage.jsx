@@ -58,6 +58,14 @@ export default function DashboardPage() {
     await loadItems();
   }
 
+  async function handleImageUpload(file) {
+    const fd = new FormData();
+    fd.append("file", file);
+    const { data } = await api.post(`/items/${editing.id}/image`, fd);
+    setEditing(data);
+    await loadItems();
+  }
+
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 space-y-6">
       <div className="bg-brand-50 border border-brand-100 text-brand-700 text-sm rounded-lg px-4 py-3">
@@ -99,6 +107,7 @@ export default function DashboardPage() {
             <ItemForm
               initial={editing}
               onSubmit={editing ? handleUpdate : handleCreate}
+              onImageUpload={editing ? handleImageUpload : null}
               onCancel={() => {
                 setShowForm(false);
                 setEditing(null);
