@@ -38,7 +38,7 @@ services:
       REDIS_URL: redis://redis:6379/0
       APP_ENV: production
       WEB_CONCURRENCY: ${WEB_CONCURRENCY:-4}
-      CORS_ORIGINS: '["http://${DOMAIN}"]'
+      CORS_ORIGINS: '["https://${DOMAIN}"]'
     volumes:
       - uploads_data:/app/uploads
     expose:
@@ -63,7 +63,7 @@ services:
     build:
       context: ./frontend
       args:
-        VITE_API_URL: http://${DOMAIN}
+        VITE_API_URL: https://${DOMAIN}
     restart: always
     depends_on:
       - backend
@@ -75,6 +75,7 @@ services:
     restart: always
     ports:
       - "80:80"
+      - "443:443"
     environment:
       DOMAIN: ${DOMAIN}
       ACME_EMAIL: ${ACME_EMAIL}
