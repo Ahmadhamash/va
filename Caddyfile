@@ -6,7 +6,7 @@
     encode zstd gzip
 
     @api {
-        path /auth* /items* /chat* /admin* /style* /channels* /webhooks* /widget* /uploads* /health /docs /redoc /openapi.json
+        path /auth* /items* /chat* /admin* /style* /channels* /webhooks* /widget* /uploads* /health /docs /redoc /openapi.json /business-types*
         not header Accept *text/html*
     }
     handle @api {
