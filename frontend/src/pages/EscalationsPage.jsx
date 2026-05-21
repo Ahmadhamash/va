@@ -257,8 +257,8 @@ export default function EscalationsPage() {
                     <div ref={messagesEndRef} />
                   </div>
                   
-                  {/* Reply Area (Only if pending) */}
-                  {esc.status === "pending" && (
+                  {/* Reply Area (pending or dismissed — allow releasing back to AI) */}
+                  {(esc.status === "pending" || esc.status === "dismissed") && (
                     <div className="bg-white border-t border-gray-200 p-3 space-y-3">
                       <div className="flex gap-2">
                         <input

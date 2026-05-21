@@ -74,6 +74,13 @@ async def handle_escalation(
     esc.status = payload.status
     esc.handler_notes = payload.handler_notes
     esc.handled_at = datetime.utcnow()
+
+    # When dismissing or handling, also release the session back to AI
+    if payload.status in ("handled", "dismissed"):
+        session = await db.get(ChatSession, esc.session_id)
+        if session:
+            session.is_escalated = False
+
     await db.commit()
     await db.refresh(esc)
     return esc

@@ -976,6 +976,10 @@ async def process_pending(session_id: uuid.UUID, db: AsyncSession) -> dict | Non
     image_urls: list[str] = []
 
     for m in pending:
+        logger.info(
+            "pending msg id=%s media_type=%s media_url=%s content=%s",
+            m.id, m.media_type, m.media_url, (m.content or "")[:80],
+        )
         if m.media_type == "audio" and m.media_url:
             try:
                 transcription = await _transcribe_from_url(m.media_url, db)
@@ -1001,15 +1005,19 @@ async def process_pending(session_id: uuid.UUID, db: AsyncSession) -> dict | Non
 
     # ── Build content payload for OpenAI ──
     if image_urls:
+        logger.info("Processing %d image(s) for session %s", len(image_urls), session_id)
         content: object = [
             {
                 "type": "text",
                 "text": combined_text or "What do you see in this image?",
             },
         ]
+        images_added = 0
         for img_url in image_urls:
             try:
+                logger.info("Downloading image from: %s", img_url[:120])
                 b64, mime = await _encode_image_from_url(img_url)
+                logger.info("Image encoded: mime=%s size=%d bytes", mime, len(b64))
                 content.append({
                     "type": "image_url",
                     "image_url": {
@@ -1017,8 +1025,17 @@ async def process_pending(session_id: uuid.UUID, db: AsyncSession) -> dict | Non
                         "detail": "high",
                     },
                 })
+                images_added += 1
             except Exception:  # noqa: BLE001
-                logger.exception("image download/encode failed")
+                logger.exception("image download/encode failed for %s", img_url[:120])
+
+        # If all image downloads failed, fall back to text or send error
+        if images_added == 0:
+            logger.warning("All image downloads failed, falling back to text")
+            if combined_text:
+                content = combined_text
+            else:
+                content = "The customer sent an image but I could not download it."
     else:
         content = combined_text
 
