@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const baseURL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+const baseURL = (import.meta.env.VITE_API_URL || "http://localhost:8000") + "/api";
 
 const api = axios.create({ baseURL });
 
@@ -27,9 +27,14 @@ api.interceptors.response.use(
   (res) => res,
   (error) => {
     if (error.response && error.response.status === 401) {
-      setToken(null);
-      if (window.location.pathname !== "/login") {
-        window.location.href = "/login";
+      // Only clear token and redirect if the request actually carried a token
+      // (avoids nuking the session on spurious 401s from unauthenticated requests)
+      const hadToken = error.config && error.config.headers && error.config.headers.Authorization;
+      if (hadToken) {
+        setToken(null);
+        if (window.location.pathname !== "/login") {
+          window.location.href = "/login";
+        }
       }
     }
     return Promise.reject(error);

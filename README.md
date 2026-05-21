@@ -51,7 +51,7 @@ docker compose up --build
 ```
 
 - Frontend: http://localhost:3000
-- API + Swagger docs: http://localhost:8000/docs
+- API + Swagger docs: http://localhost:8000/api/docs
 - Database: localhost:5432
 
 The backend container runs `alembic upgrade head` automatically before serving,
@@ -96,43 +96,43 @@ See [`.env.example`](.env.example). Key ones:
 ## API
 
 ### Auth
-- `POST /auth/register` → `{ access_token }` (first account = admin)
-- `POST /auth/login` → `{ access_token }`
-- `GET  /auth/me` (includes `role`)
+- `POST /api/auth/register` → `{ access_token }` (first account = admin)
+- `POST /api/auth/login` → `{ access_token }`
+- `GET  /api/auth/me` (includes `role`)
 
 ### Admin (admin-only)
-- `GET   /admin/clients` — all clients + item/chat/voice counts
-- `GET   /admin/clients/{id}`
-- `PUT   /admin/clients/{id}/persona` — set/override AI persona
-- `PATCH /admin/clients/{id}/active` — enable/disable account
-- `GET   /admin/clients/{id}/items`
-- `GET   /admin/clients/{id}/sessions`
-- `GET   /admin/clients/{id}/sessions/{sid}/messages`
+- `GET   /api/admin/clients` — all clients + item/chat/voice counts
+- `GET   /api/admin/clients/{id}`
+- `PUT   /api/admin/clients/{id}/persona` — set/override AI persona
+- `PATCH /api/admin/clients/{id}/active` — enable/disable account
+- `GET   /api/admin/clients/{id}/items`
+- `GET   /api/admin/clients/{id}/sessions`
+- `GET   /api/admin/clients/{id}/sessions/{sid}/messages`
 
 ### Items (client; scoped to the authenticated owner)
-- `GET /items` · `POST /items` · `PUT /items/{id}` · `DELETE /items/{id}`
-- `PATCH /items/{id}/toggle` · `GET /items/search?q=…`
+- `GET /api/items` · `POST /api/items` · `PUT /api/items/{id}` · `DELETE /api/items/{id}`
+- `PATCH /api/items/{id}/toggle` · `GET /api/items/search?q=…`
 
 ### Chat (client)
-- `POST /chat/send` — multipart: `message`, optional `session_id`,
+- `POST /api/chat/send` — multipart: `message`, optional `session_id`,
   optional `file` (image or audio). Creates a session if none is given.
-- `GET /chat/sessions` · `GET /chat/sessions/{id}/messages` ·
-  `DELETE /chat/sessions/{id}`
+- `GET /api/chat/sessions` · `GET /api/chat/sessions/{id}/messages` ·
+  `DELETE /api/chat/sessions/{id}`
 
 ### AI Voice / style training (client)
-- `POST   /style/upload` — multipart: `file` (.txt/.json/.csv), optional
+- `POST   /api/style/upload` — multipart: `file` (.txt/.json/.csv), optional
   `my_name`. Parses your past chats into voice samples.
-- `GET    /style/samples` · `DELETE /style/samples/{id}` ·
-  `DELETE /style/samples` (clear all)
+- `GET    /api/style/samples` · `DELETE /api/style/samples/{id}` ·
+  `DELETE /api/style/samples` (clear all)
 
 ### Channels (client) + public webhooks
-- `POST /channels` (`platform` = messenger|instagram|webhook|widget,
-  `credentials`), `GET /channels`, `PATCH /channels/{id}/toggle`,
-  `DELETE /channels/{id}` — returns per-channel callback/inbound/widget URLs
+- `POST /api/channels` (`platform` = messenger|instagram|webhook|widget,
+  `credentials`), `GET /api/channels`, `PATCH /api/channels/{id}/toggle`,
+  `DELETE /api/channels/{id}` — returns per-channel callback/inbound/widget URLs
 - Public, routed by unguessable `public_id`:
-  - `GET|POST /webhooks/meta/{public_id}` — Meta verify + Messenger/IG events
-  - `POST /webhooks/generic/{public_id}` — `{sender_id, message}` → `{reply}`
-  - `POST /webhooks/widget/{public_id}/message` + `GET /widget/{public_id}.js`
+  - `GET|POST /api/webhooks/meta/{public_id}` — Meta verify + Messenger/IG events
+  - `POST /api/webhooks/generic/{public_id}` — `{sender_id, message}` → `{reply}`
+  - `POST /api/webhooks/widget/{public_id}/message` + `GET /api/widget/{public_id}.js`
     (embeddable chat bubble)
 
 ### Bootstrap an admin
@@ -195,7 +195,7 @@ docker compose -f docker-compose.prod.yml exec backend \
 ## Notes / hardening
 
 - Uploads validated by **MIME type + extension**, size-capped, stored under
-  `uploads/{user_id}/…`; product images via `POST /items/{id}/image`.
+  `uploads/{user_id}/…`; product images via `POST /api/items/{id}/image`.
 - Async SQLAlchemy `pool_size=20, max_overflow=40`; 4 uvicorn workers.
 - Chat history capped at the last 20 turns per session.
 - Redis-backed rate limiting, security-headers + body-size middleware,

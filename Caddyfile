@@ -5,9 +5,8 @@
 {$DOMAIN} {
 	encode zstd gzip
 
-	# API + webhooks + uploads → backend
-	@api path /auth/* /items/* /chat/* /admin/* /style/* /channels/* /webhooks/* /widget/* /uploads/* /health /docs /redoc /openapi.json
-	handle @api {
+	# All API requests → backend
+	handle /api/* {
 		reverse_proxy backend:8000
 	}
 

@@ -2,7 +2,7 @@ import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import APIRouter, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -12,7 +12,8 @@ from slowapi.middleware import SlowAPIMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from config import settings
-from routers import admin, auth, channels, chat, items, style, webhooks
+from routers import admin, auth, bookings, channels, chat, delivery, escalations, items, offers, policies, style, webhooks, workflows
+from services.business_templates import list_business_types
 from services.ratelimit import limiter
 
 logging.basicConfig(
@@ -77,19 +78,37 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
     )
 
 
-app.include_router(auth.router)
-app.include_router(items.router)
-app.include_router(chat.router)
-app.include_router(admin.router)
-app.include_router(style.router)
-app.include_router(channels.router)
-app.include_router(webhooks.router)  # public — routed by unguessable public_id
+# ─── All API routes under /api prefix ────────────────────────────────────────
+api_router = APIRouter(prefix="/api")
 
-_upload_dir = Path(settings.UPLOAD_DIR)
-_upload_dir.mkdir(parents=True, exist_ok=True)
-app.mount("/uploads", StaticFiles(directory=str(_upload_dir)), name="uploads")
+api_router.include_router(auth.router)
+api_router.include_router(items.router)
+api_router.include_router(chat.router)
+api_router.include_router(admin.router)
+api_router.include_router(style.router)
+api_router.include_router(channels.router)
+api_router.include_router(delivery.router)
+api_router.include_router(escalations.router)
+api_router.include_router(policies.router)
+api_router.include_router(offers.router)
+api_router.include_router(bookings.router)
+api_router.include_router(workflows.router)
+api_router.include_router(webhooks.router)  # public — routed by unguessable public_id
 
 
-@app.get("/health", tags=["health"])
+@api_router.get("/health", tags=["health"])
 async def health():
     return {"status": "ok"}
+
+
+@api_router.get("/business-types", tags=["templates"])
+async def business_types():
+    return list_business_types()
+
+
+app.include_router(api_router)
+
+# Static uploads served under /api/uploads so Caddy routes them to the backend
+_upload_dir = Path(settings.UPLOAD_DIR)
+_upload_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/api/uploads", StaticFiles(directory=str(_upload_dir)), name="uploads")

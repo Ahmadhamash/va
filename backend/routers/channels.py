@@ -16,23 +16,24 @@ router = APIRouter(prefix="/channels", tags=["channels"])
 def _endpoints(platform: str, public_id: str) -> dict:
     if platform in ("messenger", "instagram"):
         return {
-            "callback_url": f"/webhooks/meta/{public_id}",
+            "callback_url": f"/api/webhooks/meta/{public_id}",
             "note": "Use this as the Meta webhook Callback URL (GET verify + "
             "POST events). Set the same verify_token in Meta and here.",
         }
     if platform == "webhook":
         return {
-            "inbound_url": f"/webhooks/generic/{public_id}",
+            "inbound_url": f"/api/webhooks/generic/{public_id}",
             "note": "POST {\"sender_id\": \"...\", \"message\": \"...\"} → "
             "{\"reply\": \"...\"}. Send X-Webhook-Secret if you set one.",
         }
     if platform == "widget":
         return {
-            "script_url": f"/widget/{public_id}.js",
-            "message_url": f"/webhooks/widget/{public_id}/message",
+            "script_url": f"/api/widget/{public_id}.js",
+            "message_url": f"/api/webhooks/widget/{public_id}/message",
             "note": "Embed the script tag on any site to add a chat bubble.",
         }
     return {}
+
 
 
 def _to_out(ci: ChannelIntegration) -> ChannelOut:

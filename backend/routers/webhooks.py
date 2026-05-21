@@ -197,7 +197,7 @@ async def widget_script(
     if integration is None or integration.platform != "widget":
         raise HTTPException(status_code=404, detail="Unknown widget")
 
-    base = str(request.base_url).rstrip("/")
+    base = str(request.base_url).rstrip("/") + "/api"
     js = (
         _WIDGET_JS.replace("__BASE__", base).replace("__PID__", public_id)
     )
