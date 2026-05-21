@@ -2,7 +2,8 @@
     encode zstd gzip
 
     # All API requests → backend
-    handle /api/* {
+    @api path /api/*
+    handle @api {
         reverse_proxy backend:8000
     }
 
