@@ -18,21 +18,24 @@ export default function LoginPage() {
       await login(username, password);
       navigate("/");
     } catch (err) {
-      setError(err?.response?.data?.detail || "Login failed");
+      const detail = err?.response?.data?.detail;
+      setError(
+        typeof detail === "string" ? detail : "فشل تسجيل الدخول"
+      );
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center px-4">
+    <div className="flex min-h-screen items-center justify-center px-4 py-10" dir="rtl">
       <form
         onSubmit={handleSubmit}
         className="w-full max-w-sm bg-white rounded-xl shadow p-8 space-y-5"
       >
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Welcome back</h1>
-          <p className="text-sm text-gray-500">Sign in to your assistant</p>
+          <h1 className="text-2xl font-bold text-gray-900">تسجيل الدخول</h1>
+          <p className="text-sm text-gray-500">ادخل إلى لوحة التحكم</p>
         </div>
 
         {error && (
@@ -43,9 +46,10 @@ export default function LoginPage() {
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            Username
+            اسم المستخدم
           </label>
           <input
+            type="text"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             required
@@ -55,7 +59,7 @@ export default function LoginPage() {
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            Password
+            كلمة المرور
           </label>
           <input
             type="password"
@@ -71,13 +75,13 @@ export default function LoginPage() {
           disabled={busy}
           className="w-full bg-brand-600 hover:bg-brand-700 text-white rounded-md py-2 font-medium disabled:opacity-60"
         >
-          {busy ? "Signing in…" : "Sign in"}
+          {busy ? "جاري الدخول…" : "دخول"}
         </button>
 
         <p className="text-sm text-center text-gray-500">
-          No account?{" "}
+          ليس لديك حساب؟{" "}
           <Link to="/register" className="text-brand-600 font-medium">
-            Register
+            إنشاء حساب
           </Link>
         </p>
       </form>

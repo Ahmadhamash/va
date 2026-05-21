@@ -11,6 +11,8 @@ from services.auth_service import (
     hash_password,
     verify_password,
 )
+from services.business_templates import get_template
+from models import BusinessPolicy
 from services.ratelimit import limiter
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -36,14 +38,39 @@ async def register(
     user_count = await db.scalar(select(func.count()).select_from(User))
     role = "admin" if not user_count else "client"
 
+    # Apply template if business_type is provided
+    persona = None
+    policies_to_add = []
+    if payload.business_type:
+        template = get_template(payload.business_type)
+        if template:
+            persona = template["persona"]
+            for pol in template["default_policies"]:
+                policies_to_add.append(
+                    BusinessPolicy(
+                        policy_type=pol["type"],
+                        title=pol["title"],
+                        content=pol["content"],
+                        is_active=True,
+                    )
+                )
+
     user = User(
         username=payload.username,
         email=payload.email,
         hashed_password=hash_password(payload.password),
         business_name=payload.business_name,
+        business_type=payload.business_type,
+        ai_persona=persona,
         role=role,
     )
     db.add(user)
+    await db.flush()  # To get user.id for policies
+
+    for p in policies_to_add:
+        p.user_id = user.id
+        db.add(p)
+
     await db.commit()
     await db.refresh(user)
 

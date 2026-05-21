@@ -9,6 +9,7 @@ class UserRegister(BaseModel):
     email: EmailStr
     password: str = Field(min_length=6, max_length=128)
     business_name: str | None = Field(default=None, max_length=255)
+    business_type: str | None = Field(default=None, max_length=50)
 
 
 class UserLogin(BaseModel):
@@ -64,6 +65,7 @@ class ClientCreate(BaseModel):
     email: EmailStr
     password: str = Field(min_length=6, max_length=128)
     business_name: str | None = Field(default=None, max_length=255)
+    business_type: str | None = Field(default=None, max_length=50)
     ai_persona: str | None = Field(default=None, max_length=4000)
 
 

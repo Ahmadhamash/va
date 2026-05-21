@@ -35,7 +35,6 @@ def _endpoints(platform: str, public_id: str) -> dict:
     return {}
 
 
-
 def _to_out(ci: ChannelIntegration) -> ChannelOut:
     out = ChannelOut.model_validate(ci)
     out.configured_keys = sorted(

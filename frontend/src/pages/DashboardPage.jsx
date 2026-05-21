@@ -48,7 +48,7 @@ export default function DashboardPage() {
   }
 
   async function handleDelete(item) {
-    if (!window.confirm(`Delete "${item.name}"?`)) return;
+    if (!window.confirm(`حذف "${item.name}"?`)) return;
     await api.delete(`/items/${item.id}`);
     await loadItems();
   }
@@ -67,27 +67,27 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-8 space-y-6">
+    <div className="mx-auto max-w-6xl px-4 py-8 space-y-6" dir="rtl">
       <div className="bg-brand-50 border border-brand-100 text-brand-700 text-sm rounded-lg px-4 py-3">
-        Your AI persona is managed by the platform admin. Use{" "}
-        <strong>AI Voice</strong> to teach the assistant your speaking style,
-        and <strong>Channels</strong> to connect Messenger / Instagram / a web
-        widget.
+        شخصية المساعد الذكي يديرها مدير المنصة. استخدم{" "}
+        <strong>صوت AI</strong> لتعليم المساعد أسلوب كلامك،
+        و<strong>القنوات</strong> لربط Messenger / Instagram / ويدجت الموقع.
       </div>
 
       <section>
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-          <h1 className="text-xl font-bold">Catalog</h1>
+          <h1 className="text-xl font-bold">الكاتالوج</h1>
           <div className="flex gap-2">
             <form onSubmit={handleSearch} className="flex gap-2">
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search…"
+                placeholder="بحث…"
+                dir="auto"
                 className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
               />
               <button className="border border-gray-300 rounded-md px-3 py-2 text-sm hover:bg-gray-50">
-                Search
+                بحث
               </button>
             </form>
             <button
@@ -97,7 +97,7 @@ export default function DashboardPage() {
               }}
               className="bg-brand-600 hover:bg-brand-700 text-white rounded-md px-4 py-2 text-sm font-medium"
             >
-              + Add item
+              + إضافة عنصر
             </button>
           </div>
         </div>
@@ -117,10 +117,10 @@ export default function DashboardPage() {
         )}
 
         {loading ? (
-          <p className="text-gray-500">Loading items…</p>
+          <p className="text-gray-500">جاري تحميل العناصر…</p>
         ) : items.length === 0 ? (
           <p className="text-gray-500">
-            No items yet. Add your first product or service.
+            لا توجد عناصر بعد. أضف أول منتج أو خدمة.
           </p>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">

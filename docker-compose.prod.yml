@@ -1,10 +1,3 @@
-# Production stack — Caddy terminates TLS (auto Let's Encrypt) and routes to
-# the API + SPA. Only ports 80/443 are exposed publicly.
-#
-#   cp .env.prod.example .env
-#   # edit DOMAIN, ACME_EMAIL, strong SECRET_KEY/passwords, OPENAI_API_KEY
-#   docker compose -f docker-compose.prod.yml up -d --build
-
 services:
   db:
     image: postgres:16

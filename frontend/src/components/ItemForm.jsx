@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { API_BASE } from "../services/api";
+import api from "../services/api";
 
 const EMPTY = {
   name: "",
@@ -8,6 +9,12 @@ const EMPTY = {
   price: "",
   currency: "USD",
   available: true,
+  warranty_duration: "",
+  warranty_terms: "",
+  warranty_coverage: "",
+  warranty_exclusions: "",
+  stock_quantity: "",
+  stock_status: "in_stock",
 };
 
 function imgSrc(url) {
@@ -18,6 +25,7 @@ function imgSrc(url) {
 export default function ItemForm({ initial, onSubmit, onCancel, onImageUpload }) {
   const [form, setForm] = useState(EMPTY);
   const [meta, setMeta] = useState([]); // [{k,v}]
+  const [variants, setVariants] = useState([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const fileRef = useRef(null);
@@ -31,12 +39,20 @@ export default function ItemForm({ initial, onSubmit, onCancel, onImageUpload })
         price: initial.price ?? "",
         currency: initial.currency || "USD",
         available: initial.available ?? true,
+        warranty_duration: initial.warranty_duration || "",
+        warranty_terms: initial.warranty_terms || "",
+        warranty_coverage: initial.warranty_coverage || "",
+        warranty_exclusions: initial.warranty_exclusions || "",
+        stock_quantity: initial.stock_quantity ?? "",
+        stock_status: initial.stock_status || "in_stock",
       });
       const m = initial.metadata || {};
       setMeta(Object.keys(m).map((k) => ({ k, v: String(m[k]) })));
+      setVariants(initial.variants || []);
     } else {
       setForm(EMPTY);
       setMeta([]);
+      setVariants([]);
     }
   }, [initial]);
 
@@ -56,10 +72,12 @@ export default function ItemForm({ initial, onSubmit, onCancel, onImageUpload })
       await onSubmit({
         ...form,
         price: form.price === "" ? null : Number(form.price),
+        stock_quantity:
+          form.stock_quantity === "" ? null : Number(form.stock_quantity),
         metadata,
       });
     } catch (err) {
-      setError(err?.response?.data?.detail || "Could not save item");
+      setError(err?.response?.data?.detail || "تعذر حفظ العنصر");
     } finally {
       setBusy(false);
     }
@@ -72,20 +90,67 @@ export default function ItemForm({ initial, onSubmit, onCancel, onImageUpload })
     try {
       await onImageUpload(f);
     } catch (err) {
-      setError(err?.response?.data?.detail || "Image upload failed");
+      setError(err?.response?.data?.detail || "فشل رفع الصورة");
     } finally {
       setBusy(false);
       if (fileRef.current) fileRef.current.value = "";
     }
   }
 
+  // ─── Variant helpers ──────────────────────────────────────────────
+  const [newVariant, setNewVariant] = useState({
+    option_type: "",
+    option_value: "",
+    price_override: "",
+    available: true,
+  });
+
+  async function addVariant() {
+    if (!initial || !newVariant.option_type || !newVariant.option_value) return;
+    setBusy(true);
+    try {
+      const payload = {
+        ...newVariant,
+        price_override:
+          newVariant.price_override === ""
+            ? null
+            : Number(newVariant.price_override),
+      };
+      const { data } = await api.post(
+        `/items/${initial.id}/variants`,
+        payload
+      );
+      setVariants([...variants, data]);
+      setNewVariant({
+        option_type: "",
+        option_value: "",
+        price_override: "",
+        available: true,
+      });
+    } catch (err) {
+      setError(err?.response?.data?.detail || "فشل إضافة الخيار");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deleteVariant(vid) {
+    if (!initial) return;
+    await api.delete(`/items/${initial.id}/variants/${vid}`);
+    setVariants(variants.filter((v) => v.id !== vid));
+  }
+
   const inputCls =
     "w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500";
 
   return (
-    <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-sm p-6 space-y-4">
+    <form
+      onSubmit={handleSubmit}
+      className="bg-white rounded-2xl shadow-sm p-6 space-y-4"
+      dir="rtl"
+    >
       <h2 className="text-lg font-semibold">
-        {initial ? "Edit item" : "Add new item"}
+        {initial ? "تعديل العنصر" : "إضافة عنصر جديد"}
       </h2>
 
       {error && (
@@ -94,10 +159,11 @@ export default function ItemForm({ initial, onSubmit, onCancel, onImageUpload })
         </div>
       )}
 
+      {/* ─── Basic Info ─── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="sm:col-span-2">
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            Name *
+            الاسم *
           </label>
           <input
             value={form.name}
@@ -110,7 +176,7 @@ export default function ItemForm({ initial, onSubmit, onCancel, onImageUpload })
 
         <div className="sm:col-span-2">
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            Description / extra info
+            الوصف / معلومات إضافية
           </label>
           <textarea
             value={form.description}
@@ -123,7 +189,7 @@ export default function ItemForm({ initial, onSubmit, onCancel, onImageUpload })
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            Category
+            التصنيف
           </label>
           <input
             value={form.category}
@@ -136,7 +202,7 @@ export default function ItemForm({ initial, onSubmit, onCancel, onImageUpload })
         <div className="grid grid-cols-2 gap-2">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Price
+              السعر
             </label>
             <input
               type="number"
@@ -149,7 +215,7 @@ export default function ItemForm({ initial, onSubmit, onCancel, onImageUpload })
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Currency
+              العملة
             </label>
             <input
               value={form.currency}
@@ -165,29 +231,231 @@ export default function ItemForm({ initial, onSubmit, onCancel, onImageUpload })
             checked={form.available}
             onChange={(e) => update("available", e.target.checked)}
           />
-          Available
+          متوفر
         </label>
       </div>
 
-      {/* Extra info (metadata key/value) */}
-      <div>
+      {/* ─── Stock ─── */}
+      <div className="border-t pt-4">
+        <h3 className="text-sm font-semibold text-gray-800 mb-3">📦 المخزون</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              الكمية (اتركه فارغ = غير محدد)
+            </label>
+            <input
+              type="number"
+              min="0"
+              value={form.stock_quantity}
+              onChange={(e) => update("stock_quantity", e.target.value)}
+              className={inputCls}
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              حالة المخزون
+            </label>
+            <select
+              value={form.stock_status}
+              onChange={(e) => update("stock_status", e.target.value)}
+              className={inputCls}
+            >
+              <option value="in_stock">متوفر</option>
+              <option value="out_of_stock">غير متوفر</option>
+              <option value="preorder">طلب مسبق</option>
+              <option value="coming_soon">قريباً</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* ─── Warranty ─── */}
+      <div className="border-t pt-4">
+        <h3 className="text-sm font-semibold text-gray-800 mb-3">🛡️ الكفالة / الضمان</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              مدة الكفالة
+            </label>
+            <input
+              value={form.warranty_duration}
+              onChange={(e) => update("warranty_duration", e.target.value)}
+              placeholder="مثل: سنة، 6 أشهر، بدون كفالة"
+              dir="auto"
+              className={inputCls}
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              شروط الكفالة
+            </label>
+            <input
+              value={form.warranty_terms}
+              onChange={(e) => update("warranty_terms", e.target.value)}
+              placeholder="مثل: تغطي عيوب التصنيع فقط"
+              dir="auto"
+              className={inputCls}
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              ما تشمله الكفالة
+            </label>
+            <textarea
+              value={form.warranty_coverage}
+              onChange={(e) => update("warranty_coverage", e.target.value)}
+              placeholder="مثل: الشاشة، البطارية، عيوب التصنيع"
+              rows={2}
+              dir="auto"
+              className={inputCls}
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              ما لا تشمله الكفالة
+            </label>
+            <textarea
+              value={form.warranty_exclusions}
+              onChange={(e) => update("warranty_exclusions", e.target.value)}
+              placeholder="مثل: الكسر، دخول الماء، سوء الاستخدام"
+              rows={2}
+              dir="auto"
+              className={inputCls}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* ─── Variants ─── */}
+      {initial && (
+        <div className="border-t pt-4">
+          <h3 className="text-sm font-semibold text-gray-800 mb-3">
+            🎨 الخيارات (ألوان / مقاسات / موديلات)
+          </h3>
+          {variants.length > 0 && (
+            <div className="space-y-2 mb-3">
+              {variants.map((v) => (
+                <div
+                  key={v.id}
+                  className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2 text-sm"
+                >
+                  <span className="font-medium text-gray-600">
+                    {v.option_type}:
+                  </span>
+                  <span dir="auto">{v.option_value}</span>
+                  {v.price_override != null && (
+                    <span className="text-brand-600">
+                      ({v.price_override} {form.currency})
+                    </span>
+                  )}
+                  <span
+                    className={
+                      v.available ? "text-green-600" : "text-red-500"
+                    }
+                  >
+                    {v.available ? "✓" : "✗"}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => deleteVariant(v.id)}
+                    className="text-red-400 hover:text-red-600 mr-auto"
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="flex flex-wrap gap-2 items-end">
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">
+                النوع
+              </label>
+              <select
+                value={newVariant.option_type}
+                onChange={(e) =>
+                  setNewVariant({ ...newVariant, option_type: e.target.value })
+                }
+                className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
+              >
+                <option value="">اختر…</option>
+                <option value="color">لون</option>
+                <option value="size">مقاس</option>
+                <option value="flavor">نكهة</option>
+                <option value="model">موديل</option>
+                <option value="material">خامة</option>
+                <option value="edition">نسخة</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">
+                القيمة
+              </label>
+              <input
+                value={newVariant.option_value}
+                onChange={(e) =>
+                  setNewVariant({ ...newVariant, option_value: e.target.value })
+                }
+                placeholder="مثل: أسود، L، فانيلا"
+                dir="auto"
+                className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm w-32"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">
+                سعر مختلف
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={newVariant.price_override}
+                onChange={(e) =>
+                  setNewVariant({
+                    ...newVariant,
+                    price_override: e.target.value,
+                  })
+                }
+                placeholder="اختياري"
+                className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm w-24"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={addVariant}
+              disabled={!newVariant.option_type || !newVariant.option_value}
+              className="bg-brand-600 hover:bg-brand-700 text-white rounded-lg px-3 py-1.5 text-sm disabled:opacity-40"
+            >
+              + إضافة
+            </button>
+          </div>
+          {!initial && (
+            <p className="text-xs text-gray-400 mt-2">
+              احفظ العنصر أولاً ثم عدّله لإضافة الخيارات.
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* ─── Extra info (metadata key/value) ─── */}
+      <div className="border-t pt-4">
         <div className="flex items-center justify-between mb-1">
           <label className="text-sm font-medium text-gray-700">
-            Extra details
+            تفاصيل إضافية
           </label>
           <button
             type="button"
             onClick={() => setMeta([...meta, { k: "", v: "" }])}
             className="text-xs text-brand-600"
           >
-            + add field
+            + إضافة حقل
           </button>
         </div>
         <div className="space-y-2">
           {meta.map((row, i) => (
             <div key={i} className="flex gap-2">
               <input
-                placeholder="label (e.g. اللون)"
+                placeholder="العنوان (مثل: اللون)"
                 value={row.k}
                 dir="auto"
                 onChange={(e) => {
@@ -198,7 +466,7 @@ export default function ItemForm({ initial, onSubmit, onCancel, onImageUpload })
                 className={inputCls + " flex-1"}
               />
               <input
-                placeholder="value"
+                placeholder="القيمة"
                 value={row.v}
                 dir="auto"
                 onChange={(e) => {
@@ -220,11 +488,11 @@ export default function ItemForm({ initial, onSubmit, onCancel, onImageUpload })
         </div>
       </div>
 
-      {/* Image upload (existing items only) */}
+      {/* ─── Image upload (existing items only) ─── */}
       {initial && onImageUpload && (
-        <div>
+        <div className="border-t pt-4">
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            Product image
+            صورة المنتج
           </label>
           <div className="flex items-center gap-3">
             {initial.image_url && (
@@ -251,19 +519,19 @@ export default function ItemForm({ initial, onSubmit, onCancel, onImageUpload })
           disabled={busy}
           className="bg-brand-600 hover:bg-brand-700 text-white rounded-lg px-4 py-2 font-medium disabled:opacity-60"
         >
-          {busy ? "Saving…" : "Save"}
+          {busy ? "جاري الحفظ…" : "حفظ"}
         </button>
         <button
           type="button"
           onClick={onCancel}
           className="border border-gray-300 text-gray-700 rounded-lg px-4 py-2 hover:bg-gray-50"
         >
-          Cancel
+          إلغاء
         </button>
       </div>
       {!initial && (
         <p className="text-xs text-gray-400">
-          Save the item first, then edit it to upload a product image.
+          احفظ العنصر أولاً، ثم عدّله لرفع صورة وإضافة خيارات.
         </p>
       )}
     </form>

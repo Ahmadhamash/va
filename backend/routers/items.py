@@ -11,6 +11,7 @@ from fastapi import (
 )
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from database import get_db
 from middleware.auth_middleware import get_current_user
@@ -23,7 +24,7 @@ router = APIRouter(prefix="/items", tags=["items"])
 
 async def _get_owned_item(item_id: uuid.UUID, user: User, db: AsyncSession) -> Item:
     result = await db.execute(
-        select(Item).where(Item.id == item_id, Item.user_id == user.id)
+        select(Item).options(selectinload(Item.variants)).where(Item.id == item_id, Item.user_id == user.id)
     )
     item = result.scalar_one_or_none()
     if item is None:
@@ -37,7 +38,7 @@ async def list_items(
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
-        select(Item).where(Item.user_id == current_user.id).order_by(Item.created_at.desc())
+        select(Item).options(selectinload(Item.variants)).where(Item.user_id == current_user.id).order_by(Item.created_at.desc())
     )
     return list(result.scalars().all())
 
@@ -50,7 +51,7 @@ async def search_items(
 ):
     pattern = f"%{q}%"
     result = await db.execute(
-        select(Item).where(
+        select(Item).options(selectinload(Item.variants)).where(
             Item.user_id == current_user.id,
             or_(
                 Item.name.ilike(pattern),
@@ -81,8 +82,15 @@ async def create_item(
     )
     db.add(item)
     await db.commit()
-    await db.refresh(item)
-    return item
+    
+    # ─── التعديل الجديد هنا ───
+    # قمنا بحذف item.variants = [] و db.refresh(item)
+    # واستبدلناها بجلب المنتج بشكل صحيح مع الـ variants
+    
+    result = await db.execute(
+        select(Item).options(selectinload(Item.variants)).where(Item.id == item.id)
+    )
+    return result.scalar_one()
 
 
 @router.put("/{item_id}", response_model=ItemOut)
@@ -145,3 +153,99 @@ async def toggle_item(
     await db.commit()
     await db.refresh(item)
     return item
+
+
+# ─── Variants ────────────────────────────────────────────────────────────────
+from models import ItemVariant
+from schemas.variant import VariantCreate, VariantOut, VariantUpdate
+
+
+@router.get("/{item_id}/variants", response_model=list[VariantOut])
+async def list_variants(
+    item_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    await _get_owned_item(item_id, current_user, db)
+    result = await db.execute(
+        select(ItemVariant).where(ItemVariant.item_id == item_id)
+    )
+    return list(result.scalars().all())
+
+
+@router.post(
+    "/{item_id}/variants",
+    response_model=VariantOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_variant(
+    item_id: uuid.UUID,
+    payload: VariantCreate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    await _get_owned_item(item_id, current_user, db)
+    variant = ItemVariant(
+        item_id=item_id,
+        option_type=payload.option_type,
+        option_value=payload.option_value,
+        price_override=payload.price_override,
+        available=payload.available,
+        stock_quantity=payload.stock_quantity,
+    )
+    db.add(variant)
+    await db.commit()
+    await db.refresh(variant)
+    return variant
+
+
+@router.put("/{item_id}/variants/{variant_id}", response_model=VariantOut)
+async def update_variant(
+    item_id: uuid.UUID,
+    variant_id: uuid.UUID,
+    payload: VariantUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    await _get_owned_item(item_id, current_user, db)
+    result = await db.execute(
+        select(ItemVariant).where(
+            ItemVariant.id == variant_id, ItemVariant.item_id == item_id
+        )
+    )
+    variant = result.scalar_one_or_none()
+    if variant is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Variant not found"
+        )
+    data = payload.model_dump(exclude_unset=True)
+    for field, value in data.items():
+        setattr(variant, field, value)
+    await db.commit()
+    await db.refresh(variant)
+    return variant
+
+
+@router.delete(
+    "/{item_id}/variants/{variant_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_variant(
+    item_id: uuid.UUID,
+    variant_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    await _get_owned_item(item_id, current_user, db)
+    result = await db.execute(
+        select(ItemVariant).where(
+            ItemVariant.id == variant_id, ItemVariant.item_id == item_id
+        )
+    )
+    variant = result.scalar_one_or_none()
+    if variant is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Variant not found"
+        )
+    await db.delete(variant)
+    await db.commit()

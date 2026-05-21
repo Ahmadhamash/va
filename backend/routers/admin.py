@@ -14,6 +14,7 @@ from models import (
     Message,
     StyleSample,
     User,
+    BusinessPolicy,
 )
 from schemas.chat import MessageOut, SessionOut
 from schemas.item import ItemOut
@@ -28,6 +29,7 @@ from schemas.user import (
 )
 from services.auth_service import hash_password
 from services.settings_service import get_settings_row, invalidate_cache
+from services.business_templates import get_template
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -270,15 +272,40 @@ async def create_client(
             status_code=status.HTTP_409_CONFLICT,
             detail="Username or email already registered",
         )
+
+    persona = payload.ai_persona
+    policies_to_add = []
+    if payload.business_type:
+        template = get_template(payload.business_type)
+        if template:
+            if not persona:
+                persona = template["persona"]
+            for pol in template["default_policies"]:
+                policies_to_add.append(
+                    BusinessPolicy(
+                        policy_type=pol["type"],
+                        title=pol["title"],
+                        content=pol["content"],
+                        is_active=True,
+                    )
+                )
+
     client = User(
         username=payload.username,
         email=payload.email,
         hashed_password=hash_password(payload.password),
         business_name=payload.business_name,
-        ai_persona=payload.ai_persona,
+        business_type=payload.business_type,
+        ai_persona=persona,
         role="client",
     )
     db.add(client)
+    await db.flush()
+
+    for p in policies_to_add:
+        p.user_id = client.id
+        db.add(p)
+
     await db.commit()
     await db.refresh(client)
     return client

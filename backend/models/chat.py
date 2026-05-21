@@ -31,6 +31,10 @@ class ChatSession(Base):
     external_user_id: Mapped[str | None] = mapped_column(
         String(255), nullable=True, index=True
     )
+    # True when a human agent is handling this conversation (AI paused)
+    is_escalated: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false"
+    )
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
     user: Mapped["User"] = relationship(back_populates="chat_sessions")  # noqa: F821
