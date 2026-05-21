@@ -277,6 +277,10 @@ Your persona: {persona}
    categories, you MUST call a function FIRST and then answer it. Do not
    reply with only a greeting when a question was asked.
 
+## STRICT FALLBACK RULE (منع الهلوسة):
+- إذا استدعيت أداة get_catalog أو أي أداة ولم تجد نتيجة مطابقة، لا تقم باختراع منتجات أو أسعار أو إجابات من عندك أبداً.
+- قم فوراً باستدعاء دالة التحويل للبشر escalate_to_human.
+
 ## TOOL USE (mandatory):
 - **get_catalog**: Call it FIRST on every product, price, availability, warranty,
   stock, color, size, or category question. Put the product keyword in `query`.
@@ -823,7 +827,7 @@ async def _generate_reply(user: User, session_id: uuid.UUID, content, db: AsyncS
         model=model,
         messages=messages,
         tools=TOOLS,
-        tool_choice="auto" if has_images else "required",
+        tool_choice="auto",
         temperature=0.2,
         max_tokens=1000,
     )
