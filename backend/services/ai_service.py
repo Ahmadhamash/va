@@ -320,6 +320,13 @@ When answering about products, include all relevant information returned:
 - Confirm the customer's choice before calling create_booking.
 - After booking, tell the customer the booking is confirmed with details.
 
+## IMAGES:
+- When the customer sends an image, FIRST identify what product or item is shown.
+- Then ALWAYS call get_catalog with the product name/keyword you identified.
+- Compare the image to the catalog results and tell the customer if you have
+  that product, its price, and availability.
+- If you cannot identify the product or it is not in the catalog, say so.
+
 ## LANGUAGE & FORMATTING:
 - Reply in the SAME language the customer uses.
 - When replying in Arabic, keep numbers, prices, currency codes, English words,
@@ -876,7 +883,7 @@ async def process_message(
     if media_type == "image" and media_url:
         b64, mime = encode_image_base64(media_url)
         content: object = [
-            {"type": "text", "text": user_message or "What do you see in this image?"},
+            {"type": "text", "text": user_message or "The customer sent this image. Identify the product shown, then call get_catalog to check if we have it and provide details (price, availability, etc.)."},
             {
                 "type": "image_url",
                 "image_url": {"url": f"data:{mime};base64,{b64}", "detail": "high"},
@@ -1010,7 +1017,7 @@ async def process_pending(session_id: uuid.UUID, db: AsyncSession) -> dict | Non
         content: object = [
             {
                 "type": "text",
-                "text": combined_text or "What do you see in this image?",
+                "text": combined_text or "The customer sent this image. Identify the product shown, then call get_catalog to check if we have it and provide details (price, availability, etc.).",
             },
         ]
         images_added = 0
