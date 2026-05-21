@@ -28,7 +28,7 @@ logger = logging.getLogger("ai_service")
 TRANSCRIBE_MODEL = "whisper-1"
 HISTORY_LIMIT = 20
 MAX_TOOL_ROUNDS = 5
-STYLE_SAMPLE_LIMIT = 5
+STYLE_SAMPLE_LIMIT = 15
 
 # Cache one AsyncOpenAI client per API key so rotating the key takes effect
 # without leaking connections.
@@ -247,10 +247,12 @@ def build_system_prompt(
         joined = "\n---\n".join(style_samples[:STYLE_SAMPLE_LIMIT])
         style_block = f"""
 
-## VOICE / STYLE REFERENCE (do NOT copy text):
-Below are examples of the owner's writing style. Use them ONLY to imitate
-tone, warmth, phrasing and emoji habits. NEVER copy a line verbatim, NEVER
-reply with only a greeting when the customer asked something, and NEVER reuse
+## VOICE / STYLE — YOU MUST FOLLOW THIS:
+You MUST write in the EXACT same dialect, tone, and style as the examples below.
+If the examples are in Jordanian Arabic dialect, you MUST reply in Jordanian Arabic dialect.
+If the examples use casual language (e.g. هلا، منورين، كيف منقدر نساعدك), you MUST be casual too.
+Do NOT switch to formal Modern Standard Arabic (MSA). Match the warmth, emoji habits, and phrasing.
+NEVER copy a line verbatim. NEVER reply with only a greeting. NEVER reuse
 any product/price/fact from them. Always answer the customer's actual
 question (calling a function first when it is about products).
 
