@@ -803,11 +803,16 @@ async def _generate_reply(user: User, session_id: uuid.UUID, content, db: AsyncS
 
     # Force a DB lookup on the first turn so the assistant can never answer a
     # product/price/availability question from style/persona alone.
+    # When images are present, use "auto" so the model can analyze the image
+    # instead of being forced to call a catalog tool and ignoring it.
+    has_images = isinstance(content, list) and any(
+        item.get("type") == "image_url" for item in content if isinstance(item, dict)
+    )
     response = await client.chat.completions.create(
         model=model,
         messages=messages,
         tools=TOOLS,
-        tool_choice="required",
+        tool_choice="auto" if has_images else "required",
         temperature=0.2,
         max_tokens=1000,
     )
