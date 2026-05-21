@@ -12,7 +12,7 @@ import io
 import json
 import re
 
-MAX_SAMPLES = 40
+MAX_SAMPLES = 200
 MAX_SAMPLE_LEN = 320
 
 _SPEAKER_KEYS = ("sender", "from", "name", "author", "role", "sender_name", "user")

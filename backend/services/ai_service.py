@@ -769,7 +769,7 @@ async def get_style_samples(
     stmt = (
         select(StyleSample.sample)
         .where(StyleSample.user_id == user_id)
-        .order_by(StyleSample.created_at.desc())
+        .order_by(func.random())
         .limit(limit)
     )
     return [s for s in (await db.execute(stmt)).scalars().all() if s]
