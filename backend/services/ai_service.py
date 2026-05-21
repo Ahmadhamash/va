@@ -8,7 +8,7 @@ from decimal import Decimal
 
 import httpx
 from openai import APIError, AsyncOpenAI
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
