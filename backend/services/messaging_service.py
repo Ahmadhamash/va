@@ -80,8 +80,11 @@ async def _client_for(integration: ChannelIntegration, db: AsyncSession) -> User
 async def enqueue_inbound(
     integration: ChannelIntegration,
     external_user_id: str,
-    text: str,
+    text: str | None,
     db: AsyncSession,
+    *,
+    media_type: str = "text",
+    media_url: str | None = None,
 ) -> ChatSession | None:
     """Buffer an inbound message and schedule debounced processing."""
     client = await _client_for(integration, db)
@@ -90,7 +93,9 @@ async def enqueue_inbound(
     session = await _get_or_create_session(
         client, integration.platform, external_user_id, db
     )
-    await save_message(session.id, "user", text, "text", None, db, processed=False)
+    await save_message(
+        session.id, "user", text, media_type, media_url, db, processed=False,
+    )
     await schedule_session(session.id, db)
     return session
 

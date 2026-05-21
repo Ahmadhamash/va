@@ -1,9 +1,11 @@
+import io
 import json
 import logging
 import re
 import uuid
 from decimal import Decimal
 
+import httpx
 from openai import APIError, AsyncOpenAI
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -899,11 +901,47 @@ async def process_message(
     return {"reply": reply, "transcription": transcription}
 
 
+# ─── External media helpers (Facebook CDN etc.) ─────────────────────────────
+async def _download_bytes(url: str) -> bytes:
+    """Download content from an external URL (e.g. Facebook CDN)."""
+    async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
+        resp = await client.get(url)
+        resp.raise_for_status()
+        return resp.content
+
+
+async def _encode_image_from_url(url: str) -> tuple[str, str]:
+    """Download an image from URL and return (base64_string, mime_type)."""
+    data = await _download_bytes(url)
+    # Detect MIME from magic bytes
+    if data[:8] == b"\x89PNG\r\n\x1a\n":
+        mime = "image/png"
+    elif data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        mime = "image/webp"
+    elif data[:3] == b"GIF":
+        mime = "image/gif"
+    else:
+        mime = "image/jpeg"
+    return base64.b64encode(data).decode("utf-8"), mime
+
+
+async def _transcribe_from_url(url: str, db: AsyncSession) -> str:
+    """Download audio from URL and transcribe via Whisper."""
+    data = await _download_bytes(url)
+    key = await effective_openai_key(db)
+    audio_file = io.BytesIO(data)
+    audio_file.name = "audio.mp4"  # OpenAI SDK needs a filename with extension
+    transcript = await _client_for(key).audio.transcriptions.create(
+        model=TRANSCRIBE_MODEL, file=audio_file, response_format="text",
+    )
+    return transcript if isinstance(transcript, str) else getattr(transcript, "text", "")
+
+
 # ─── Debounced path (channels/widget via worker) ─────────────────────────────
 async def process_pending(session_id: uuid.UUID, db: AsyncSession) -> dict | None:
     """Coalesce all unprocessed user messages in a session into one turn,
-    answer once, persist, and mark them processed. Returns the reply info or
-    None if there is nothing to do (another worker handled it / no messages)."""
+    answer once, persist, and mark them processed.  Now supports image and
+    audio attachments from external channels (Messenger / Instagram)."""
     session = await db.get(ChatSession, session_id)
     if session is None:
         return None
@@ -928,15 +966,59 @@ async def process_pending(session_id: uuid.UUID, db: AsyncSession) -> dict | Non
     if not pending:
         return None
 
-    combined = "\n".join(m.content for m in pending if m.content).strip()
-    if not combined:
+    # ── Separate text, images, and audio from pending messages ──
+    text_parts: list[str] = []
+    image_urls: list[str] = []
+
+    for m in pending:
+        if m.media_type == "audio" and m.media_url:
+            try:
+                transcription = await _transcribe_from_url(m.media_url, db)
+                if transcription.strip():
+                    text_parts.append(transcription.strip())
+            except Exception:  # noqa: BLE001
+                logger.exception("audio transcription failed for pending msg")
+        elif m.media_type == "image" and m.media_url:
+            image_urls.append(m.media_url)
+            if m.content:
+                text_parts.append(m.content)
+        else:
+            if m.content:
+                text_parts.append(m.content)
+
+    combined_text = "\n".join(text_parts).strip()
+
+    if not combined_text and not image_urls:
         for m in pending:
             m.processed = True
         await db.commit()
         return None
 
+    # ── Build content payload for OpenAI ──
+    if image_urls:
+        content: object = [
+            {
+                "type": "text",
+                "text": combined_text or "What do you see in this image?",
+            },
+        ]
+        for img_url in image_urls:
+            try:
+                b64, mime = await _encode_image_from_url(img_url)
+                content.append({
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:{mime};base64,{b64}",
+                        "detail": "high",
+                    },
+                })
+            except Exception:  # noqa: BLE001
+                logger.exception("image download/encode failed")
+    else:
+        content = combined_text
+
     try:
-        reply = await _generate_reply(user, session_id, combined, db)
+        reply = await _generate_reply(user, session_id, content, db)
     except APIError:
         logger.exception("OpenAI API error (worker)")
         reply = "Service temporarily unavailable, please try again"

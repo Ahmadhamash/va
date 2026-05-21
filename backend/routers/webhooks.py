@@ -70,13 +70,37 @@ async def meta_receive(
             message = event.get("message") or {}
             if message.get("is_echo"):
                 continue
-            text = message.get("text")
             sender_id = (event.get("sender") or {}).get("id")
-            if not text or not sender_id:
+            if not sender_id:
                 continue
+
+            text = message.get("text")
+            media_type = "text"
+            media_url = None
+
+            # Check for attachments (images, audio/voice notes)
+            for att in message.get("attachments") or []:
+                att_type = att.get("type", "")
+                att_url = (att.get("payload") or {}).get("url")
+                if att_type == "image" and att_url:
+                    media_type = "image"
+                    media_url = att_url
+                    break
+                if att_type == "audio" and att_url:
+                    media_type = "audio"
+                    media_url = att_url
+                    break
+
+            # Skip if no text AND no media attachment
+            if not text and not media_url:
+                continue
+
             try:
                 # Buffer + debounce; the worker answers and sends the reply.
-                await enqueue_inbound(integration, sender_id, text, db)
+                await enqueue_inbound(
+                    integration, sender_id, text, db,
+                    media_type=media_type, media_url=media_url,
+                )
             except Exception:  # noqa: BLE001
                 logger.exception("meta inbound enqueue failed")
 
