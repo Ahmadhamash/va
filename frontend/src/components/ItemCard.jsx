@@ -1,4 +1,5 @@
 import { API_BASE } from "../services/api";
+import { useTranslation } from "react-i18next";
 
 function imgSrc(url) {
   if (!url) return null;
@@ -6,17 +7,18 @@ function imgSrc(url) {
 }
 
 const stockLabel = {
-  in_stock: "متوفر",
-  out_of_stock: "غير متوفر",
-  preorder: "طلب مسبق",
-  coming_soon: "قريباً",
+  in_stock: "available",
+  out_of_stock: "out_of_stock",
+  preorder: "preorder",
+  coming_soon: "coming_soon",
 };
 
 export default function ItemCard({ item, onEdit, onDelete, onToggle }) {
+  const { t } = useTranslation();
   return (
     <div
       className="bg-white rounded-xl shadow-sm hover:shadow-md transition-shadow p-5 flex flex-col"
-      dir="rtl"
+      dir={t('dir', 'ltr')}
     >
       {item.image_url ? (
         <img
@@ -40,7 +42,7 @@ export default function ItemCard({ item, onEdit, onDelete, onToggle }) {
               : "bg-gray-200 text-gray-600"
           }`}
         >
-          {item.available ? "متوفر" : "غير متوفر"}
+          {item.available ? t("available") : t("unavailable")}
         </span>
       </div>
 
@@ -57,19 +59,19 @@ export default function ItemCard({ item, onEdit, onDelete, onToggle }) {
       <div className="mt-3 font-semibold text-gray-900">
         {item.price != null
           ? `${item.price} ${item.currency}`
-          : "بدون سعر"}
+          : t("no_price")}
       </div>
 
       {/* Stock & Warranty badges */}
       <div className="flex flex-wrap gap-1 mt-2">
         {item.stock_status && item.stock_status !== "in_stock" && (
           <span className="text-[10px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">
-            📦 {stockLabel[item.stock_status] || item.stock_status}
+            📦 {stockLabel[item.stock_status] ? t(stockLabel[item.stock_status]) : item.stock_status}
           </span>
         )}
         {item.stock_quantity != null && (
           <span className="text-[10px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full">
-            الكمية: {item.stock_quantity}
+            {t("quantity")} {item.stock_quantity}
           </span>
         )}
         {item.warranty_duration && (
@@ -79,7 +81,7 @@ export default function ItemCard({ item, onEdit, onDelete, onToggle }) {
         )}
         {item.variants && item.variants.length > 0 && (
           <span className="text-[10px] bg-purple-50 text-purple-600 px-2 py-0.5 rounded-full">
-            🎨 {item.variants.length} خيار
+            🎨 {item.variants.length} {t("option")}
           </span>
         )}
       </div>
@@ -89,19 +91,19 @@ export default function ItemCard({ item, onEdit, onDelete, onToggle }) {
           onClick={() => onEdit(item)}
           className="px-3 py-1.5 rounded-md border border-gray-300 hover:bg-gray-50"
         >
-          تعديل
+          {t("edit")}
         </button>
         <button
           onClick={() => onToggle(item)}
           className="px-3 py-1.5 rounded-md border border-gray-300 hover:bg-gray-50"
         >
-          {item.available ? "إيقاف" : "تفعيل"}
+          {item.available ? t("disable") : t("enable")}
         </button>
         <button
           onClick={() => onDelete(item)}
           className="px-3 py-1.5 rounded-md border border-red-300 text-red-600 hover:bg-red-50mr-auto"
         >
-          حذف
+          {t("delete")}
         </button>
       </div>
     </div>

@@ -77,7 +77,7 @@ export default function Navbar() {
             onClick={toggleLanguage}
             className="text-xs font-medium px-2 py-1 bg-gray-100 text-gray-700 hover:bg-gray-200 rounded"
           >
-            {i18n.language === "ar" ? "EN" : "عربي"}
+            {i18n.language === "ar" ? t("english") : t("arabic")}
           </button>
           {user ? (
             <>

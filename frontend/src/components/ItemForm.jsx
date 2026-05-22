@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { API_BASE } from "../services/api";
 import api from "../services/api";
-
 const EMPTY = {
   name: "",
   description: "",
@@ -14,22 +14,27 @@ const EMPTY = {
   warranty_coverage: "",
   warranty_exclusions: "",
   stock_quantity: "",
-  stock_status: "in_stock",
+  stock_status: "in_stock"
 };
-
 function imgSrc(url) {
   if (!url) return null;
   return url.startsWith("/") ? `${API_BASE}${url}` : url;
 }
-
-export default function ItemForm({ initial, onSubmit, onCancel, onImageUpload }) {
+export default function ItemForm({
+  initial,
+  onSubmit,
+  onCancel,
+  onImageUpload
+}) {
+  const {
+    t
+  } = useTranslation();
   const [form, setForm] = useState(EMPTY);
   const [meta, setMeta] = useState([]); // [{k,v}]
   const [variants, setVariants] = useState([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const fileRef = useRef(null);
-
   useEffect(() => {
     if (initial) {
       setForm({
@@ -44,10 +49,13 @@ export default function ItemForm({ initial, onSubmit, onCancel, onImageUpload })
         warranty_coverage: initial.warranty_coverage || "",
         warranty_exclusions: initial.warranty_exclusions || "",
         stock_quantity: initial.stock_quantity ?? "",
-        stock_status: initial.stock_status || "in_stock",
+        stock_status: initial.stock_status || "in_stock"
       });
       const m = initial.metadata || {};
-      setMeta(Object.keys(m).map((k) => ({ k, v: String(m[k]) })));
+      setMeta(Object.keys(m).map(k => ({
+        k,
+        v: String(m[k])
+      })));
       setVariants(initial.variants || []);
     } else {
       setForm(EMPTY);
@@ -55,34 +63,36 @@ export default function ItemForm({ initial, onSubmit, onCancel, onImageUpload })
       setVariants([]);
     }
   }, [initial]);
-
   function update(field, value) {
-    setForm((f) => ({ ...f, [field]: value }));
+    setForm(f => ({
+      ...f,
+      [field]: value
+    }));
   }
-
   async function handleSubmit(e) {
     e.preventDefault();
     setError("");
     setBusy(true);
     try {
       const metadata = {};
-      meta.forEach(({ k, v }) => {
+      meta.forEach(({
+        k,
+        v
+      }) => {
         if (k.trim()) metadata[k.trim()] = v;
       });
       await onSubmit({
         ...form,
         price: form.price === "" ? null : Number(form.price),
-        stock_quantity:
-          form.stock_quantity === "" ? null : Number(form.stock_quantity),
-        metadata,
+        stock_quantity: form.stock_quantity === "" ? null : Number(form.stock_quantity),
+        metadata
       });
     } catch (err) {
-      setError(err?.response?.data?.detail || "تعذر حفظ العنصر");
+      setError(err?.response?.data?.detail || t("item_save_error"));
     } finally {
       setBusy(false);
     }
   }
-
   async function pickImage(e) {
     const f = e.target.files?.[0];
     if (!f || !onImageUpload) return;
@@ -90,7 +100,7 @@ export default function ItemForm({ initial, onSubmit, onCancel, onImageUpload })
     try {
       await onImageUpload(f);
     } catch (err) {
-      setError(err?.response?.data?.detail || "فشل رفع الصورة");
+      setError(err?.response?.data?.detail || t("image_upload_fail"));
     } finally {
       setBusy(false);
       if (fileRef.current) fileRef.current.value = "";
@@ -102,168 +112,108 @@ export default function ItemForm({ initial, onSubmit, onCancel, onImageUpload })
     option_type: "",
     option_value: "",
     price_override: "",
-    available: true,
+    available: true
   });
-
   async function addVariant() {
     if (!initial || !newVariant.option_type || !newVariant.option_value) return;
     setBusy(true);
     try {
       const payload = {
         ...newVariant,
-        price_override:
-          newVariant.price_override === ""
-            ? null
-            : Number(newVariant.price_override),
+        price_override: newVariant.price_override === "" ? null : Number(newVariant.price_override)
       };
-      const { data } = await api.post(
-        `/items/${initial.id}/variants`,
-        payload
-      );
+      const {
+        data
+      } = await api.post(`/items/${initial.id}/variants`, payload);
       setVariants([...variants, data]);
       setNewVariant({
         option_type: "",
         option_value: "",
         price_override: "",
-        available: true,
+        available: true
       });
     } catch (err) {
-      setError(err?.response?.data?.detail || "فشل إضافة الخيار");
+      setError(err?.response?.data?.detail || t("option_add_fail"));
     } finally {
       setBusy(false);
     }
   }
-
   async function deleteVariant(vid) {
     if (!initial) return;
     await api.delete(`/items/${initial.id}/variants/${vid}`);
-    setVariants(variants.filter((v) => v.id !== vid));
+    setVariants(variants.filter(v => v.id !== vid));
   }
-
-  const inputCls =
-    "w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500";
-
-  return (
-    <form
-      onSubmit={handleSubmit}
-      className="bg-white rounded-2xl shadow-sm p-6 space-y-4"
-      dir="rtl"
-    >
+  const inputCls = "w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500";
+  return <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-sm p-6 space-y-4" dir={t('dir', 'ltr')}>
       <h2 className="text-lg font-semibold">
-        {initial ? "تعديل العنصر" : "إضافة عنصر جديد"}
+        {initial ? t("edit_item") : t("add_new_item")}
       </h2>
 
-      {error && (
-        <div className="bg-red-50 text-red-700 text-sm rounded-lg px-3 py-2">
+      {error && <div className="bg-red-50 text-red-700 text-sm rounded-lg px-3 py-2">
           {error}
-        </div>
-      )}
+        </div>}
 
       {/* ─── Basic Info ─── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="sm:col-span-2">
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            الاسم *
+            {t("name_required")}
           </label>
-          <input
-            value={form.name}
-            onChange={(e) => update("name", e.target.value)}
-            required
-            dir="auto"
-            className={inputCls}
-          />
+          <input value={form.name} onChange={e => update("name", e.target.value)} required dir="auto" className={inputCls} />
         </div>
 
         <div className="sm:col-span-2">
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            الوصف / معلومات إضافية
+            {t("description_extra")}
           </label>
-          <textarea
-            value={form.description}
-            onChange={(e) => update("description", e.target.value)}
-            rows={3}
-            dir="auto"
-            className={inputCls}
-          />
+          <textarea value={form.description} onChange={e => update("description", e.target.value)} rows={3} dir="auto" className={inputCls} />
         </div>
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            التصنيف
+            {t("category")}
           </label>
-          <input
-            value={form.category}
-            onChange={(e) => update("category", e.target.value)}
-            dir="auto"
-            className={inputCls}
-          />
+          <input value={form.category} onChange={e => update("category", e.target.value)} dir="auto" className={inputCls} />
         </div>
 
         <div className="grid grid-cols-2 gap-2">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              السعر
+              {t("price")}
             </label>
-            <input
-              type="number"
-              step="0.01"
-              min="0"
-              value={form.price}
-              onChange={(e) => update("price", e.target.value)}
-              className={inputCls}
-            />
+            <input type="number" step="0.01" min="0" value={form.price} onChange={e => update("price", e.target.value)} className={inputCls} />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              العملة
+              {t("currency")}
             </label>
-            <input
-              value={form.currency}
-              onChange={(e) => update("currency", e.target.value)}
-              className={inputCls}
-            />
+            <input value={form.currency} onChange={e => update("currency", e.target.value)} className={inputCls} />
           </div>
         </div>
 
         <label className="flex items-center gap-2 text-sm text-gray-700">
-          <input
-            type="checkbox"
-            checked={form.available}
-            onChange={(e) => update("available", e.target.checked)}
-          />
-          متوفر
-        </label>
+          <input type="checkbox" checked={form.available} onChange={e => update("available", e.target.checked)} />{t("txt_206")}</label>
       </div>
 
       {/* ─── Stock ─── */}
       <div className="border-t pt-4">
-        <h3 className="text-sm font-semibold text-gray-800 mb-3">📦 المخزون</h3>
+        <h3 className="text-sm font-semibold text-gray-800 mb-3">{t("stock")}</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              الكمية (اتركه فارغ = غير محدد)
+              {t("quantity_blank")}
             </label>
-            <input
-              type="number"
-              min="0"
-              value={form.stock_quantity}
-              onChange={(e) => update("stock_quantity", e.target.value)}
-              className={inputCls}
-            />
+            <input type="number" min="0" value={form.stock_quantity} onChange={e => update("stock_quantity", e.target.value)} className={inputCls} />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              حالة المخزون
+              {t("stock_status")}
             </label>
-            <select
-              value={form.stock_status}
-              onChange={(e) => update("stock_status", e.target.value)}
-              className={inputCls}
-            >
-              <option value="in_stock">متوفر</option>
-              <option value="out_of_stock">غير متوفر</option>
-              <option value="preorder">طلب مسبق</option>
-              <option value="coming_soon">قريباً</option>
+            <select value={form.stock_status} onChange={e => update("stock_status", e.target.value)} className={inputCls}>
+              <option value="in_stock">{t("in_stock")}</option>
+              <option value="out_of_stock">{t("out_of_stock")}</option>
+              <option value="preorder">{t("preorder")}</option>
+              <option value="coming_soon">{t("coming_soon")}</option>
             </select>
           </div>
         </div>
@@ -271,269 +221,161 @@ export default function ItemForm({ initial, onSubmit, onCancel, onImageUpload })
 
       {/* ─── Warranty ─── */}
       <div className="border-t pt-4">
-        <h3 className="text-sm font-semibold text-gray-800 mb-3">🛡️ الكفالة / الضمان</h3>
+        <h3 className="text-sm font-semibold text-gray-800 mb-3">{t("warranty_section")}</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              مدة الكفالة
+              {t("warranty_duration")}
             </label>
-            <input
-              value={form.warranty_duration}
-              onChange={(e) => update("warranty_duration", e.target.value)}
-              placeholder="مثل: سنة، 6 أشهر، بدون كفالة"
-              dir="auto"
-              className={inputCls}
-            />
+            <input value={form.warranty_duration} onChange={e => update("warranty_duration", e.target.value)} placeholder={t("warranty_duration_ph")} dir="auto" className={inputCls} />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              شروط الكفالة
+              {t("warranty_terms")}
             </label>
-            <input
-              value={form.warranty_terms}
-              onChange={(e) => update("warranty_terms", e.target.value)}
-              placeholder="مثل: تغطي عيوب التصنيع فقط"
-              dir="auto"
-              className={inputCls}
-            />
+            <input value={form.warranty_terms} onChange={e => update("warranty_terms", e.target.value)} placeholder={t("warranty_terms_ph")} dir="auto" className={inputCls} />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              ما تشمله الكفالة
+              {t("warranty_coverage")}
             </label>
-            <textarea
-              value={form.warranty_coverage}
-              onChange={(e) => update("warranty_coverage", e.target.value)}
-              placeholder="مثل: الشاشة، البطارية، عيوب التصنيع"
-              rows={2}
-              dir="auto"
-              className={inputCls}
-            />
+            <textarea value={form.warranty_coverage} onChange={e => update("warranty_coverage", e.target.value)} placeholder={t("warranty_coverage_ph")} rows={2} dir="auto" className={inputCls} />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              ما لا تشمله الكفالة
+              {t("warranty_exclusions")}
             </label>
-            <textarea
-              value={form.warranty_exclusions}
-              onChange={(e) => update("warranty_exclusions", e.target.value)}
-              placeholder="مثل: الكسر، دخول الماء، سوء الاستخدام"
-              rows={2}
-              dir="auto"
-              className={inputCls}
-            />
+            <textarea value={form.warranty_exclusions} onChange={e => update("warranty_exclusions", e.target.value)} placeholder={t("warranty_exclusions_ph")} rows={2} dir="auto" className={inputCls} />
           </div>
         </div>
       </div>
 
       {/* ─── Variants ─── */}
-      {initial && (
-        <div className="border-t pt-4">
+      {initial && <div className="border-t pt-4">
           <h3 className="text-sm font-semibold text-gray-800 mb-3">
-            🎨 الخيارات (ألوان / مقاسات / موديلات)
+            {t("options_section")}
           </h3>
-          {variants.length > 0 && (
-            <div className="space-y-2 mb-3">
-              {variants.map((v) => (
-                <div
-                  key={v.id}
-                  className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2 text-sm"
-                >
+          {variants.length > 0 && <div className="space-y-2 mb-3">
+              {variants.map(v => <div key={v.id} className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2 text-sm">
                   <span className="font-medium text-gray-600">
                     {v.option_type}:
                   </span>
                   <span dir="auto">{v.option_value}</span>
-                  {v.price_override != null && (
-                    <span className="text-brand-600">
+                  {v.price_override != null && <span className="text-brand-600">
                       ({v.price_override} {form.currency})
-                    </span>
-                  )}
-                  <span
-                    className={
-                      v.available ? "text-green-600" : "text-red-500"
-                    }
-                  >
+                    </span>}
+                  <span className={v.available ? "text-green-600" : "text-red-500"}>
                     {v.available ? "✓" : "✗"}
                   </span>
-                  <button
-                    type="button"
-                    onClick={() => deleteVariant(v.id)}
-                    className="text-red-400 hover:text-red-600 mr-auto"
-                  >
+                  <button type="button" onClick={() => deleteVariant(v.id)} className="text-red-400 hover:text-red-600 mr-auto">
                     ×
                   </button>
-                </div>
-              ))}
-            </div>
-          )}
+                </div>)}
+            </div>}
           <div className="flex flex-wrap gap-2 items-end">
             <div>
               <label className="block text-xs text-gray-500 mb-1">
-                النوع
+                {t("type")}
               </label>
-              <select
-                value={newVariant.option_type}
-                onChange={(e) =>
-                  setNewVariant({ ...newVariant, option_type: e.target.value })
-                }
-                className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
-              >
-                <option value="">اختر…</option>
-                <option value="color">لون</option>
-                <option value="size">مقاس</option>
-                <option value="flavor">نكهة</option>
-                <option value="model">موديل</option>
-                <option value="material">خامة</option>
-                <option value="edition">نسخة</option>
+              <select value={newVariant.option_type} onChange={e => setNewVariant({
+            ...newVariant,
+            option_type: e.target.value
+          })} className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm">
+                <option value="">{t("select")}</option>
+                <option value="color">{t("color")}</option>
+                <option value="size">{t("size")}</option>
+                <option value="flavor">{t("flavor")}</option>
+                <option value="model">{t("model")}</option>
+                <option value="material">{t("material")}</option>
+                <option value="edition">{t("edition")}</option>
               </select>
             </div>
             <div>
               <label className="block text-xs text-gray-500 mb-1">
-                القيمة
+                {t("value")}
               </label>
-              <input
-                value={newVariant.option_value}
-                onChange={(e) =>
-                  setNewVariant({ ...newVariant, option_value: e.target.value })
-                }
-                placeholder="مثل: أسود، L، فانيلا"
-                dir="auto"
-                className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm w-32"
-              />
+              <input value={newVariant.option_value} onChange={e => setNewVariant({
+            ...newVariant,
+            option_value: e.target.value
+          })} placeholder={t("value_ph")} dir="auto" className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm w-32" />
             </div>
             <div>
               <label className="block text-xs text-gray-500 mb-1">
-                سعر مختلف
+                {t("diff_price")}
               </label>
-              <input
-                type="number"
-                step="0.01"
-                min="0"
-                value={newVariant.price_override}
-                onChange={(e) =>
-                  setNewVariant({
-                    ...newVariant,
-                    price_override: e.target.value,
-                  })
-                }
-                placeholder="اختياري"
-                className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm w-24"
-              />
+              <input type="number" step="0.01" min="0" value={newVariant.price_override} onChange={e => setNewVariant({
+            ...newVariant,
+            price_override: e.target.value
+          })} placeholder={t("optional")} className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm w-24" />
             </div>
-            <button
-              type="button"
-              onClick={addVariant}
-              disabled={!newVariant.option_type || !newVariant.option_value}
-              className="bg-brand-600 hover:bg-brand-700 text-white rounded-lg px-3 py-1.5 text-sm disabled:opacity-40"
-            >
-              + إضافة
+            <button type="button" onClick={addVariant} disabled={!newVariant.option_type || !newVariant.option_value} className="bg-brand-600 hover:bg-brand-700 text-white rounded-lg px-3 py-1.5 text-sm disabled:opacity-40">
+              {t("add_btn")}
             </button>
           </div>
-          {!initial && (
-            <p className="text-xs text-gray-400 mt-2">
-              احفظ العنصر أولاً ثم عدّله لإضافة الخيارات.
-            </p>
-          )}
-        </div>
-      )}
+          {!initial && <p className="text-xs text-gray-400 mt-2">
+              {t("save_item_first")}
+            </p>}
+        </div>}
 
       {/* ─── Extra info (metadata key/value) ─── */}
       <div className="border-t pt-4">
         <div className="flex items-center justify-between mb-1">
           <label className="text-sm font-medium text-gray-700">
-            تفاصيل إضافية
+            {t("extra_details")}
           </label>
-          <button
-            type="button"
-            onClick={() => setMeta([...meta, { k: "", v: "" }])}
-            className="text-xs text-brand-600"
-          >
-            + إضافة حقل
+          <button type="button" onClick={() => setMeta([...meta, {
+          k: "",
+          v: ""
+        }])} className="text-xs text-brand-600">
+            {t("add_field")}
           </button>
         </div>
         <div className="space-y-2">
-          {meta.map((row, i) => (
-            <div key={i} className="flex gap-2">
-              <input
-                placeholder="العنوان (مثل: اللون)"
-                value={row.k}
-                dir="auto"
-                onChange={(e) => {
-                  const c = [...meta];
-                  c[i] = { ...c[i], k: e.target.value };
-                  setMeta(c);
-                }}
-                className={inputCls + " flex-1"}
-              />
-              <input
-                placeholder="القيمة"
-                value={row.v}
-                dir="auto"
-                onChange={(e) => {
-                  const c = [...meta];
-                  c[i] = { ...c[i], v: e.target.value };
-                  setMeta(c);
-                }}
-                className={inputCls + " flex-1"}
-              />
-              <button
-                type="button"
-                onClick={() => setMeta(meta.filter((_, j) => j !== i))}
-                className="text-gray-400 hover:text-red-600 px-2"
-              >
+          {meta.map((row, i) => <div key={i} className="flex gap-2">
+              <input placeholder={t("title_ph")} value={row.k} dir="auto" onChange={e => {
+            const c = [...meta];
+            c[i] = {
+              ...c[i],
+              k: e.target.value
+            };
+            setMeta(c);
+          }} className={inputCls + " flex-1"} />
+              <input placeholder={t("value_placeholder")} value={row.v} dir="auto" onChange={e => {
+            const c = [...meta];
+            c[i] = {
+              ...c[i],
+              v: e.target.value
+            };
+            setMeta(c);
+          }} className={inputCls + " flex-1"} />
+              <button type="button" onClick={() => setMeta(meta.filter((_, j) => j !== i))} className="text-gray-400 hover:text-red-600 px-2">
                 ×
               </button>
-            </div>
-          ))}
+            </div>)}
         </div>
       </div>
 
       {/* ─── Image upload (existing items only) ─── */}
-      {initial && onImageUpload && (
-        <div className="border-t pt-4">
+      {initial && onImageUpload && <div className="border-t pt-4">
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            صورة المنتج
+            {t("product_image")}
           </label>
           <div className="flex items-center gap-3">
-            {initial.image_url && (
-              <img
-                src={imgSrc(initial.image_url)}
-                alt=""
-                className="h-16 w-16 rounded-lg object-cover border"
-              />
-            )}
-            <input
-              ref={fileRef}
-              type="file"
-              accept="image/png,image/jpeg,image/webp,image/gif"
-              onChange={pickImage}
-              className="text-sm text-gray-600 file:mr-3 file:py-2 file:px-4 file:rounded-md file:border-0 file:bg-brand-50 file:text-brand-700"
-            />
+            {initial.image_url && <img src={imgSrc(initial.image_url)} alt="" className="h-16 w-16 rounded-lg object-cover border" />}
+            <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={pickImage} className="text-sm text-gray-600 file:mr-3 file:py-2 file:px-4 file:rounded-md file:border-0 file:bg-brand-50 file:text-brand-700" />
           </div>
-        </div>
-      )}
+        </div>}
 
       <div className="flex gap-3 pt-2">
-        <button
-          type="submit"
-          disabled={busy}
-          className="bg-brand-600 hover:bg-brand-700 text-white rounded-lg px-4 py-2 font-medium disabled:opacity-60"
-        >
-          {busy ? "جاري الحفظ…" : "حفظ"}
+        <button type="submit" disabled={busy} className="bg-brand-600 hover:bg-brand-700 text-white rounded-lg px-4 py-2 font-medium disabled:opacity-60">
+          {busy ? t("saving") : t("save")}
         </button>
-        <button
-          type="button"
-          onClick={onCancel}
-          className="border border-gray-300 text-gray-700 rounded-lg px-4 py-2 hover:bg-gray-50"
-        >
-          إلغاء
+        <button type="button" onClick={onCancel} className="border border-gray-300 text-gray-700 rounded-lg px-4 py-2 hover:bg-gray-50">
+          {t("cancel")}
         </button>
       </div>
-      {!initial && (
-        <p className="text-xs text-gray-400">
-          احفظ العنصر أولاً، ثم عدّله لرفع صورة وإضافة خيارات.
-        </p>
-      )}
-    </form>
-  );
+      {!initial && <p className="text-xs text-gray-400">
+          {t("save_item_first_image")}
+        </p>}
+    </form>;
 }
