@@ -1,4 +1,6 @@
 import { Navigate, Route, Routes, Link } from "react-router-dom";
+import { useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import Navbar from "./components/Navbar.jsx";
 import { useAuth } from "./context/AuthContext.jsx";
 import AdminPage from "./pages/AdminPage.jsx";
@@ -60,6 +62,12 @@ function Home() {
 }
 
 export default function App() {
+  const { i18n } = useTranslation();
+
+  useEffect(() => {
+    document.documentElement.dir = i18n.language === "ar" ? "rtl" : "ltr";
+  }, [i18n.language]);
+
   return (
     <Routes>
       <Route path="/login" element={<PublicOnly><LoginPage /></PublicOnly>} />
