@@ -3,6 +3,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from config import settings as env_settings
 from database import get_db
@@ -171,7 +172,10 @@ async def client_items(
 ):
     await _get_client(client_id, db)
     rows = await db.execute(
-        select(Item).where(Item.user_id == client_id).order_by(Item.created_at.desc())
+        select(Item)
+        .options(selectinload(Item.variants))
+        .where(Item.user_id == client_id)
+        .order_by(Item.created_at.desc())
     )
     return list(rows.scalars().all())
 
