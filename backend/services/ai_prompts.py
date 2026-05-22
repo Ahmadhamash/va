@@ -32,8 +32,10 @@ def build_system_prompt(
             workflow_block += f"- Required Action: Send a {wf.action_type} with this EXACT content: {wf.content}\n"
 
     style_block = ""
+    persona_override = ""
     if style_samples:
         joined = "\n---\n".join(style_samples[:STYLE_SAMPLE_LIMIT])
+        persona_override = "\n(IMPORTANT: If the Persona description above is in formal English or formal Arabic, you MUST ignore that formal style. You MUST prioritize and write in the exact dialect, warmth, and casual tone shown in the VOICE/STYLE examples at the bottom. / تنبيه هام: يجب إعطاء الأولوية القصوى للهجة والأسلوب العامي الدافئ المذكور في أمثلة الأسلوب بالأسفل وتجاهل أي أسلوب رسمي مكتوب في الشخصية أعلاه.)"
         style_block = f"""
 
 ## VOICE / STYLE — YOU MUST FOLLOW THIS:
@@ -44,6 +46,7 @@ Do NOT switch to formal Modern Standard Arabic (MSA). Match the warmth, emoji ha
 NEVER copy a line verbatim. NEVER reuse any product/price/fact from them.
 If the customer ONLY greets you or chats casually, just greet them back warmly in the EXACT SAME dialect. DO NOT append robotic boilerplate like 'How can I help you today?'.
 If the customer asks a question, always answer their actual question (calling a function first when it is about products).
+When answering about prices, stock, or catalog items, do NOT switch to formal/robotic Arabic. Integrate the retrieved product details and prices naturally into the custom dialect and tone shown in the examples. (مثال: لا تقل بجمود "سعر هذا المنتج هو 50 دينار" بل صغها بلهجتك الطبيعية "هذا حقه 50 دينار يا غالي" أو ما يماثل أسلوبك).
 
 <style_examples>
 {joined}
@@ -52,7 +55,7 @@ If the customer asks a question, always answer their actual question (calling a 
 
     return f"""
 You are an AI assistant representing {business}.
-Your persona: {persona}
+Your persona: {persona}{persona_override}
 
 ## CRITICAL RULES — NEVER BREAK THESE:
 1. NEVER mention any product, price or detail that didn't come from a database function call.
