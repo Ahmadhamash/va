@@ -1,26 +1,24 @@
 import { useTranslation } from "react-i18next";
 import { useEffect, useState } from "react";
 import api from "../services/api";
-const OFFER_TYPES = [{
-  value: "percentage",
-  label: t("txt_103")
-}, {
-  value: "fixed",
-  label: t("txt_104")
-}, {
-  value: "free_delivery",
-  label: t("txt_105")
-}, {
-  value: "bundle",
-  label: t("txt_106")
-}, {
-  value: "custom",
-  label: t("txt_107")
-}];
 export default function OffersPage() {
-  const {
-    t
-  } = useTranslation();
+  const { t } = useTranslation();
+  const OFFER_TYPES = [{
+    value: "percentage",
+    label: t("txt_103")
+  }, {
+    value: "fixed",
+    label: t("txt_104")
+  }, {
+    value: "free_delivery",
+    label: t("txt_105")
+  }, {
+    value: "bundle",
+    label: t("txt_106")
+  }, {
+    value: "custom",
+    label: t("txt_107")
+  }];
   const [tab, setTab] = useState("offers");
   const [offers, setOffers] = useState([]);
   const [packages, setPackages] = useState([]);

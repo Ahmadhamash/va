@@ -1,29 +1,27 @@
 import { useTranslation } from "react-i18next";
 import { useEffect, useState } from "react";
 import api from "../services/api";
-const POLICY_TYPES = [{
-  value: "return",
-  label: t("txt_135")
-}, {
-  value: "exchange",
-  label: t("txt_136")
-}, {
-  value: "payment",
-  label: t("txt_137")
-}, {
-  value: "shipping",
-  label: t("txt_138")
-}, {
-  value: "general",
-  label: t("txt_139")
-}, {
-  value: "custom",
-  label: t("txt_107")
-}];
 export default function PoliciesPage() {
-  const {
-    t
-  } = useTranslation();
+  const { t } = useTranslation();
+  const POLICY_TYPES = [{
+    value: "return",
+    label: t("txt_135")
+  }, {
+    value: "exchange",
+    label: t("txt_136")
+  }, {
+    value: "payment",
+    label: t("txt_137")
+  }, {
+    value: "shipping",
+    label: t("txt_138")
+  }, {
+    value: "general",
+    label: t("txt_139")
+  }, {
+    value: "custom",
+    label: t("txt_107")
+  }];
   const [policies, setPolicies] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);

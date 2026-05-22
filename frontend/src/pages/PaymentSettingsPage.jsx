@@ -1,46 +1,44 @@
 import { useTranslation } from "react-i18next";
 import { useEffect, useState } from "react";
 import api from "../services/api";
-const METHODS = [{
-  key: "cod",
-  label: t("txt_121"),
-  icon: "💵",
-  placeholder: ""
-}, {
-  key: "cliq",
-  label: "CliQ",
-  icon: "📱",
-  placeholder: t("txt_122")
-}, {
-  key: "bank_transfer",
-  label: t("txt_123"),
-  icon: "🏦",
-  placeholder: t("txt_124")
-}, {
-  key: "wallet",
-  label: t("txt_125"),
-  icon: "💳",
-  placeholder: t("txt_126")
-}, {
-  key: "card",
-  label: t("txt_127"),
-  icon: "💳",
-  placeholder: t("txt_128")
-}, {
-  key: "installments",
-  label: t("txt_129"),
-  icon: "📊",
-  placeholder: t("txt_130")
-}, {
-  key: "other",
-  label: t("txt_107"),
-  icon: "📝",
-  placeholder: t("txt_131")
-}];
 export default function PaymentSettingsPage() {
-  const {
-    t
-  } = useTranslation();
+  const { t } = useTranslation();
+  const METHODS = [{
+    key: "cod",
+    label: t("txt_121"),
+    icon: "💵",
+    placeholder: ""
+  }, {
+    key: "cliq",
+    label: "CliQ",
+    icon: "📱",
+    placeholder: t("txt_122")
+  }, {
+    key: "bank_transfer",
+    label: t("txt_123"),
+    icon: "🏦",
+    placeholder: t("txt_124")
+  }, {
+    key: "wallet",
+    label: t("txt_125"),
+    icon: "💳",
+    placeholder: t("txt_126")
+  }, {
+    key: "card",
+    label: t("txt_127"),
+    icon: "💳",
+    placeholder: t("txt_128")
+  }, {
+    key: "installments",
+    label: t("txt_129"),
+    icon: "📊",
+    placeholder: t("txt_130")
+  }, {
+    key: "other",
+    label: t("txt_107"),
+    icon: "📝",
+    placeholder: t("txt_131")
+  }];
   const [methods, setMethods] = useState({});
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState("");

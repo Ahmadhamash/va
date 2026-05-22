@@ -1,24 +1,22 @@
 import { useTranslation } from "react-i18next";
 import { useEffect, useState } from "react";
 import api from "../services/api";
-const DAYS = [t("txt_0"), t("txt_1"), t("txt_2"), t("txt_3"), t("txt_4"), t("txt_5"), t("txt_6")];
-const STATUS_LABEL = {
-  pending: t("txt_7"),
-  confirmed: t("txt_8"),
-  cancelled: t("txt_9"),
-  completed: t("txt_10"),
-  rescheduled: t("txt_11")
-};
-const STATUS_COLOR = {
-  pending: "bg-amber-100 text-amber-700",
-  confirmed: "bg-green-100 text-green-700",
-  cancelled: "bg-red-100 text-red-600",
-  completed: "bg-blue-100 text-blue-700"
-};
 export default function BookingsPage() {
-  const {
-    t
-  } = useTranslation();
+  const { t } = useTranslation();
+  const DAYS = [t("txt_0"), t("txt_1"), t("txt_2"), t("txt_3"), t("txt_4"), t("txt_5"), t("txt_6")];
+  const STATUS_LABEL = {
+    pending: t("txt_7"),
+    confirmed: t("txt_8"),
+    cancelled: t("txt_9"),
+    completed: t("txt_10"),
+    rescheduled: t("txt_11")
+  };
+  const STATUS_COLOR = {
+    pending: "bg-amber-100 text-amber-700",
+    confirmed: "bg-green-100 text-green-700",
+    cancelled: "bg-red-100 text-red-600",
+    completed: "bg-blue-100 text-blue-700"
+  };
   const [tab, setTab] = useState("bookings");
   const [slots, setSlots] = useState([]);
   const [bookings, setBookings] = useState([]);

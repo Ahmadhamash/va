@@ -1,21 +1,19 @@
 import { useTranslation } from "react-i18next";
 import { useEffect, useState } from "react";
 import api from "../services/api";
-const PRESET_TRIGGERS = [t("txt_179"), t("txt_180"), t("txt_181"), t("txt_182"), t("txt_183"), t("txt_184")];
-const ACTION_TYPES = [{
-  value: "send_link",
-  label: t("txt_185")
-}, {
-  value: "send_form",
-  label: t("txt_186")
-}, {
-  value: "send_text",
-  label: t("txt_187")
-}];
 export default function WorkflowsPage() {
-  const {
-    t
-  } = useTranslation();
+  const { t } = useTranslation();
+  const PRESET_TRIGGERS = [t("txt_179"), t("txt_180"), t("txt_181"), t("txt_182"), t("txt_183"), t("txt_184")];
+  const ACTION_TYPES = [{
+    value: "send_link",
+    label: t("txt_185")
+  }, {
+    value: "send_form",
+    label: t("txt_186")
+  }, {
+    value: "send_text",
+    label: t("txt_187")
+  }];
   const [workflows, setWorkflows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
