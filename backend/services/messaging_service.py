@@ -129,23 +129,49 @@ async def send_meta_message(
     recipient_id: str,
     text: str,
     platform: str = "messenger",
+    audio_url: str | None = None,
 ) -> None:
     if not page_access_token:
         logger.warning("No page_access_token; cannot send reply")
         return
-    payload = {
-        "recipient": {"id": recipient_id},
-        "message": {"text": text[:1900]},
-        "messaging_type": "RESPONSE",
-    }
+        
+    payloads = []
+    
+    # Send text only if no audio, or maybe we send both? 
+    # Let's send text first, then audio if present, because users usually want both. 
+    # But wait, the user asked "why does it send text with it" -> let's send ONLY audio if audio_url is present, 
+    # OR we can just send the audio attachment instead of text. Let's stick to sending both since text is useful, 
+    # but I'll let them know it's a feature. Actually, I'll send only audio if they want.
+    if audio_url:
+        payloads.append({
+            "recipient": {"id": recipient_id},
+            "message": {
+                "attachment": {
+                    "type": "audio",
+                    "payload": {
+                        "url": audio_url,
+                        "is_reusable": True
+                    }
+                }
+            },
+            "messaging_type": "RESPONSE",
+        })
+    else:
+        payloads.append({
+            "recipient": {"id": recipient_id},
+            "message": {"text": text[:1900]},
+            "messaging_type": "RESPONSE",
+        })
+        
     try:
         async with httpx.AsyncClient(timeout=15) as http:
-            resp = await http.post(
-                f"{GRAPH_API}/me/messages",
-                params={"access_token": page_access_token},
-                json=payload,
-            )
-            if resp.status_code >= 400:
-                logger.error("Meta send failed (%s): %s", resp.status_code, resp.text)
+            for payload in payloads:
+                resp = await http.post(
+                    f"{GRAPH_API}/me/messages",
+                    params={"access_token": page_access_token},
+                    json=payload,
+                )
+                if resp.status_code >= 400:
+                    logger.error("Meta send failed (%s): %s", resp.status_code, resp.text)
     except Exception:  # noqa: BLE001
         logger.exception("Meta send error")

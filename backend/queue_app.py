@@ -61,7 +61,7 @@ async def process_session_task(ctx, session_id: str, seq: int) -> str:
                 token = (integration.credentials or {}).get("page_access_token", "")
                 try:
                     await send_meta_message(
-                        token, external_id, result["reply"], channel
+                        token, external_id, result["reply"], channel, audio_url=result.get("audio_url")
                     )
                 except Exception as e:
                     job_try = ctx.get("job_try", 1)
