@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import ChatMessage from "../components/ChatMessage.jsx";
+import DashboardCharts from "../components/DashboardCharts.jsx";
 import api from "../services/api";
 
 function Stat({ label, value }) {
@@ -203,15 +204,18 @@ export default function AdminPage() {
       </div>
 
       {stats && view === "clients" && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
-          <Stat label="Clients" value={stats.clients} />
-          <Stat label="Active" value={stats.active_clients} />
-          <Stat label="Items" value={stats.items} />
-          <Stat label="Chats" value={stats.sessions} />
-          <Stat label="Messages" value={stats.messages} />
-          <Stat label="Voice samples" value={stats.style_samples} />
-          <Stat label="Channels" value={stats.channels} />
-        </div>
+        <>
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 mb-6">
+            <Stat label="Clients" value={stats.clients} />
+            <Stat label="Active" value={stats.active_clients} />
+            <Stat label="Items" value={stats.items} />
+            <Stat label="Chats" value={stats.sessions} />
+            <Stat label="Messages" value={stats.messages} />
+            <Stat label="Voice samples" value={stats.style_samples} />
+            <Stat label="Channels" value={stats.channels} />
+          </div>
+          <DashboardCharts stats={stats} />
+        </>
       )}
 
       {view === "settings" && settings && (

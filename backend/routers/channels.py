@@ -1,7 +1,7 @@
 import secrets
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -75,6 +75,8 @@ async def create_channel(
 
 @router.get("", response_model=list[ChannelOut])
 async def list_channels(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=100),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -82,6 +84,7 @@ async def list_channels(
         select(ChannelIntegration)
         .where(ChannelIntegration.user_id == current_user.id)
         .order_by(ChannelIntegration.created_at.desc())
+        .offset(skip).limit(limit)
     )
     return [_to_out(c) for c in rows.scalars().all()]
 

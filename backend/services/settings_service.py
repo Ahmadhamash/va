@@ -6,7 +6,6 @@ in-process TTL cache avoids hitting the DB on every request/job.
 """
 import time
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import settings as env_settings

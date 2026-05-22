@@ -15,8 +15,9 @@ from sqlalchemy.orm import selectinload
 
 from database import get_db
 from middleware.auth_middleware import get_current_user
-from models import Item, User
+from models import Item, User, ItemVariant
 from schemas.item import ItemCreate, ItemOut, ItemUpdate
+from schemas.variant import VariantCreate, VariantOut, VariantUpdate
 from services.file_service import save_upload
 
 router = APIRouter(prefix="/items", tags=["items"])
@@ -34,11 +35,13 @@ async def _get_owned_item(item_id: uuid.UUID, user: User, db: AsyncSession) -> I
 
 @router.get("", response_model=list[ItemOut])
 async def list_items(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=100),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
-        select(Item).options(selectinload(Item.variants)).where(Item.user_id == current_user.id).order_by(Item.created_at.desc())
+        select(Item).options(selectinload(Item.variants)).where(Item.user_id == current_user.id).order_by(Item.created_at.desc()).offset(skip).limit(limit)
     )
     return list(result.scalars().all())
 
@@ -46,6 +49,8 @@ async def list_items(
 @router.get("/search", response_model=list[ItemOut])
 async def search_items(
     q: str = Query(..., min_length=1, description="Search by name or category"),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=100),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -58,7 +63,7 @@ async def search_items(
                 Item.category.ilike(pattern),
                 Item.description.ilike(pattern),
             ),
-        )
+        ).offset(skip).limit(limit)
     )
     return list(result.scalars().all())
 
@@ -156,19 +161,20 @@ async def toggle_item(
 
 
 # ─── Variants ────────────────────────────────────────────────────────────────
-from models import ItemVariant
-from schemas.variant import VariantCreate, VariantOut, VariantUpdate
+
 
 
 @router.get("/{item_id}/variants", response_model=list[VariantOut])
 async def list_variants(
     item_id: uuid.UUID,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=100),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     await _get_owned_item(item_id, current_user, db)
     result = await db.execute(
-        select(ItemVariant).where(ItemVariant.item_id == item_id)
+        select(ItemVariant).where(ItemVariant.item_id == item_id).offset(skip).limit(limit)
     )
     return list(result.scalars().all())
 

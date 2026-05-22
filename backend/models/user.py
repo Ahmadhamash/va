@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, String, Text, func
+from sqlalchemy import Boolean, String, Text, func, Integer
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -37,6 +37,10 @@ class User(Base):
         JSONB, default=dict, server_default="{}"
     )
 
+    # Phase 2: Reliability & Usage Tracking
+    ai_credit_balance: Mapped[int] = mapped_column(Integer, default=1000, server_default="1000")
+    email_verified: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+
     items: Mapped[list["Item"]] = relationship(  # noqa: F821
         back_populates="user", cascade="all, delete-orphan"
     )
@@ -69,6 +73,12 @@ class User(Base):
     )
     bookings: Mapped[list["Booking"]] = relationship(  # noqa: F821
         back_populates="user", cascade="all, delete-orphan"
+    )
+    workflows: Mapped[list["BusinessWorkflow"]] = relationship(  # noqa: F821
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    subscription: Mapped["UserSubscription"] = relationship(  # noqa: F821
+        back_populates="user", cascade="all, delete-orphan", uselist=False
     )
 
     @property

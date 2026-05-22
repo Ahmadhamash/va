@@ -87,9 +87,34 @@ services:
       - backend
       - frontend
 
+  backup:
+    image: postgres:16
+    restart: always
+    depends_on:
+      db: { condition: service_healthy }
+    env_file: [.env]
+    volumes:
+      - backups_data:/backups
+    command: >
+      sh -c "
+      echo 'Backup service started';
+      while true; do
+        TIMESTAMP=$$(date +'%Y%m%d_%H%M%S');
+        echo \"Starting backup at $$TIMESTAMP\";
+        pg_dump -h db -U $${POSTGRES_USER} -d $${POSTGRES_DB} -F c -f /backups/db_backup_$$TIMESTAMP.dump;
+        echo \"Backup completed\";
+        # Placeholder for AWS S3 upload:
+        # aws s3 cp /backups/db_backup_$$TIMESTAMP.dump s3://your-bucket-name/
+        # Cleanup older than 7 days
+        find /backups -type f -name '*.dump' -mtime +7 -delete;
+        sleep 86400;
+      done
+      "
+
 volumes:
   postgres_data:
   redis_data:
   uploads_data:
   caddy_data:
   caddy_config:
+  backups_data:

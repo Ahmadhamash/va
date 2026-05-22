@@ -5,21 +5,38 @@ from pathlib import Path
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi import Response, HTTPException
+from services.file_service import resolve_path, _IMAGE_MIME_BY_EXT
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
+from pythonjsonlogger import jsonlogger
+from asgi_correlation_id import CorrelationIdMiddleware, correlation_id
 
 from config import settings
-from routers import admin, auth, bookings, channels, chat, delivery, escalations, items, offers, policies, style, webhooks, workflows
+from routers import admin, auth, billing, bookings, channels, chat, delivery, escalations, items, offers, policies, style, webhooks, workflows, catalog_import
 from services.business_templates import list_business_types
 from services.ratelimit import limiter
+import sentry_sdk
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
-)
+if settings.SENTRY_DSN:
+    sentry_sdk.init(
+        dsn=settings.SENTRY_DSN,
+        environment=settings.APP_ENV,
+        traces_sample_rate=1.0,
+        profiles_sample_rate=1.0,
+    )
+
+logHandler = logging.StreamHandler()
+class CustomJsonFormatter(jsonlogger.JsonFormatter):
+    def add_fields(self, log_record, record, message_dict):
+        super().add_fields(log_record, record, message_dict)
+        log_record['correlation_id'] = correlation_id.get()
+
+formatter = CustomJsonFormatter('%(asctime)s %(levelname)s %(name)s %(correlation_id)s %(message)s')
+logHandler.setFormatter(formatter)
+logging.basicConfig(level=logging.INFO, handlers=[logHandler])
 logger = logging.getLogger("app")
 
 MAX_BODY_BYTES = (settings.MAX_FILE_SIZE_MB + 5) * 1024 * 1024
@@ -59,6 +76,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 
 app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(CorrelationIdMiddleware)
 
 app.add_middleware(
     CORSMiddleware,
@@ -83,6 +101,7 @@ api_router = APIRouter(prefix="/api")
 
 api_router.include_router(auth.router)
 api_router.include_router(items.router)
+api_router.include_router(catalog_import.router)
 api_router.include_router(chat.router)
 api_router.include_router(admin.router)
 api_router.include_router(style.router)
@@ -93,6 +112,7 @@ api_router.include_router(policies.router)
 api_router.include_router(offers.router)
 api_router.include_router(bookings.router)
 api_router.include_router(workflows.router)
+api_router.include_router(billing.router)
 api_router.include_router(webhooks.router)  # public — routed by unguessable public_id
 
 
@@ -108,7 +128,15 @@ async def business_types():
 
 app.include_router(api_router)
 
-# Static uploads served under /api/uploads so Caddy routes them to the backend
-_upload_dir = Path(settings.UPLOAD_DIR)
-_upload_dir.mkdir(parents=True, exist_ok=True)
-app.mount("/api/uploads", StaticFiles(directory=str(_upload_dir)), name="uploads")
+
+
+@app.get("/api/uploads/{path:path}")
+async def serve_upload(path: str):
+    try:
+        data = resolve_path(path).read_bytes()
+        ext = Path(path).suffix.lower()
+        mime = _IMAGE_MIME_BY_EXT.get(ext, "application/octet-stream")
+        return Response(content=data, media_type=mime)
+    except Exception:
+        raise HTTPException(status_code=404, detail="File not found")
+

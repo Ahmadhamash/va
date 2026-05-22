@@ -13,7 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models import ChannelIntegration, ChatSession, User
-from services.ai_service import process_message, save_message
+from services.ai_chat import process_message, save_message
 from services.queue_service import schedule_session
 
 logger = logging.getLogger("messaging")
@@ -25,7 +25,7 @@ def verify_meta_signature(
     app_secret: str | None, raw_body: bytes, signature_header: str | None
 ) -> bool:
     if not app_secret:
-        return True
+        return False
     if not signature_header or not signature_header.startswith("sha256="):
         return False
     expected = hmac.new(

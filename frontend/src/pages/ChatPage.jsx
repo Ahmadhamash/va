@@ -71,22 +71,77 @@ export default function ChatPage() {
     if (file) fd.append("file", file);
 
     try {
-      const { data } = await api.post("/chat/send", fd);
-      let sid = data.session_id;
-      if (!activeId) {
-        await loadSessions();
-        setActiveId(sid);
+      if (file || mediaType === "audio") {
+        const { data } = await api.post("/chat/send", fd);
+        let sid = data.session_id;
+        if (!activeId) {
+          await loadSessions();
+          setActiveId(sid);
+        }
+        await loadMessages(sid);
+      } else {
+        const token = localStorage.getItem("ai_assistant_token");
+        const baseURL = (import.meta.env.VITE_API_URL || "http://localhost:8000") + "/api";
+        const res = await fetch(baseURL + "/chat/stream", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${token}`
+          },
+          body: fd,
+        });
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder("utf-8");
+
+        let sid = activeId;
+        const tmpId = `bot-${Date.now()}`;
+        setSending(false); // remove "is thinking" since we start streaming
+        setMessages((prev) => [
+          ...prev,
+          { id: tmpId, role: "assistant", content: "", media_type: "text", media_url: null },
+        ]);
+
+        let done = false;
+        while (!done) {
+          const { value, done: readerDone } = await reader.read();
+          if (value) {
+            const chunkText = decoder.decode(value, { stream: true });
+            const lines = chunkText.split("\n");
+            for (let line of lines) {
+              if (line.startsWith("data: ")) {
+                const dataStr = line.slice(6);
+                if (dataStr.trim() === "") continue;
+                try {
+                  const parsed = JSON.parse(dataStr);
+                  if (parsed.session_id) {
+                    sid = parsed.session_id;
+                    if (!activeId) {
+                      loadSessions().then(() => setActiveId(sid));
+                    }
+                  } else if (parsed.text) {
+                    setMessages((prev) =>
+                      prev.map((m) =>
+                        m.id === tmpId ? { ...m, content: m.content + parsed.text } : m
+                      )
+                    );
+                  } else if (parsed.detail) {
+                    throw new Error(parsed.detail);
+                  }
+                } catch(e) {}
+              }
+            }
+          }
+          done = readerDone;
+        }
+        await loadMessages(sid);
       }
-      await loadMessages(sid);
     } catch (err) {
       setMessages((prev) => [
         ...prev,
         {
           id: `err-${Date.now()}`,
           role: "assistant",
-          content:
-            err?.response?.data?.detail ||
-            "Something went wrong. Please try again.",
+          content: err?.message || err?.response?.data?.detail || "Something went wrong. Please try again.",
           media_type: "text",
           media_url: null,
         },

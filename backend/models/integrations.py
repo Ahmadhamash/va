@@ -2,10 +2,11 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import Boolean, ForeignKey, String, Text, func
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from database import Base
+from crypto import EncryptedJSONB
 
 
 class StyleSample(Base):
@@ -59,7 +60,7 @@ class ChannelIntegration(Base):
     )
     # Secrets: page_access_token, app_secret, verify_token, webhook_secret, …
     credentials: Mapped[dict] = mapped_column(
-        JSONB, default=dict, server_default="{}"
+        EncryptedJSONB, default=dict, server_default="{}"
     )
     is_active: Mapped[bool] = mapped_column(
         Boolean, default=True, server_default="true"

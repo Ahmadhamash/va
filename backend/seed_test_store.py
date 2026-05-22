@@ -3,7 +3,7 @@ from services.auth_service import hash_password
 from sqlalchemy import select
 
 from database import AsyncSessionLocal
-from models import User, Item, BusinessWorkflow, DeliveryRule, BusinessPolicy
+from models import User, Item, BusinessWorkflow, BusinessPolicy
 
 
 async def seed_store():

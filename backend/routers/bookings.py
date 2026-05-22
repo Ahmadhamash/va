@@ -1,7 +1,7 @@
 import uuid
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -22,6 +22,8 @@ DAY_NAMES_AR = ["الاثنين", "الثلاثاء", "الأربعاء", "ال�
 # ─── Time Slots ──────────────────────────────────────────────────────────────
 @router.get("/time-slots", response_model=list[TimeSlotOut])
 async def list_time_slots(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=100),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -29,6 +31,7 @@ async def list_time_slots(
         select(TimeSlot)
         .where(TimeSlot.user_id == current_user.id)
         .order_by(TimeSlot.day_of_week, TimeSlot.start_time)
+        .offset(skip).limit(limit)
     )
     return list(result.scalars().all())
 
@@ -87,6 +90,8 @@ async def delete_time_slot(
 async def list_bookings(
     status_filter: str | None = None,
     date_from: date | None = None,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=100),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -99,6 +104,8 @@ async def list_bookings(
         stmt = stmt.where(Booking.status == status_filter)
     if date_from:
         stmt = stmt.where(Booking.booking_date >= date_from)
+    
+    stmt = stmt.offset(skip).limit(limit)
     result = await db.execute(stmt)
     return list(result.scalars().all())
 

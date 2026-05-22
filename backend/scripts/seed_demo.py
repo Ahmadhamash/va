@@ -134,7 +134,7 @@ async def _ensure_channel(db, user: User, platform: str) -> ChannelIntegration:
 
 async def run() -> None:
     async with AsyncSessionLocal() as db:
-        admin = await _get_or_create_user(db, ADMIN, "admin")
+        await _get_or_create_user(db, ADMIN, "admin")
         client = await _get_or_create_user(db, CLIENT, "client")
 
         item_count = await db.scalar(

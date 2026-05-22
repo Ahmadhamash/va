@@ -71,15 +71,18 @@ async def save_upload(file: UploadFile, user_id: uuid.UUID) -> tuple[str, str]:
     """
     original = _sanitize_filename(file.filename or "upload")
     ext = Path(original).suffix.lower()
-    media_type = _classify(file.content_type, ext)
-
-    limit = MAX_IMAGE_SIZE if media_type == "image" else MAX_AUDIO_SIZE
 
     contents = await file.read()
     if len(contents) == 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Empty file"
         )
+        
+    import magic
+    actual_mime = magic.from_buffer(contents, mime=True)
+    media_type = _classify(actual_mime, ext)
+
+    limit = MAX_IMAGE_SIZE if media_type == "image" else MAX_AUDIO_SIZE
     if len(contents) > limit:
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,

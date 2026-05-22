@@ -21,6 +21,10 @@ class PersonaUpdate(BaseModel):
     ai_persona: str = Field(max_length=4000)
     business_name: str | None = Field(default=None, max_length=255)
 
+class UserUpdate(BaseModel):
+    business_name: str | None = Field(default=None, max_length=255)
+    business_type: str | None = Field(default=None, max_length=50)
+
 
 class UserOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -33,6 +37,8 @@ class UserOut(BaseModel):
     role: str
     is_active: bool
     created_at: datetime
+    email_verified: bool
+    ai_credit_balance: int
 
 
 class Token(BaseModel):

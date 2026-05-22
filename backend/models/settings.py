@@ -1,9 +1,10 @@
 from datetime import datetime
 
-from sqlalchemy import Integer, String, Text, func
+from sqlalchemy import Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from database import Base
+from crypto import EncryptedString
 
 
 class AppSettings(Base):
@@ -16,7 +17,7 @@ class AppSettings(Base):
     __tablename__ = "app_settings"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
-    openai_api_key: Mapped[str | None] = mapped_column(Text, nullable=True)
+    openai_api_key: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
     ai_model: Mapped[str] = mapped_column(
         String(50), default="gpt-4o", server_default="gpt-4o"
     )

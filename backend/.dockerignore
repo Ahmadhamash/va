@@ -1,0 +1,10 @@
+.git
+.env
+__pycache__/
+*.pyc
+venv/
+env/
+.pytest_cache/
+tests/
+alembic/versions/*_seed_*.py
+uploads/

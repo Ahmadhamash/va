@@ -3,7 +3,7 @@ from datetime import datetime
 
 from sqlalchemy import Boolean, ForeignKey, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from database import Base
 
@@ -21,6 +21,8 @@ class BusinessWorkflow(Base):
         nullable=False,
         index=True,
     )
+    user: Mapped["User"] = relationship(back_populates="workflows")  # noqa: F821
+    
     # The condition/trigger. Free-text or presets like 'digital_product_purchase'
     trigger_event: Mapped[str] = mapped_column(String(255), nullable=False)
     

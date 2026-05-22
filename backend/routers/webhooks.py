@@ -13,6 +13,7 @@ from services.messaging_service import (
     sync_reply,
     verify_meta_signature,
 )
+from services.ratelimit import limiter
 
 logger = logging.getLogger("webhooks")
 
@@ -27,6 +28,7 @@ _CORS = {
 
 # ─── Meta (Messenger + Instagram) ────────────────────────────────────────────
 @router.get("/webhooks/meta/{public_id}")
+@limiter.limit("60/minute")
 async def meta_verify(
     public_id: str, request: Request, db: AsyncSession = Depends(get_db)
 ):
@@ -45,6 +47,7 @@ async def meta_verify(
 
 
 @router.post("/webhooks/meta/{public_id}")
+@limiter.limit("60/minute")
 async def meta_receive(
     public_id: str,
     request: Request,
@@ -109,6 +112,7 @@ async def meta_receive(
 
 # ─── Generic webhook (synchronous) ───────────────────────────────────────────
 @router.post("/webhooks/generic/{public_id}")
+@limiter.limit("30/minute")
 async def generic_inbound(
     public_id: str,
     request: Request,
@@ -138,12 +142,42 @@ async def generic_inbound(
 
 
 # ─── Embeddable web widget (debounced + polling) ─────────────────────────────
+def _verify_widget_token(token: str) -> str | None:
+    import jwt
+    from config import settings
+    if not token:
+        return None
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        return payload.get("vid")
+    except jwt.PyJWTError:
+        return None
+
+@router.options("/webhooks/widget/{public_id}/init")
+async def widget_init_preflight(public_id: str):
+    return Response(status_code=204, headers=_CORS)
+
+@router.post("/webhooks/widget/{public_id}/init")
+@limiter.limit("10/minute")
+async def widget_init(public_id: str, request: Request, db: AsyncSession = Depends(get_db)):
+    integration = await get_integration(public_id, db)
+    if integration is None or integration.platform != "widget":
+        return JSONResponse({"detail": "Unknown widget"}, status_code=404, headers=_CORS)
+    import uuid
+    import jwt
+    from config import settings
+    visitor_id = str(uuid.uuid4())
+    token = jwt.encode({"vid": visitor_id}, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+    return JSONResponse({"token": token}, headers=_CORS)
+
+
 @router.options("/webhooks/widget/{public_id}/message")
 async def widget_preflight(public_id: str):
     return Response(status_code=204, headers=_CORS)
 
 
 @router.post("/webhooks/widget/{public_id}/message")
+@limiter.limit("30/minute")
 async def widget_message(
     public_id: str, request: Request, db: AsyncSession = Depends(get_db)
 ):
@@ -156,7 +190,12 @@ async def widget_message(
         return JSONResponse({"detail": "Invalid JSON"}, status_code=400, headers=_CORS)
 
     text = (body.get("message") or "").strip()
-    visitor = str(body.get("visitor_id") or "web-visitor")
+    token = body.get("token")
+    visitor = _verify_widget_token(token)
+    
+    if not visitor:
+        return JSONResponse({"detail": "Invalid or missing token"}, status_code=403, headers=_CORS)
+
     if not text:
         return JSONResponse(
             {"detail": "message is required"}, status_code=400, headers=_CORS
@@ -172,6 +211,7 @@ async def widget_poll_preflight(public_id: str):
 
 
 @router.get("/webhooks/widget/{public_id}/poll")
+@limiter.limit("60/minute")
 async def widget_poll(
     public_id: str, request: Request, db: AsyncSession = Depends(get_db)
 ):
@@ -179,7 +219,11 @@ async def widget_poll(
     if integration is None or integration.platform != "widget":
         return JSONResponse({"detail": "Unknown widget"}, status_code=404, headers=_CORS)
 
-    visitor = request.query_params.get("visitor_id") or "web-visitor"
+    token = request.query_params.get("token")
+    visitor = _verify_widget_token(token)
+    
+    if not visitor:
+        return JSONResponse({"detail": "Invalid token"}, status_code=403, headers=_CORS)
     client = await db.get(User, integration.user_id)
     if client is None:
         return JSONResponse({"messages": []}, headers=_CORS)
@@ -232,8 +276,16 @@ _WIDGET_JS = """(function(){
   var BASE="__BASE__",PID="__PID__";
   var MSG=BASE+"/webhooks/widget/"+PID+"/message";
   var POLL=BASE+"/webhooks/widget/"+PID+"/poll";
-  var vid=localStorage.getItem("ai_widget_vid");
-  if(!vid){vid="v-"+Math.random().toString(36).slice(2);localStorage.setItem("ai_widget_vid",vid);}
+  var INIT=BASE+"/webhooks/widget/"+PID+"/init";
+  var token=localStorage.getItem("ai_widget_token");
+  
+  function initToken(cb){
+    if(token) return cb();
+    fetch(INIT,{method:"POST"}).then(function(r){return r.json();}).then(function(d){
+      token=d.token; localStorage.setItem("ai_widget_token", token); cb();
+    }).catch(function(){});
+  }
+
   var open=false,seen={},poller=null;
   var btn=document.createElement("div");
   btn.innerHTML="\\uD83D\\uDCAC";
@@ -242,14 +294,20 @@ _WIDGET_JS = """(function(){
   panel.style.cssText="position:fixed;bottom:88px;right:20px;width:350px;max-width:92vw;height:480px;background:#fff;border-radius:16px;box-shadow:0 12px 48px rgba(0,0,0,.25);display:none;flex-direction:column;overflow:hidden;z-index:2147483000;font-family:system-ui,sans-serif";
   panel.innerHTML='<div style="background:#2f56d6;color:#fff;padding:14px 16px;font-weight:600">Chat with us</div><div id="aiw-log" style="flex:1;overflow-y:auto;padding:14px;background:#f4f6fb;font-size:14px"></div><div style="display:flex;border-top:1px solid #eee"><input id="aiw-in" placeholder="Type a message..." style="flex:1;border:0;padding:14px;outline:none;font-size:14px"/><button id="aiw-send" style="border:0;background:#2f56d6;color:#fff;padding:0 18px;cursor:pointer;font-weight:600">Send</button></div>';
   document.body.appendChild(btn);document.body.appendChild(panel);
-  btn.onclick=function(){open=!open;panel.style.display=open?"flex":"none";if(open)poll();};
+  
+  btn.onclick=function(){open=!open;panel.style.display=open?"flex":"none";if(open){initToken(poll);}};
   function log(){return panel.querySelector("#aiw-log");}
   function add(t,me,id){if(id){if(seen[id])return;seen[id]=1;}var d=document.createElement("div");d.dir="auto";d.style.cssText="margin:6px 0;padding:9px 12px;border-radius:12px;max-width:82%;white-space:pre-wrap;word-break:break-word;"+(me?"background:#2f56d6;color:#fff;margin-left:auto":"background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.1)");d.textContent=t;log().appendChild(d);log().scrollTop=log().scrollHeight;}
-  function poll(){fetch(POLL+"?visitor_id="+encodeURIComponent(vid)).then(function(r){return r.json();}).then(function(d){(d.messages||[]).forEach(function(m){add(m.content,m.role==="user",m.id);});}).catch(function(){});}
-  function send(){var i=panel.querySelector("#aiw-in");var v=i.value.trim();if(!v)return;i.value="";add(v,true);
-    fetch(MSG,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({message:v,visitor_id:vid})})
-    .then(function(){var n=0;clearInterval(poller);poller=setInterval(function(){n++;poll();if(n>30)clearInterval(poller);},2000);})
-    .catch(function(){add("Connection error.",false);});}
+  function poll(){if(!token)return;fetch(POLL+"?token="+encodeURIComponent(token)).then(function(r){return r.json();}).then(function(d){(d.messages||[]).forEach(function(m){add(m.content,m.role==="user",m.id);});}).catch(function(){});}
+  function send(){
+    var i=panel.querySelector("#aiw-in");var v=i.value.trim();if(!v)return;
+    initToken(function(){
+      i.value="";add(v,true);
+      fetch(MSG,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({message:v,token:token})})
+      .then(function(){var n=0;clearInterval(poller);poller=setInterval(function(){n++;poll();if(n>30)clearInterval(poller);},2000);})
+      .catch(function(){add("Connection error.",false);});
+    });
+  }
   panel.querySelector("#aiw-send").onclick=send;
   panel.querySelector("#aiw-in").addEventListener("keydown",function(e){if(e.key==="Enter")send();});
 })();"""

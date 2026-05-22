@@ -1,3 +1,4 @@
+from models.billing import SubscriptionTier, UserSubscription
 from models.booking import Booking, TimeSlot
 from models.chat import ChatSession, Message
 from models.delivery import DeliveryRule
@@ -30,4 +31,6 @@ __all__ = [
     "TimeSlot",
     "Booking",
     "BusinessWorkflow",
+    "SubscriptionTier",
+    "UserSubscription",
 ]

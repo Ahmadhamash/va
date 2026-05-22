@@ -8,9 +8,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
 from middleware.auth_middleware import get_current_user
-from models import ChannelIntegration, ChatSession, Escalation, Message, User
+from models import ChannelIntegration, ChatSession, Escalation, User
 from schemas.escalation import EscalationHandle, EscalationOut
-from services.ai_service import save_message
+from services.ai_chat import save_message
 from services.messaging_service import send_meta_message
 
 router = APIRouter(prefix="/escalations", tags=["escalations"])
