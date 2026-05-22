@@ -27,11 +27,34 @@ export default function ChatPage() {
 
   useEffect(() => {
     loadSessions();
+    const interval = setInterval(() => {
+      api.get("/chat/sessions")
+        .then(({ data }) => setSessions(data))
+        .catch(() => {});
+    }, 5000);
+    return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
     loadMessages(activeId);
-  }, [activeId]);
+    if (!activeId) return;
+
+    const interval = setInterval(() => {
+      if (!sending) {
+        api.get(`/chat/sessions/${activeId}/messages`)
+          .then(({ data }) => {
+            setMessages((prev) => {
+              if (JSON.stringify(prev) !== JSON.stringify(data)) {
+                return data;
+              }
+              return prev;
+            });
+          })
+          .catch(() => {});
+      }
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [activeId, sending]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });

@@ -15,8 +15,8 @@ export default function EscalationsPage() {
   const [replyText, setReplyText] = useState("");
   const [sendingReply, setSendingReply] = useState(false);
   const messagesEndRef = useRef(null);
-  async function load() {
-    setLoading(true);
+  async function load(isSilent = false) {
+    if (!isSilent) setLoading(true);
     try {
       const params = filter ? {
         status_filter: filter
@@ -28,12 +28,43 @@ export default function EscalationsPage() {
       });
       setEscalations(data);
     } finally {
-      setLoading(false);
+      if (!isSilent) setLoading(false);
     }
   }
   useEffect(() => {
     load();
   }, [filter]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      load(true);
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [filter]);
+
+  const activeEsc = escalations.find(e => e.id === showMessages);
+  const activeSessionId = activeEsc?.session_id;
+
+  useEffect(() => {
+    if (!activeSessionId) return;
+
+    const interval = setInterval(() => {
+      if (!sendingReply) {
+        api.get(`/chat/sessions/${activeSessionId}/messages`)
+          .then(({ data }) => {
+            setSelectedMessages((prev) => {
+              if (JSON.stringify(prev) !== JSON.stringify(data)) {
+                return data;
+              }
+              return prev;
+            });
+          })
+          .catch(() => {});
+      }
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, [activeSessionId, sendingReply]);
 
   // Scroll to bottom when messages change
   useEffect(() => {
