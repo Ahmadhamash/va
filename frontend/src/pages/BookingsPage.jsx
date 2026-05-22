@@ -65,8 +65,8 @@ export default function BookingsPage() {
   return <div className="mx-auto max-w-4xl px-4 py-8 space-y-6" dir="rtl">
       <h1 className="text-xl font-bold">{t("txt_13")}</h1>
       <div className="flex gap-2">
-        {["bookings", "slots"].map(t => <button key={t} onClick={() => setTab(t)} className={`px-4 py-2 rounded-lg text-sm font-medium ${tab === t ? "bg-brand-600 text-white" : "bg-white shadow-sm"}`}>
-            {t === "bookings" ? t("txt_14") : t("txt_15")}
+        {["bookings", "slots"].map(tabKey => <button key={tabKey} onClick={() => setTab(tabKey)} className={`px-4 py-2 rounded-lg text-sm font-medium ${tab === tabKey ? "bg-brand-600 text-white" : "bg-white shadow-sm"}`}>
+            {tabKey === "bookings" ? t("txt_14") : t("txt_15")}
           </button>)}
       </div>
       {error && <div className="bg-red-50 text-red-700 text-sm rounded-lg px-3 py-2">{error}</div>}

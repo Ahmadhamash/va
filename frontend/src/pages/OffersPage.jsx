@@ -77,11 +77,11 @@ export default function OffersPage() {
   return <div className="mx-auto max-w-4xl px-4 py-8 space-y-6" dir="rtl">
       <h1 className="text-xl font-bold">{t("txt_108")}</h1>
       <div className="flex gap-2">
-        {["offers", "packages"].map(t => <button key={t} onClick={() => {
-        setTab(t);
+        {["offers", "packages"].map(tabKey => <button key={tabKey} onClick={() => {
+        setTab(tabKey);
         reset();
-      }} className={`px-4 py-2 rounded-lg text-sm font-medium ${tab === t ? "bg-brand-600 text-white" : "bg-white shadow-sm"}`}>
-            {t === "offers" ? t("txt_109") : t("txt_110")}
+      }} className={`px-4 py-2 rounded-lg text-sm font-medium ${tab === tabKey ? "bg-brand-600 text-white" : "bg-white shadow-sm"}`}>
+            {tabKey === "offers" ? t("txt_109") : t("txt_110")}
           </button>)}
       </div>
       {error && <div className="bg-red-50 text-red-700 text-sm rounded-lg px-3 py-2">{error}</div>}
@@ -107,7 +107,7 @@ export default function OffersPage() {
             <div><label className="block text-sm font-medium mb-1">{t("txt_113")}</label><select value={form.offer_type || "percentage"} onChange={e => setForm({
               ...form,
               offer_type: e.target.value
-            })} className={inputCls}>{OFFER_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}</select></div>
+            })} className={inputCls}>{OFFER_TYPES.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}</select></div>
             <div><label className="block text-sm font-medium mb-1">{t("txt_114")}</label><input type="number" step="0.01" value={form.discount_value || ""} onChange={e => setForm({
               ...form,
               discount_value: e.target.value

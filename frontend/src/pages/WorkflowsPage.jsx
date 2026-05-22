@@ -138,8 +138,8 @@ export default function WorkflowsPage() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{t("txt_201")}</label>
                 <select value={triggerEvent} onChange={e => setTriggerEvent(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:outline-none">
-                  {PRESET_TRIGGERS.map(t => <option key={t} value={t}>
-                      {t}
+                  {PRESET_TRIGGERS.map(trigger => <option key={trigger} value={trigger}>
+                      {trigger}
                     </option>)}
                 </select>
                 {triggerEvent === t("txt_184") && <input type="text" value={customTrigger} onChange={e => setCustomTrigger(e.target.value)} placeholder={t("txt_202")} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm mt-2 focus:ring-2 focus:ring-brand-500 focus:outline-none" />}

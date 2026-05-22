@@ -103,7 +103,7 @@ export default function PoliciesPage() {
             ...form,
             policy_type: e.target.value
           })} className={inputCls}>
-                {POLICY_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                {POLICY_TYPES.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
               </select>
             </div>
             <div>
@@ -132,7 +132,7 @@ export default function PoliciesPage() {
               <div className="flex justify-between items-start">
                 <div>
                   <span className="text-xs bg-brand-50 text-brand-600 px-2 py-0.5 rounded-full ml-2">
-                    {POLICY_TYPES.find(t => t.value === p.policy_type)?.label || p.policy_type}
+                    {POLICY_TYPES.find(opt => opt.value === p.policy_type)?.label || p.policy_type}
                   </span>
                   <span className="font-semibold text-gray-900">{p.title}</span>
                 </div>

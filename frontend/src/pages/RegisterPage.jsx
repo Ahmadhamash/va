@@ -4,12 +4,8 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
 import api from "../services/api";
 export default function RegisterPage() {
-  const {
-    t
-  } = useTranslation();
-  const {
-    register
-  } = useAuth();
+  const { t } = useTranslation();
+  const { register } = useAuth();
   const navigate = useNavigate();
   const [form, setForm] = useState({
     username: "",
@@ -22,9 +18,7 @@ export default function RegisterPage() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   useEffect(() => {
-    api.get("/business-types").then(({
-      data
-    }) => setTypes(data)).catch(() => {});
+    api.get("/business-types").then(({ data }) => setTypes(data)).catch(() => {});
   }, []);
   function update(field) {
     return e => setForm({
@@ -93,8 +87,8 @@ export default function RegisterPage() {
           <label className="block text-sm font-medium text-gray-700 mb-1">{t("txt_163")}</label>
           <select value={form.business_type} onChange={update("business_type")} className="w-full rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500">
             <option value="">{t("txt_164")}</option>
-            {types.map(t => <option key={t.key} value={t.key}>
-                {t.icon} {t.label}
+            {types.map(bt => <option key={bt.key} value={bt.key}>
+                {bt.icon} {bt.label}
               </option>)}
           </select>
           <p className="text-xs text-gray-500 mt-1">{t("txt_165")}</p>
