@@ -10,10 +10,12 @@ export default function TrainingPage() {
   // Settings states
   const [businessName, setBusinessName] = useState("");
   const [plainPersona, setPlainPersona] = useState("");
-  const [voiceMode, setVoiceMode] = useState("custom");
+  const [promptMode, setPromptMode] = useState("default");
   const [dialect, setDialect] = useState("jordanian");
   const [emoji, setEmoji] = useState("medium");
   const [tone, setTone] = useState("friendly");
+  const [voiceReplyEnabled, setVoiceReplyEnabled] = useState(false);
+  const [ttsVoice, setTtsVoice] = useState("alloy");
   
   const [settingsBusy, setSettingsBusy] = useState(false);
   const [settingsMsg, setSettingsMsg] = useState("");
@@ -45,18 +47,24 @@ export default function TrainingPage() {
       if (match) {
         try {
           const config = JSON.parse(match[1]);
-          setVoiceMode(config.voice_mode || "custom");
+          setPromptMode(config.prompt_mode || "default");
           setDialect(config.dialect || "jordanian");
           setEmoji(config.emoji || "medium");
           setTone(config.tone || "friendly");
+          setVoiceReplyEnabled(config.voice_reply_enabled || false);
+          setTtsVoice(config.tts_voice || "alloy");
           setPlainPersona(persona.replace(match[0], "").trim());
         } catch (e) {
           setPlainPersona(persona);
-          setVoiceMode("custom");
+          setPromptMode("default");
+          setVoiceReplyEnabled(false);
+          setTtsVoice("alloy");
         }
       } else {
         setPlainPersona(persona);
-        setVoiceMode("custom");
+        setPromptMode("default");
+        setVoiceReplyEnabled(false);
+        setTtsVoice("alloy");
       }
     }
   }, [user]);
@@ -72,7 +80,9 @@ export default function TrainingPage() {
     setSettingsBusy(true);
 
     const config = {
-      voice_mode: voiceMode,
+      prompt_mode: promptMode,
+      voice_reply_enabled: voiceReplyEnabled,
+      tts_voice: ttsVoice,
       dialect,
       emoji,
       tone
@@ -165,8 +175,45 @@ export default function TrainingPage() {
             />
           </div>
 
-          {/* AI Persona Description */}
-          <div>
+        </div>
+
+        {/* AI Voice Mode Toggle */}
+        <div className="pt-4 border-t border-gray-100">
+          <label className="block text-sm font-semibold text-gray-700 mb-3">
+            {t("voice_mode")}
+          </label>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 bg-gray-100 p-1 rounded-xl">
+            {[
+              { id: "default", label: t("prompt_mode_default") },
+              { id: "custom_settings", label: t("prompt_mode_custom_settings") },
+              { id: "full_prompt", label: t("prompt_mode_full_prompt") },
+              { id: "samples", label: t("prompt_mode_samples") },
+            ].map((m) => (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => setPromptMode(m.id)}
+                className={`text-center py-2.5 rounded-lg font-medium text-xs sm:text-sm transition-all ${
+                  promptMode === m.id
+                    ? "bg-white text-brand-700 shadow-sm"
+                    : "text-gray-500 hover:text-gray-800"
+                }`}
+              >
+                {m.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Mode Settings Content */}
+        {promptMode === "default" && (
+          <div className="bg-brand-50 border border-brand-100 rounded-xl p-4 text-brand-800 text-xs sm:text-sm mt-4">
+            💡 <strong>{t("prompt_mode_default")}</strong>: {t("prompt_mode_default_msg")}
+          </div>
+        )}
+
+        {promptMode === "full_prompt" && (
+          <div className="pt-4 mt-4 border-t border-gray-50">
             <label className="block text-sm font-semibold text-gray-700 mb-1">
               {t("ai_persona")}
             </label>
@@ -178,101 +225,119 @@ export default function TrainingPage() {
               className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-all text-sm"
             />
           </div>
-        </div>
+        )}
 
-        {/* AI Voice Mode Toggle */}
-        <div className="pt-4 border-t border-gray-100">
-          <label className="block text-sm font-semibold text-gray-700 mb-3">
-            {t("voice_mode")}
-          </label>
-          <div className="flex bg-gray-100 p-1 rounded-xl">
-            <button
-              type="button"
-              onClick={() => setVoiceMode("custom")}
-              className={`flex-1 text-center py-2.5 rounded-lg font-medium text-xs sm:text-sm transition-all ${
-                voiceMode === "custom"
-                  ? "bg-white text-brand-700 shadow-sm"
-                  : "text-gray-500 hover:text-gray-800"
-              }`}
-            >
-              {t("voice_mode_custom")}
-            </button>
-            <button
-              type="button"
-              onClick={() => setVoiceMode("samples")}
-              className={`flex-1 text-center py-2.5 rounded-lg font-medium text-xs sm:text-sm transition-all ${
-                voiceMode === "samples"
-                  ? "bg-white text-brand-700 shadow-sm"
-                  : "text-gray-500 hover:text-gray-800"
-              }`}
-            >
-              {t("voice_mode_samples")}
-            </button>
-          </div>
-        </div>
-
-        {/* Mode Settings Content */}
-        {voiceMode === "custom" ? (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 border-t border-gray-50">
-            {/* Arabic Dialect */}
+        {promptMode === "custom_settings" && (
+          <div className="space-y-4 pt-4 mt-4 border-t border-gray-50">
             <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1">
-                {t("dialect")}
+              <label className="block text-sm font-semibold text-gray-700 mb-1">
+                {t("ai_persona")}
               </label>
-              <select
-                value={dialect}
-                onChange={(e) => setDialect(e.target.value)}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white text-sm"
-              >
-                <option value="jordanian">{t("dialect_jordanian")}</option>
-                <option value="saudi">{t("dialect_saudi")}</option>
-                <option value="egyptian">{t("dialect_egyptian")}</option>
-                <option value="syrian">{t("dialect_syrian")}</option>
-                <option value="msa">{t("dialect_msa")}</option>
-              </select>
+              <textarea
+                value={plainPersona}
+                onChange={(e) => setPlainPersona(e.target.value)}
+                placeholder={t("ai_persona_help")}
+                rows={4}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-all text-sm"
+              />
             </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Arabic Dialect */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">
+                  {t("dialect")}
+                </label>
+                <select
+                  value={dialect}
+                  onChange={(e) => setDialect(e.target.value)}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white text-sm"
+                >
+                  <option value="jordanian">{t("dialect_jordanian")}</option>
+                  <option value="saudi">{t("dialect_saudi")}</option>
+                  <option value="egyptian">{t("dialect_egyptian")}</option>
+                  <option value="syrian">{t("dialect_syrian")}</option>
+                  <option value="msa">{t("dialect_msa")}</option>
+                </select>
+              </div>
 
-            {/* Tone of Voice */}
-            <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1">
-                {t("tone_of_voice")}
-              </label>
-              <select
-                value={tone}
-                onChange={(e) => setTone(e.target.value)}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white text-sm"
-              >
-                <option value="friendly">{t("tone_friendly")}</option>
-                <option value="professional">{t("tone_professional")}</option>
-                <option value="salesy">{t("tone_salesy")}</option>
-              </select>
-            </div>
+              {/* Tone of Voice */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">
+                  {t("tone_of_voice")}
+                </label>
+                <select
+                  value={tone}
+                  onChange={(e) => setTone(e.target.value)}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white text-sm"
+                >
+                  <option value="friendly">{t("tone_friendly")}</option>
+                  <option value="professional">{t("tone_professional")}</option>
+                  <option value="salesy">{t("tone_salesy")}</option>
+                </select>
+              </div>
 
-            {/* Emoji Level */}
-            <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1">
-                {t("emoji_level")}
-              </label>
-              <select
-                value={emoji}
-                onChange={(e) => setEmoji(e.target.value)}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white text-sm"
-              >
-                <option value="none">{t("emoji_none")}</option>
-                <option value="low">{t("emoji_low")}</option>
-                <option value="medium">{t("emoji_medium")}</option>
-                <option value="high">{t("emoji_high")}</option>
-              </select>
+              {/* Emoji Level */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">
+                  {t("emoji_level")}
+                </label>
+                <select
+                  value={emoji}
+                  onChange={(e) => setEmoji(e.target.value)}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white text-sm"
+                >
+                  <option value="none">{t("emoji_none")}</option>
+                  <option value="low">{t("emoji_low")}</option>
+                  <option value="medium">{t("emoji_medium")}</option>
+                  <option value="high">{t("emoji_high")}</option>
+                </select>
+              </div>
             </div>
           </div>
-        ) : (
-          <div className="bg-brand-50 border border-brand-100 rounded-xl p-4 text-brand-800 text-xs sm:text-sm">
-            💡 <strong>{t("voice_mode_samples")}</strong>: {t("txt_16")}
+        )}
+
+        {promptMode === "samples" && (
+          <div className="bg-brand-50 border border-brand-100 rounded-xl p-4 text-brand-800 text-xs sm:text-sm mt-4">
+            💡 <strong>{t("prompt_mode_samples")}</strong>: {t("txt_16")}
             <div className="mt-2 text-xs text-brand-600">
               * سيقوم المساعد بمحاكاة أسلوب الكلام الخاص بك تلقائياً من عينات المحادثات المرفوعة أدناه بدلاً من الخيارات المحددة مسبقاً.
             </div>
           </div>
         )}
+
+        {/* Voice Replies Section */}
+        <div className="pt-6 border-t border-gray-100">
+          <label className="flex items-center space-x-3 space-x-reverse cursor-pointer mb-4">
+            <input
+              type="checkbox"
+              checked={voiceReplyEnabled}
+              onChange={(e) => setVoiceReplyEnabled(e.target.checked)}
+              className="form-checkbox h-5 w-5 text-brand-600 rounded focus:ring-brand-500 border-gray-300"
+            />
+            <span className="text-sm font-semibold text-gray-700">
+              {t("voice_replies")}
+            </span>
+          </label>
+          {voiceReplyEnabled && (
+            <div className="pl-8 rtl:pr-8 rtl:pl-0">
+              <label className="block text-xs font-semibold text-gray-600 mb-1">
+                {t("tts_voice")}
+              </label>
+              <select
+                value={ttsVoice}
+                onChange={(e) => setTtsVoice(e.target.value)}
+                className="w-full md:w-1/3 rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white text-sm"
+              >
+                <option value="alloy">{t("voice_alloy")}</option>
+                <option value="echo">{t("voice_echo")}</option>
+                <option value="nova">{t("voice_nova")}</option>
+                <option value="shimmer">{t("voice_shimmer")}</option>
+                <option value="onyx">{t("voice_onyx")}</option>
+                <option value="fable">{t("voice_fable")}</option>
+              </select>
+            </div>
+          )}
+        </div>
 
         {/* Submit Actions */}
         <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-6 border-t border-gray-100">
@@ -295,7 +360,7 @@ export default function TrainingPage() {
       </form>
 
       {/* Voice Cloning Details (Only displayed when samples mode is active) */}
-      {voiceMode === "samples" && (
+      {promptMode === "samples" && (
         <div className="space-y-6 animate-fadeIn">
           {/* Upload Form */}
           <form onSubmit={handleUpload} className="bg-white rounded-2xl shadow-sm border border-gray-150 p-6 space-y-4">

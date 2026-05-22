@@ -1,6 +1,5 @@
 import csv
 import io
-from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse

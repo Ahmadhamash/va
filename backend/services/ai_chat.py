@@ -222,16 +222,41 @@ async def process_message(
             "transcription": transcription,
         }
 
+    # Deduct AI credit
+    user.ai_credit_balance -= 1
+    
+    # Handle optional voice reply
+    voice_reply_enabled = False
+    tts_voice = "alloy"
+    if user.ai_persona:
+        import re
+        import json
+        match = re.search(r"<!--\s*({.*?})\s*-->", user.ai_persona)
+        if match:
+            try:
+                config = json.loads(match.group(1))
+                voice_reply_enabled = config.get("voice_reply_enabled", False)
+                tts_voice = config.get("tts_voice", "alloy")
+            except Exception:
+                pass
+                
+    reply_media_type = "text"
+    reply_media_url = None
+    if voice_reply_enabled and reply and reply not in ("Service temporarily unavailable, please try again", "I couldn't retrieve that information right now"):
+        try:
+            from services.ai_media import generate_tts
+            reply_media_url = await generate_tts(reply, tts_voice, user.id, db)
+            reply_media_type = "audio"
+        except Exception:
+            logger.exception("Failed to generate TTS")
+
     await save_message(
         session_id, "user", user_message, media_type, media_url, db
     )
-    await save_message(session_id, "assistant", reply, "text", None, db)
-    
-    # Deduct AI credit
-    user.ai_credit_balance -= 1
+    await save_message(session_id, "assistant", reply, reply_media_type, reply_media_url, db)
     await db.commit()
     
-    return {"reply": reply, "transcription": transcription}
+    return {"reply": reply, "transcription": transcription, "audio_url": reply_media_url}
 
 
 # ─── Debounced path (channels/widget via worker) ─────────────────────────────
@@ -345,13 +370,39 @@ async def process_pending(session_id: uuid.UUID, db: AsyncSession) -> dict | Non
 
     for m in pending:
         m.processed = True
-    await db.commit()
 
-    await save_message(session_id, "assistant", reply, "text", None, db)
+    # Handle optional voice reply
+    voice_reply_enabled = False
+    tts_voice = "alloy"
+    if user.ai_persona:
+        import re
+        import json
+        match = re.search(r"<!--\s*({.*?})\s*-->", user.ai_persona)
+        if match:
+            try:
+                config = json.loads(match.group(1))
+                voice_reply_enabled = config.get("voice_reply_enabled", False)
+                tts_voice = config.get("tts_voice", "alloy")
+            except Exception:
+                pass
+                
+    reply_media_type = "text"
+    reply_media_url = None
+    if voice_reply_enabled and reply and reply not in ("Service temporarily unavailable, please try again", "I couldn't retrieve that information right now"):
+        try:
+            from services.ai_media import generate_tts
+            reply_media_url = await generate_tts(reply, tts_voice, user.id, db)
+            reply_media_type = "audio"
+        except Exception:
+            logger.exception("Failed to generate TTS")
+
+    await save_message(session_id, "assistant", reply, reply_media_type, reply_media_url, db)
+    await db.commit()
 
     return {
         "reply": reply,
         "channel": session.channel,
         "external_user_id": session.external_user_id,
         "user_id": str(user.id),
+        "audio_url": reply_media_url,
     }

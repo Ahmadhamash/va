@@ -21,9 +21,6 @@ export default function ChatMessage({ message }) {
             className="rounded-lg mb-2 max-h-60 object-cover"
           />
         )}
-        {message.media_type === "audio" && mediaSrc && (
-          <audio controls src={mediaSrc} className="mb-2 w-56" />
-        )}
         {message.content && (
           <p
             dir="auto"
@@ -32,6 +29,9 @@ export default function ChatMessage({ message }) {
           >
             {message.content}
           </p>
+        )}
+        {message.media_type === "audio" && mediaSrc && (
+          <audio controls src={mediaSrc} className="mt-2 max-w-full h-10" />
         )}
         {!message.content && message.media_type === "audio" && (
           <p className="italic opacity-70">Voice message</p>

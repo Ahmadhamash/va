@@ -5,7 +5,8 @@ import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 from openai import AsyncOpenAI
 from services.settings_service import effective_openai_key
-from services.file_service import resolve_path
+from services.file_service import resolve_path, save_file_bytes
+import uuid
 
 logger = logging.getLogger("ai_media")
 TRANSCRIBE_MODEL = "whisper-1"
@@ -39,6 +40,26 @@ async def transcribe_audio(media_url: str, db: AsyncSession) -> str:
     return transcript if isinstance(transcript, str) else getattr(
         transcript, "text", ""
     )
+
+
+async def generate_tts(text: str, voice: str, user_id: uuid.UUID, db: AsyncSession) -> str:
+    key = await effective_openai_key(db)
+    client = _client_for(key)
+    
+    # Generate speech audio
+    response = await client.audio.speech.create(
+        model="tts-1",
+        voice=voice,
+        input=text
+    )
+    
+    # response is an HttpxBinaryResponseContent, we can get bytes using read()
+    audio_bytes = response.read()
+    
+    # Save using the new save_file_bytes
+    # OpenAI tts-1 defaults to mp3
+    media_url, _ = await save_file_bytes(audio_bytes, ".mp3", user_id)
+    return media_url
 
 
 # ─── External media helpers (Facebook CDN etc.) ─────────────────────────────

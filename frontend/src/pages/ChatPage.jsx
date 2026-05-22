@@ -147,6 +147,12 @@ export default function ChatPage() {
                         m.id === tmpId ? { ...m, content: m.content + parsed.text } : m
                       )
                     );
+                  } else if (parsed.url) {
+                    setMessages((prev) =>
+                      prev.map((m) =>
+                        m.id === tmpId ? { ...m, media_type: "audio", media_url: parsed.url } : m
+                      )
+                    );
                   } else if (parsed.detail) {
                     throw new Error(parsed.detail);
                   }

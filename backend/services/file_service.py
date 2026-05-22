@@ -101,6 +101,39 @@ async def save_upload(file: UploadFile, user_id: uuid.UUID) -> tuple[str, str]:
     return rel_path, media_type
 
 
+async def save_file_bytes(content: bytes, extension: str, user_id: uuid.UUID) -> tuple[str, str]:
+    """
+    Persist raw bytes under uploads/{user_id}/{timestamp}{extension}.
+    Returns (relative_path, media_type) where media_type is 'image' or 'audio'.
+    """
+    if len(content) == 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Empty file"
+        )
+        
+    import magic
+    actual_mime = magic.from_buffer(content, mime=True)
+    media_type = _classify(actual_mime, extension)
+
+    limit = MAX_IMAGE_SIZE if media_type == "image" else MAX_AUDIO_SIZE
+    if len(content) > limit:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"File exceeds the {limit // (1024 * 1024)}MB limit",
+        )
+
+    user_dir = _upload_root() / str(user_id)
+    user_dir.mkdir(parents=True, exist_ok=True)
+
+    stored_name = f"{int(time.time())}_{uuid.uuid4().hex[:8]}{extension}"
+    abs_path = user_dir / stored_name
+    with open(abs_path, "wb") as fh:
+        fh.write(content)
+
+    rel_path = str(Path(str(user_id)) / stored_name).replace("\\", "/")
+    return rel_path, media_type
+
+
 def resolve_path(relative_path: str) -> Path:
     """Resolve a stored relative path safely inside the upload root."""
     root = _upload_root()

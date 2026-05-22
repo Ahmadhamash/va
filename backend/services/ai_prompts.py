@@ -7,121 +7,9 @@ from models import BusinessWorkflow, StyleSample, User
 logger = logging.getLogger("ai_prompts")
 STYLE_SAMPLE_LIMIT = 15
 
-def build_system_prompt(
-    user: User, 
-    style_samples: list[str] | None = None,
-    workflows: list[BusinessWorkflow] | None = None,
-) -> str:
-    business = user.business_name or "this business"
-    persona = user.ai_persona or "Friendly, professional, and helpful."
-
-    # Parse settings stored in an HTML comment JSON block (e.g. <!-- {"dialect": "saudi", "emoji": "medium", "tone": "friendly", "voice_mode": "custom"} -->)
-    import re
-    import json
-    dialect_instruction = ""
-    emoji_instruction = ""
-    tone_instruction = ""
-    voice_mode = None
-    match = re.search(r"<!--\s*({.*?})\s*-->", persona)
-    if match:
-        try:
-            config = json.loads(match.group(1))
-            voice_mode = config.get("voice_mode")
-            
-            # Strip the config comment so the LLM doesn't see it as text
-            persona = persona.replace(match.group(0), "").strip()
-            
-            # Only map configs to explicit instructions if voice_mode is not "samples"
-            if voice_mode != "samples":
-                dialect = config.get("dialect")
-                emoji = config.get("emoji")
-                tone = config.get("tone")
-                
-                if dialect == "jordanian":
-                    dialect_instruction = "- Dialect: You MUST reply in the Jordanian/Palestinian Arabic dialect (اللهجة الأردنية/الفلسطينية العامية). Never use formal Modern Standard Arabic (MSA)."
-                elif dialect == "saudi":
-                    dialect_instruction = "- Dialect: You MUST reply in the Saudi/Gulf Arabic dialect (اللهجة السعودية/الخليجية العامية). Never use formal Modern Standard Arabic (MSA)."
-                elif dialect == "egyptian":
-                    dialect_instruction = "- Dialect: You MUST reply in the Egyptian Arabic dialect (اللهجة المصرية العامية). Never use formal Modern Standard Arabic (MSA)."
-                elif dialect == "syrian":
-                    dialect_instruction = "- Dialect: You MUST reply in the Syrian/Levantine Arabic dialect (اللهجة السورية/الشامية العامية). Never use formal Modern Standard Arabic (MSA)."
-                elif dialect == "msa":
-                    dialect_instruction = "- Dialect: You MUST reply in simplified Modern Standard Arabic (العربية الفصحى المبسطة)."
-                    
-                if emoji == "none":
-                    emoji_instruction = "- Emojis: Do NOT use any emojis in your responses."
-                elif emoji == "low":
-                    emoji_instruction = "- Emojis: Use emojis very sparingly (at most 1 emoji per response)."
-                elif emoji == "medium":
-                    emoji_instruction = "- Emojis: Use emojis moderately to maintain a warm and friendly style (1-3 emojis)."
-                elif emoji == "high":
-                    emoji_instruction = "- Emojis: Use emojis warmly and frequently to express emotion and energy."
-                    
-                if tone == "friendly":
-                    tone_instruction = "- Tone: Be extremely friendly, warm, welcoming, and hospitable (أسلوب ودود وحميمي ومرِّحب)."
-                elif tone == "professional":
-                    tone_instruction = "- Tone: Be polite, helpful, and highly professional (أسلوب مهني ومؤدب ومختصر)."
-                elif tone == "salesy":
-                    tone_instruction = "- Tone: Be enthusiastic, energetic, persuasive, and sales-focused (أسلوب حماسي، تنشيط مبيعات ومقنع)."
-        except Exception:
-            pass
-
-    # If voice_mode is explicitly custom, ignore style samples
-    if voice_mode == "custom":
-        style_samples = None
-
-    override_block = ""
-    if dialect_instruction or emoji_instruction or tone_instruction:
-        override_block = "\n## REQUIRED STYLE INSTRUCTIONS:\n"
-        if dialect_instruction:
-            override_block += dialect_instruction + "\n"
-        if emoji_instruction:
-            override_block += emoji_instruction + "\n"
-        if tone_instruction:
-            override_block += tone_instruction + "\n"
-
-    payment_info = "Payment Methods Available:\n"
-    if user.payment_methods:
-        for k, v in user.payment_methods.items():
-            payment_info += f"- {k}: {v}\n"
-    else:
-        payment_info += "No specific payment methods configured.\n"
-
-    workflow_block = ""
-    if workflows:
-        workflow_block = "\n\n## AUTOMATED ACTIONS & WORKFLOWS:\n"
-        workflow_block += "The business owner has configured specific actions for certain scenarios. You MUST execute these when the user's intent matches the trigger event.\n"
-        for idx, wf in enumerate(workflows, start=1):
-            workflow_block += f"\nRule {idx}:\n"
-            workflow_block += f"- Trigger Event: When the user intent matches '{wf.trigger_event}'\n"
-            workflow_block += f"- Required Action: Send a {wf.action_type} with this EXACT content: {wf.content}\n"
-
-    style_block = ""
-    persona_override = ""
-    if style_samples:
-        joined = "\n---\n".join(style_samples[:STYLE_SAMPLE_LIMIT])
-        persona_override = "\n(IMPORTANT: If the Persona description above is in formal English or formal Arabic, you MUST ignore that formal style. You MUST prioritize and write in the exact dialect, warmth, and casual tone shown in the VOICE/STYLE examples at the bottom. / تنبيه هام: يجب إعطاء الأولوية القصوى للهجة والأسلوب العامي الدافئ المذكور في أمثلة الأسلوب بالأسفل وتجاهل أي أسلوب رسمي مكتوب في الشخصية أعلاه.)"
-        style_block = f"""
-
-## VOICE / STYLE — YOU MUST FOLLOW THIS:
-You MUST write in the EXACT same dialect, tone, and style as the examples below.
-If the examples are in Jordanian Arabic dialect, you MUST reply in Jordanian Arabic dialect.
-If the examples use casual language (e.g. هلا، منورين، كيف منقدر نساعدك), you MUST be casual too.
-Do NOT switch to formal Modern Standard Arabic (MSA). Match the warmth, emoji habits, and phrasing.
-NEVER copy a line verbatim. NEVER reuse any product/price/fact from them.
-If the customer ONLY greets you or chats casually, just greet them back warmly in the EXACT SAME dialect. DO NOT append robotic boilerplate like 'How can I help you today?'.
-If the customer asks a question, always answer their actual question (calling a function first when it is about products).
-When answering about prices, stock, or catalog items, do NOT switch to formal/robotic Arabic. Integrate the retrieved product details and prices naturally into the custom dialect and tone shown in the examples. (مثال: لا تقل بجمود "سعر هذا المنتج هو 50 دينار" بل صغها بلهجتك الطبيعية "هذا حقه 50 دينار يا غالي" أو ما يماثل أسلوبك).
-
-<style_examples>
-{joined}
-</style_examples>
-"""
-
-    return f"""
+DEFAULT_COMPREHENSIVE_PROMPT = """
 You are an AI assistant representing {business}.
 Your persona: {persona}
-{override_block}{persona_override}
 
 ## CRITICAL RULES — NEVER BREAK THESE:
 1. NEVER mention any product, price or detail that didn't come from a database function call.
@@ -204,7 +92,138 @@ When answering about products, include all relevant information returned:
 - For payment info, use this detail:
 {payment_info}
 {workflow_block}{style_block}
-""".strip()
+"""
+
+def build_system_prompt(
+    user: User, 
+    style_samples: list[str] | None = None,
+    workflows: list[BusinessWorkflow] | None = None,
+) -> str:
+    business = user.business_name or "this business"
+    persona = user.ai_persona or "Friendly, professional, and helpful."
+
+    # Parse settings stored in an HTML comment JSON block (e.g. <!-- {"prompt_mode": "default", ...} -->)
+    import re
+    import json
+    dialect_instruction = ""
+    emoji_instruction = ""
+    tone_instruction = ""
+    prompt_mode = "default"
+    
+    match = re.search(r"<!--\s*({.*?})\s*-->", persona)
+    if match:
+        try:
+            config = json.loads(match.group(1))
+            prompt_mode = config.get("prompt_mode", "default")
+            # voice_mode might be present in older setups, gracefully handle it
+            voice_mode = config.get("voice_mode")
+            if voice_mode and "prompt_mode" not in config:
+                if voice_mode == "custom":
+                    prompt_mode = "custom_settings"
+                elif voice_mode == "samples":
+                    prompt_mode = "samples"
+            
+            # Strip the config comment so the LLM doesn't see it as text
+            persona = persona.replace(match.group(0), "").strip()
+            
+            # Only map configs to explicit instructions if prompt_mode is custom_settings
+            if prompt_mode == "custom_settings":
+                dialect = config.get("dialect")
+                emoji = config.get("emoji")
+                tone = config.get("tone")
+                
+                if dialect == "jordanian":
+                    dialect_instruction = "- Dialect: You MUST reply in the Jordanian/Palestinian Arabic dialect (اللهجة الأردنية/الفلسطينية العامية). Never use formal Modern Standard Arabic (MSA)."
+                elif dialect == "saudi":
+                    dialect_instruction = "- Dialect: You MUST reply in the Saudi/Gulf Arabic dialect (اللهجة السعودية/الخليجية العامية). Never use formal Modern Standard Arabic (MSA)."
+                elif dialect == "egyptian":
+                    dialect_instruction = "- Dialect: You MUST reply in the Egyptian Arabic dialect (اللهجة المصرية العامية). Never use formal Modern Standard Arabic (MSA)."
+                elif dialect == "syrian":
+                    dialect_instruction = "- Dialect: You MUST reply in the Syrian/Levantine Arabic dialect (اللهجة السورية/الشامية العامية). Never use formal Modern Standard Arabic (MSA)."
+                elif dialect == "msa":
+                    dialect_instruction = "- Dialect: You MUST reply in simplified Modern Standard Arabic (العربية الفصحى المبسطة)."
+                    
+                if emoji == "none":
+                    emoji_instruction = "- Emojis: Do NOT use any emojis in your responses."
+                elif emoji == "low":
+                    emoji_instruction = "- Emojis: Use emojis very sparingly (at most 1 emoji per response)."
+                elif emoji == "medium":
+                    emoji_instruction = "- Emojis: Use emojis moderately to maintain a warm and friendly style (1-3 emojis)."
+                elif emoji == "high":
+                    emoji_instruction = "- Emojis: Use emojis warmly and frequently to express emotion and energy."
+                    
+                if tone == "friendly":
+                    tone_instruction = "- Tone: Be extremely friendly, warm, welcoming, and hospitable (أسلوب ودود وحميمي ومرِّحب)."
+                elif tone == "professional":
+                    tone_instruction = "- Tone: Be polite, helpful, and highly professional (أسلوب مهني ومؤدب ومختصر)."
+                elif tone == "salesy":
+                    tone_instruction = "- Tone: Be enthusiastic, energetic, persuasive, and sales-focused (أسلوب حماسي، تنشيط مبيعات ومقنع)."
+        except Exception:
+            pass
+
+    if prompt_mode == "full_prompt":
+        return persona
+
+    # If prompt_mode is not samples, ignore style samples
+    if prompt_mode != "samples":
+        style_samples = None
+
+    override_block = ""
+    if dialect_instruction or emoji_instruction or tone_instruction:
+        override_block = "\n## REQUIRED STYLE INSTRUCTIONS:\n"
+        if dialect_instruction:
+            override_block += dialect_instruction + "\n"
+        if emoji_instruction:
+            override_block += emoji_instruction + "\n"
+        if tone_instruction:
+            override_block += tone_instruction + "\n"
+
+    payment_info = "Payment Methods Available:\n"
+    if user.payment_methods:
+        for k, v in user.payment_methods.items():
+            payment_info += f"- {k}: {v}\n"
+    else:
+        payment_info += "No specific payment methods configured.\n"
+
+    workflow_block = ""
+    if workflows:
+        workflow_block = "\n\n## AUTOMATED ACTIONS & WORKFLOWS:\n"
+        workflow_block += "The business owner has configured specific actions for certain scenarios. You MUST execute these when the user's intent matches the trigger event.\n"
+        for idx, wf in enumerate(workflows, start=1):
+            workflow_block += f"\nRule {idx}:\n"
+            workflow_block += f"- Trigger Event: When the user intent matches '{wf.trigger_event}'\n"
+            workflow_block += f"- Required Action: Send a {wf.action_type} with this EXACT content: {wf.content}\n"
+
+    style_block = ""
+    persona_override = ""
+    if style_samples:
+        joined = "\n---\n".join(style_samples[:STYLE_SAMPLE_LIMIT])
+        persona_override = "\n(IMPORTANT: If the Persona description above is in formal English or formal Arabic, you MUST ignore that formal style. You MUST prioritize and write in the exact dialect, warmth, and casual tone shown in the VOICE/STYLE examples at the bottom. / تنبيه هام: يجب إعطاء الأولوية القصوى للهجة والأسلوب العامي الدافئ المذكور في أمثلة الأسلوب بالأسفل وتجاهل أي أسلوب رسمي مكتوب في الشخصية أعلاه.)"
+        style_block = f"""
+
+## VOICE / STYLE — YOU MUST FOLLOW THIS:
+You MUST write in the EXACT same dialect, tone, and style as the examples below.
+If the examples are in Jordanian Arabic dialect, you MUST reply in Jordanian Arabic dialect.
+If the examples use casual language (e.g. هلا، منورين، كيف منقدر نساعدك), you MUST be casual too.
+Do NOT switch to formal Modern Standard Arabic (MSA). Match the warmth, emoji habits, and phrasing.
+NEVER copy a line verbatim. NEVER reuse any product/price/fact from them.
+If the customer ONLY greets you or chats casually, just greet them back warmly in the EXACT SAME dialect. DO NOT append robotic boilerplate like 'How can I help you today?'.
+If the customer asks a question, always answer their actual question (calling a function first when it is about products).
+When answering about prices, stock, or catalog items, do NOT switch to formal/robotic Arabic. Integrate the retrieved product details and prices naturally into the custom dialect and tone shown in the examples. (مثال: لا تقل بجمود "سعر هذا المنتج هو 50 دينار" بل صغها بلهجتك الطبيعية "هذا حقه 50 دينار يا غالي" أو ما يماثل أسلوبك).
+
+<style_examples>
+{joined}
+</style_examples>
+"""
+
+    persona_section = f"{persona}\n{override_block}{persona_override}".strip()
+    return DEFAULT_COMPREHENSIVE_PROMPT.format(
+        business=business, 
+        persona=persona_section, 
+        payment_info=payment_info, 
+        workflow_block=workflow_block,
+        style_block=style_block
+    ).strip()
 
 
 async def get_style_samples(

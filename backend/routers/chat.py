@@ -134,6 +134,7 @@ async def send_message_stream(
                 media_url=None,
             )
             reply = result["reply"]
+            audio_url = result.get("audio_url")
             import asyncio
             
             # Stream chunk by chunk for typing effect
@@ -142,6 +143,9 @@ async def send_message_stream(
                 chunk = reply[i:i+chunk_size]
                 yield {"event": "chunk", "data": json.dumps({"text": chunk})}
                 await asyncio.sleep(0.01)
+                
+            if audio_url:
+                yield {"event": "audio", "data": json.dumps({"url": audio_url})}
                 
         except Exception as e:
             yield {"event": "error", "data": json.dumps({"detail": str(e)})}

@@ -310,5 +310,19 @@
   "ai_persona": "وصف شخصية وقواعد المساعد الذكي",
   "ai_persona_help": "اكتب القواعد الأساسية للمساعد (مثال: أجب دائماً بلطف، لا تذكر المنافسين، الخ).",
   "settings_saved": "تم حفظ الإعدادات بنجاح!",
-  "settings_save_error": "حدث خطأ أثناء حفظ الإعدادات"
+  "settings_save_error": "حدث خطأ أثناء حفظ الإعدادات",
+  "prompt_mode_default": "الافتراضي الشامل",
+  "prompt_mode_custom_settings": "تخصيص الإعدادات",
+  "prompt_mode_full_prompt": "كتابة برومبت كامل",
+  "prompt_mode_samples": "محاكاة أسلوبك",
+  "voice_replies": "الردود الصوتية (Voice Replies)",
+  "voice_reply_enabled": "تفعيل الردود الصوتية",
+  "tts_voice": "صوت المتحدث",
+  "voice_alloy": "Alloy",
+  "voice_echo": "Echo",
+  "voice_nova": "Nova",
+  "voice_shimmer": "Shimmer",
+  "voice_onyx": "Onyx",
+  "voice_fable": "Fable",
+  "prompt_mode_default_msg": "سيتم استخدام برومبت احترافي وشامل للذكاء الاصطناعي تلقائياً."
 }

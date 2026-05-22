@@ -310,5 +310,19 @@
   "ai_persona": "AI Persona Rules & Description",
   "ai_persona_help": "Enter the basic rules for the assistant (e.g., always be polite, don't mention competitors, etc.).",
   "settings_saved": "Settings saved successfully!",
-  "settings_save_error": "An error occurred while saving settings"
+  "settings_save_error": "An error occurred while saving settings",
+  "prompt_mode_default": "Default (Robust)",
+  "prompt_mode_custom_settings": "Custom Settings",
+  "prompt_mode_full_prompt": "Full Custom Prompt",
+  "prompt_mode_samples": "Voice Cloning",
+  "voice_replies": "Voice Replies",
+  "voice_reply_enabled": "Enable Voice Replies",
+  "tts_voice": "TTS Voice",
+  "voice_alloy": "Alloy",
+  "voice_echo": "Echo",
+  "voice_nova": "Nova",
+  "voice_shimmer": "Shimmer",
+  "voice_onyx": "Onyx",
+  "voice_fable": "Fable",
+  "prompt_mode_default_msg": "A highly robust professional AI prompt will be used automatically."
 }
