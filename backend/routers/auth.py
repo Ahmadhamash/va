@@ -155,9 +155,11 @@ async def me(current_user: User = Depends(get_current_user)):
 @router.put("/me", response_model=UserOut)
 async def update_me(payload: UserUpdate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     if payload.business_name is not None:
-        current_user.business_name = payload.business_name
+      current_user.business_name = payload.business_name
+    if payload.ai_persona is not None:
+      current_user.ai_persona = payload.ai_persona
     if payload.business_type is not None:
-        current_user.business_type = payload.business_type
+      current_user.business_type = payload.business_type
         
         # Optionally populate template if they set type and don't have persona
         if not current_user.ai_persona:

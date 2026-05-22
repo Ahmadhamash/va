@@ -24,6 +24,7 @@ class PersonaUpdate(BaseModel):
 class UserUpdate(BaseModel):
     business_name: str | None = Field(default=None, max_length=255)
     business_type: str | None = Field(default=None, max_length=50)
+    ai_persona: str | None = Field(default=None, max_length=4000)
 
 
 class UserOut(BaseModel):

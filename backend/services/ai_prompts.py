@@ -15,6 +15,71 @@ def build_system_prompt(
     business = user.business_name or "this business"
     persona = user.ai_persona or "Friendly, professional, and helpful."
 
+    # Parse settings stored in an HTML comment JSON block (e.g. <!-- {"dialect": "saudi", "emoji": "medium", "tone": "friendly", "voice_mode": "custom"} -->)
+    import re
+    import json
+    dialect_instruction = ""
+    emoji_instruction = ""
+    tone_instruction = ""
+    voice_mode = None
+    match = re.search(r"<!--\s*({.*?})\s*-->", persona)
+    if match:
+        try:
+            config = json.loads(match.group(1))
+            voice_mode = config.get("voice_mode")
+            
+            # Strip the config comment so the LLM doesn't see it as text
+            persona = persona.replace(match.group(0), "").strip()
+            
+            # Only map configs to explicit instructions if voice_mode is not "samples"
+            if voice_mode != "samples":
+                dialect = config.get("dialect")
+                emoji = config.get("emoji")
+                tone = config.get("tone")
+                
+                if dialect == "jordanian":
+                    dialect_instruction = "- Dialect: You MUST reply in the Jordanian/Palestinian Arabic dialect (اللهجة الأردنية/الفلسطينية العامية). Never use formal Modern Standard Arabic (MSA)."
+                elif dialect == "saudi":
+                    dialect_instruction = "- Dialect: You MUST reply in the Saudi/Gulf Arabic dialect (اللهجة السعودية/الخليجية العامية). Never use formal Modern Standard Arabic (MSA)."
+                elif dialect == "egyptian":
+                    dialect_instruction = "- Dialect: You MUST reply in the Egyptian Arabic dialect (اللهجة المصرية العامية). Never use formal Modern Standard Arabic (MSA)."
+                elif dialect == "syrian":
+                    dialect_instruction = "- Dialect: You MUST reply in the Syrian/Levantine Arabic dialect (اللهجة السورية/الشامية العامية). Never use formal Modern Standard Arabic (MSA)."
+                elif dialect == "msa":
+                    dialect_instruction = "- Dialect: You MUST reply in simplified Modern Standard Arabic (العربية الفصحى المبسطة)."
+                    
+                if emoji == "none":
+                    emoji_instruction = "- Emojis: Do NOT use any emojis in your responses."
+                elif emoji == "low":
+                    emoji_instruction = "- Emojis: Use emojis very sparingly (at most 1 emoji per response)."
+                elif emoji == "medium":
+                    emoji_instruction = "- Emojis: Use emojis moderately to maintain a warm and friendly style (1-3 emojis)."
+                elif emoji == "high":
+                    emoji_instruction = "- Emojis: Use emojis warmly and frequently to express emotion and energy."
+                    
+                if tone == "friendly":
+                    tone_instruction = "- Tone: Be extremely friendly, warm, welcoming, and hospitable (أسلوب ودود وحميمي ومرِّحب)."
+                elif tone == "professional":
+                    tone_instruction = "- Tone: Be polite, helpful, and highly professional (أسلوب مهني ومؤدب ومختصر)."
+                elif tone == "salesy":
+                    tone_instruction = "- Tone: Be enthusiastic, energetic, persuasive, and sales-focused (أسلوب حماسي، تنشيط مبيعات ومقنع)."
+        except Exception:
+            pass
+
+    # If voice_mode is explicitly custom, ignore style samples
+    if voice_mode == "custom":
+        style_samples = None
+
+    override_block = ""
+    if dialect_instruction or emoji_instruction or tone_instruction:
+        override_block = "\n## REQUIRED STYLE INSTRUCTIONS:\n"
+        if dialect_instruction:
+            override_block += dialect_instruction + "\n"
+        if emoji_instruction:
+            override_block += emoji_instruction + "\n"
+        if tone_instruction:
+            override_block += tone_instruction + "\n"
+
     payment_info = "Payment Methods Available:\n"
     if user.payment_methods:
         for k, v in user.payment_methods.items():
@@ -55,7 +120,8 @@ When answering about prices, stock, or catalog items, do NOT switch to formal/ro
 
     return f"""
 You are an AI assistant representing {business}.
-Your persona: {persona}{persona_override}
+Your persona: {persona}
+{override_block}{persona_override}
 
 ## CRITICAL RULES — NEVER BREAK THESE:
 1. NEVER mention any product, price or detail that didn't come from a database function call.
