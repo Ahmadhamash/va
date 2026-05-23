@@ -91,6 +91,7 @@ class HandoffSession(Base):
         UUID(as_uuid=True),
         ForeignKey("ai_verification_logs.id", ondelete="SET NULL"),
         nullable=True,
+        index=True
     )
     sla_deadline: Mapped[Optional[datetime]] = mapped_column(nullable=True)
 

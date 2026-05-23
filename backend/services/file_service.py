@@ -109,12 +109,17 @@ async def save_upload(file: UploadFile, user_id: uuid.UUID) -> tuple[str, str]:
         )
 
     user_dir = _upload_root() / str(user_id)
-    user_dir.mkdir(parents=True, exist_ok=True)
+    import asyncio
+    await asyncio.to_thread(user_dir.mkdir, parents=True, exist_ok=True)
 
     stored_name = f"{int(time.time())}_{uuid.uuid4().hex[:8]}_{original}"
     abs_path = user_dir / stored_name
-    with open(abs_path, "wb") as fh:
-        fh.write(contents)
+    
+    def _write_file():
+        with open(abs_path, "wb") as fh:
+            fh.write(contents)
+            
+    await asyncio.to_thread(_write_file)
 
     rel_path = str(Path(str(user_id)) / stored_name).replace("\\", "/")
     return rel_path, media_type
@@ -131,10 +136,11 @@ async def save_file_bytes(content: bytes, extension: str, user_id: uuid.UUID) ->
         )
         
     import magic
-    actual_mime = magic.from_buffer(content, mime=True)
+    import asyncio
+    actual_mime = await asyncio.to_thread(magic.from_buffer, content, mime=True)
     media_type = _classify(actual_mime, extension)
 
-    return _persist_bytes(content, extension, user_id, media_type)
+    return await _persist_bytes(content, extension, user_id, media_type)
 
 
 async def save_external_file_bytes(
@@ -172,10 +178,10 @@ async def save_external_file_bytes(
                 f"(content-type={content_type!r}, actual={actual_mime!r})"
             ),
         )
-    return _persist_bytes(content, ext, user_id, media_type)
+    return await _persist_bytes(content, ext, user_id, media_type)
 
 
-def _persist_bytes(
+async def _persist_bytes(
     content: bytes,
     extension: str,
     user_id: uuid.UUID,
@@ -189,12 +195,17 @@ def _persist_bytes(
         )
 
     user_dir = _upload_root() / str(user_id)
-    user_dir.mkdir(parents=True, exist_ok=True)
+    import asyncio
+    await asyncio.to_thread(user_dir.mkdir, parents=True, exist_ok=True)
 
     stored_name = f"{int(time.time())}_{uuid.uuid4().hex[:8]}{extension}"
     abs_path = user_dir / stored_name
-    with open(abs_path, "wb") as fh:
-        fh.write(content)
+    
+    def _write_file():
+        with open(abs_path, "wb") as fh:
+            fh.write(content)
+            
+    await asyncio.to_thread(_write_file)
 
     rel_path = str(Path(str(user_id)) / stored_name).replace("\\", "/")
     return rel_path, media_type
@@ -211,9 +222,14 @@ def resolve_path(relative_path: str) -> Path:
     return abs_path
 
 
-def encode_image_base64(relative_path: str) -> tuple[str, str]:
+async def encode_image_base64(relative_path: str) -> tuple[str, str]:
     """Return (base64_string, mime_type) for an image stored under uploads/."""
     abs_path = resolve_path(relative_path)
     mime = _IMAGE_MIME_BY_EXT.get(abs_path.suffix.lower(), "image/jpeg")
-    with open(abs_path, "rb") as fh:
-        return base64.b64encode(fh.read()).decode("utf-8"), mime
+    
+    def _read_file():
+        with open(abs_path, "rb") as fh:
+            return base64.b64encode(fh.read()).decode("utf-8"), mime
+            
+    import asyncio
+    return await asyncio.to_thread(_read_file)

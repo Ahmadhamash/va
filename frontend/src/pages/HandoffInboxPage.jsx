@@ -70,11 +70,11 @@ export default function HandoffInboxPage() {
       <div className="flex gap-4">
         <div className="bg-yellow-50 rounded-lg px-4 py-2 text-center">
           <span className="text-lg font-bold text-yellow-700">{pending}</span>
-          <span className="text-xs text-gray-500 mr-1">بانتظار</span>
+          <span className="text-xs text-gray-500 ms-1">بانتظار</span>
         </div>
         <div className="bg-blue-50 rounded-lg px-4 py-2 text-center">
           <span className="text-lg font-bold text-blue-700">{assigned}</span>
-          <span className="text-xs text-gray-500 mr-1">قيد المعالجة</span>
+          <span className="text-xs text-gray-500 ms-1">قيد المعالجة</span>
         </div>
       </div>
 

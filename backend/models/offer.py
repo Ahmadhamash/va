@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import Boolean, ForeignKey, Integer, Numeric, String, Text, func
+from sqlalchemy import Boolean, ForeignKey, Integer, Numeric, String, Text, func, CheckConstraint
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -17,6 +17,9 @@ class Offer(Base):
     """
 
     __tablename__ = "offers"
+    __table_args__ = (
+        CheckConstraint("discount_value >= 0", name="check_offer_discount_positive"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -58,6 +61,9 @@ class Package(Base):
     """
 
     __tablename__ = "packages"
+    __table_args__ = (
+        CheckConstraint("price >= 0", name="check_package_price_positive"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),

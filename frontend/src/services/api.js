@@ -73,7 +73,7 @@ api.interceptors.response.use(
       if (hadToken) {
         setToken(null);
         if (window.location.pathname !== "/login") {
-          window.location.href = "/login";
+          window.dispatchEvent(new Event("unauthorized"));
         }
       }
     }

@@ -204,7 +204,7 @@ export default function EscalationsPage() {
               {showMessages === esc.id && <div className="bg-gray-50 rounded-lg border border-gray-200 overflow-hidden flex flex-col">
                   {/* Messages Area */}
                   <div className="p-3 max-h-[300px] overflow-y-auto space-y-2 flex-grow">
-                    {selectedMessages.length === 0 ? <p className="text-sm text-gray-400 text-center py-4">{t("txt_86")}</p> : selectedMessages.map(m => <div key={m.id} className={`rounded-lg px-3 py-2 text-sm max-w-[80%] ${m.role === "user" ? "bg-brand-100 text-brand-800 mr-auto" : "bg-white border border-gray-200 shadow-sm ml-auto"}`} dir="auto">
+                    {selectedMessages.length === 0 ? <p className="text-sm text-gray-400 text-center py-4">{t("txt_86")}</p> : selectedMessages.map(m => <div key={m.id} className={`rounded-lg px-3 py-2 text-sm max-w-[80%] ${m.role === "user" ? "bg-brand-100 text-brand-800 me-auto" : "bg-white border border-gray-200 shadow-sm ms-auto"}`} dir="auto">
                           <div className="text-[10px] text-gray-400 mb-0.5">
                             {m.role === "user" ? t("txt_87") : t("txt_88")}
                           </div>

@@ -66,6 +66,7 @@ class Booking(Base):
         UUID(as_uuid=True),
         ForeignKey("chat_sessions.id", ondelete="SET NULL"),
         nullable=True,
+        index=True
     )
     customer_name: Mapped[str] = mapped_column(String(255), nullable=False)
     customer_phone: Mapped[str | None] = mapped_column(String(50), nullable=True)

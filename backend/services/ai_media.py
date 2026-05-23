@@ -67,23 +67,40 @@ async def _download_bytes(url: str) -> bytes:
     """Download content from an external URL (e.g. Facebook CDN)."""
     import socket
     import ipaddress
-    from urllib.parse import urlparse
+    from urllib.parse import urlparse, urljoin
     
-    try:
-        parsed = urlparse(url)
-        if parsed.hostname:
-            ip = socket.gethostbyname(parsed.hostname)
-            ip_obj = ipaddress.ip_address(ip)
-            if ip_obj.is_private or ip_obj.is_loopback or ip_obj.is_link_local or ip_obj.is_multicast:
-                raise ValueError(f"SSRF Protection: Blocked download from private IP {ip}")
-    except Exception as e:
-        logger.warning("SSRF blocked download from %s: %s", url, e)
-        raise ValueError("Download from this domain is blocked")
+    current_url = url
+    async with httpx.AsyncClient(timeout=30, follow_redirects=False) as client:
+        for _ in range(5):
+            parsed = urlparse(current_url)
+            if not parsed.hostname:
+                raise ValueError("Invalid URL")
+            try:
+                ip = socket.gethostbyname(parsed.hostname)
+                ip_obj = ipaddress.ip_address(ip)
+                if ip_obj.is_private or ip_obj.is_loopback or ip_obj.is_link_local or ip_obj.is_multicast:
+                    raise ValueError(f"SSRF Protection: Blocked download from private IP {ip}")
+            except Exception as e:
+                logger.warning("SSRF blocked download from %s: %s", current_url, e)
+                raise ValueError("Download from this domain is blocked")
 
-    async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
-        resp = await client.get(url)
-        resp.raise_for_status()
-        return resp.content
+            netloc = parsed.netloc.replace(parsed.hostname, f"[{ip}]" if ":" in ip else ip, 1)
+            replaced_url = parsed._replace(netloc=netloc).geturl()
+            headers = {"Host": parsed.hostname}
+            
+            resp = await client.get(replaced_url, headers=headers)
+            
+            if 300 <= resp.status_code < 400:
+                loc = resp.headers.get("Location")
+                if not loc:
+                    raise ValueError("Redirect without location")
+                current_url = urljoin(current_url, loc)
+                continue
+            
+            resp.raise_for_status()
+            return resp.content
+            
+        raise ValueError("Too many redirects")
 
 
 async def _encode_image_from_url(url: str) -> tuple[str, str]:

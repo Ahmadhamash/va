@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, String, Text, func, Integer
+from sqlalchemy import Boolean, String, Text, func, Integer, CheckConstraint
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -10,6 +10,9 @@ from database import Base
 
 class User(Base):
     __tablename__ = "users"
+    __table_args__ = (
+        CheckConstraint("ai_credit_balance >= 0", name="check_user_credit_positive"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -43,6 +46,9 @@ class User(Base):
     # Phase 2: Reliability & Usage Tracking
     ai_credit_balance: Mapped[int] = mapped_column(Integer, default=1000, server_default="1000")
     email_verified: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    
+    # Phase 1 Remediation: Password Reset token invalidation
+    token_version: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
 
     items: Mapped[list["Item"]] = relationship(  # noqa: F821
         back_populates="user", cascade="all, delete-orphan"

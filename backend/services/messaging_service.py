@@ -153,12 +153,48 @@ async def _cache_external_media(
         return media_url, media_type
 
     try:
-        async with httpx.AsyncClient(timeout=30, follow_redirects=True) as http:
-            resp = await http.get(media_url)
-            resp.raise_for_status()
+        import socket
+        import ipaddress
+        from urllib.parse import urlparse, urljoin
+        
+        current_url = media_url
+        content = None
+        content_type = None
+        
+        async with httpx.AsyncClient(timeout=30, follow_redirects=False) as http:
+            for _ in range(5):
+                parsed = urlparse(current_url)
+                if not parsed.hostname:
+                    raise ValueError("Invalid URL")
+                
+                ip = socket.gethostbyname(parsed.hostname)
+                ip_obj = ipaddress.ip_address(ip)
+                if ip_obj.is_private or ip_obj.is_loopback or ip_obj.is_link_local or ip_obj.is_multicast:
+                    raise ValueError(f"SSRF Protection: Blocked download from private IP {ip}")
+
+                netloc = parsed.netloc.replace(parsed.hostname, f"[{ip}]" if ":" in ip else ip, 1)
+                replaced_url = parsed._replace(netloc=netloc).geturl()
+                headers = {"Host": parsed.hostname}
+                
+                resp = await http.get(replaced_url, headers=headers)
+                
+                if 300 <= resp.status_code < 400:
+                    loc = resp.headers.get("Location")
+                    if not loc:
+                        raise ValueError("Redirect without location")
+                    current_url = urljoin(current_url, loc)
+                    continue
+                
+                resp.raise_for_status()
+                content = resp.content
+                content_type = resp.headers.get("content-type")
+                break
+            else:
+                raise ValueError("Too many redirects")
+                
         stored_url, stored_type = await save_external_file_bytes(
-            resp.content,
-            resp.headers.get("content-type"),
+            content,
+            content_type,
             client.id,
         )
         logger.info(

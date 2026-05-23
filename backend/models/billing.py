@@ -38,7 +38,8 @@ class UserSubscription(Base):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, unique=True
     )
     tier_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("subscription_tiers.id", ondelete="RESTRICT"), nullable=False
+        UUID(as_uuid=True), ForeignKey("subscription_tiers.id", ondelete="RESTRICT"), nullable=False,
+        index=True
     )
     status: Mapped[str] = mapped_column(String(20), default="active", server_default="active")
     start_date: Mapped[datetime] = mapped_column(server_default=func.now())

@@ -393,7 +393,7 @@ async def process_message(
             raise TranscriptionError(str(exc)) from exc
 
     if media_type == "image" and media_url:
-        b64, mime = encode_image_base64(media_url)
+        b64, mime = await encode_image_base64(media_url)
         content: object = [
             {"type": "text", "text": user_message or "The customer sent this image. Identify the product shown, then call get_catalog to check if we have it and provide details (price, availability, etc.)."},
             {
@@ -566,7 +566,7 @@ async def process_pending(session_id: uuid.UUID, db: AsyncSession) -> dict | Non
         for img_url in image_urls:
             try:
                 logger.info("Reading local image from: %s", img_url)
-                b64, mime = encode_image_base64(img_url)
+                b64, mime = await encode_image_base64(img_url)
                 logger.info("Image encoded: mime=%s size=%d bytes", mime, len(b64))
                 content.append({
                     "type": "image_url",

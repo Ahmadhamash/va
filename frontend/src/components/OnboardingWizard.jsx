@@ -4,7 +4,7 @@ import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
 
 export default function OnboardingWizard() {
-  const { user, setUser } = useAuth();
+  const { user, setUser, logout } = useAuth();
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
@@ -60,10 +60,24 @@ export default function OnboardingWizard() {
     }
   };
 
+  const handleLogout = () => {
+    logout();
+    navigate("/login");
+  };
+
   return (
     <div className="fixed inset-0 z-50 bg-gray-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl shadow-2xl p-8 max-w-lg w-full">
-        <div className="mb-8">
+      <div className="bg-white rounded-xl shadow-2xl p-8 max-w-lg w-full relative">
+        <button
+          onClick={handleLogout}
+          className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition-colors"
+          title="Logout"
+        >
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+          </svg>
+        </button>
+        <div className="mb-8 pe-8">
           <h2 className="text-2xl font-bold text-gray-900 mb-2">
             Welcome to AI Assistant! 👋
           </h2>

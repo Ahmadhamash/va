@@ -77,12 +77,11 @@ class Settings(BaseSettings):
 
     @field_validator("SECRET_KEY", mode="after")
     @classmethod
-    def _validate_secret_key(cls, v, info):
-        if info.data.get("APP_ENV") == "production":
-            if v == "change-this-to-a-random-string-at-least-32-characters-long":
-                raise ValueError("SECRET_KEY must be changed in production")
-            if len(v) < 32:
-                raise ValueError("SECRET_KEY must be at least 32 characters long")
+    def _validate_secret_key(cls, v):
+        if v == "change-this-to-a-random-string-at-least-32-characters-long":
+            raise ValueError("SECRET_KEY must be changed from the default value")
+        if len(v) < 32:
+            raise ValueError("SECRET_KEY must be at least 32 characters long")
         return v
 
 

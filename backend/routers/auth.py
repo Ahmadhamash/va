@@ -27,12 +27,13 @@ logger = logging.getLogger(__name__)
 class ForgotPasswordRequest(BaseModel):
     email: EmailStr
 
-def create_refresh_token(subject: str) -> str:
+def create_refresh_token(subject: str, token_version: int = 1) -> str:
     now = datetime.now(timezone.utc)
     payload = {
         "sub": subject,
         "type": "refresh",
         "exp": now + timedelta(minutes=settings.REFRESH_TOKEN_EXPIRE_MINUTES),
+        "v": token_version,
     }
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
@@ -64,6 +65,10 @@ async def register(
             detail="Username or email already registered",
         )
 
+    # Acquire advisory lock to prevent race conditions on initial admin creation
+    import sqlalchemy as sa
+    await db.execute(sa.text("SELECT pg_advisory_xact_lock(123456789)"))
+    
     # First account on a fresh deployment becomes the platform admin.
     user_count = await db.scalar(select(func.count()).select_from(User))
     role = "admin" if not user_count else "client"
@@ -104,8 +109,8 @@ async def register(
     await db.commit()
     await db.refresh(user)
 
-    token = create_access_token(str(user.id))
-    refresh_token = create_refresh_token(str(user.id))
+    token = create_access_token(str(user.id), {"v": user.token_version})
+    refresh_token = create_refresh_token(str(user.id), token_version=user.token_version)
     response.set_cookie(
         key="refresh_token",
         value=refresh_token,
@@ -135,8 +140,8 @@ async def login(
             status_code=status.HTTP_403_FORBIDDEN, detail="Account is disabled"
         )
 
-    token = create_access_token(str(user.id))
-    refresh_token = create_refresh_token(str(user.id))
+    token = create_access_token(str(user.id), {"v": user.token_version})
+    refresh_token = create_refresh_token(str(user.id), token_version=user.token_version)
     response.set_cookie(
         key="refresh_token",
         value=refresh_token,
@@ -205,8 +210,11 @@ async def refresh(request: Request, response: Response, db: AsyncSession = Depen
     if not user or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found or inactive")
 
-    new_access_token = create_access_token(str(user.id))
-    new_refresh_token = create_refresh_token(str(user.id))
+    if payload.get("v") != user.token_version:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token revoked")
+
+    new_access_token = create_access_token(str(user.id), {"v": user.token_version})
+    new_refresh_token = create_refresh_token(str(user.id), token_version=user.token_version)
     
     response.set_cookie(
         key="refresh_token",
@@ -250,5 +258,6 @@ async def reset_password(token: str, payload: PasswordReset, db: AsyncSession = 
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User not found")
 
     user.hashed_password = hash_password(payload.new_password)
+    user.token_version += 1
     await db.commit()
     return {"message": "Password updated successfully"}

@@ -17,14 +17,29 @@ services:
   redis:
     image: redis:7-alpine
     restart: always
-    command: ["redis-server", "--appendonly", "yes"]
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD}"]
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "sh", "-c", "redis-cli -a $$REDIS_PASSWORD ping"]
       interval: 5s
       timeout: 3s
       retries: 10
+
+  init:
+    build: ./backend
+    depends_on:
+      db: { condition: service_healthy }
+    env_file: [.env]
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+    command: ["alembic", "upgrade", "head"]
+
+  init-volume:
+    image: alpine
+    volumes:
+      - uploads_data:/app/uploads
+    command: chown -R 10001:10001 /app/uploads
 
   backend:
     build: ./backend
@@ -32,10 +47,12 @@ services:
     depends_on:
       db: { condition: service_healthy }
       redis: { condition: service_healthy }
+      init: { condition: service_completed_successfully }
+      init-volume: { condition: service_completed_successfully }
     env_file: [.env]
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
-      REDIS_URL: redis://redis:6379/0
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
       APP_ENV: production
       WEB_CONCURRENCY: ${WEB_CONCURRENCY:-4}
       CORS_ORIGINS: '["https://${DOMAIN}"]'
@@ -51,10 +68,12 @@ services:
     depends_on:
       db: { condition: service_healthy }
       redis: { condition: service_healthy }
+      init: { condition: service_completed_successfully }
+      init-volume: { condition: service_completed_successfully }
     env_file: [.env]
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
-      REDIS_URL: redis://redis:6379/0
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
       APP_ENV: production
     volumes:
       - uploads_data:/app/uploads
@@ -98,13 +117,13 @@ services:
     command: >
       sh -c "
       echo 'Backup service started';
+      export PGPASSWORD=$${POSTGRES_PASSWORD};
       while true; do
         TIMESTAMP=$$(date +'%Y%m%d_%H%M%S');
         echo \"Starting backup at $$TIMESTAMP\";
         pg_dump -h db -U $${POSTGRES_USER} -d $${POSTGRES_DB} -F c -f /backups/db_backup_$$TIMESTAMP.dump;
         echo \"Backup completed\";
-        # Placeholder for AWS S3 upload:
-        # aws s3 cp /backups/db_backup_$$TIMESTAMP.dump s3://your-bucket-name/
+        aws s3 cp /backups/db_backup_$$TIMESTAMP.dump s3://$${AWS_S3_BUCKET}/
         # Cleanup older than 7 days
         find /backups -type f -name '*.dump' -mtime +7 -delete;
         sleep 86400;

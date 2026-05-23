@@ -51,6 +51,7 @@ class MediaAttachment(Base):
         UUID(as_uuid=True),
         ForeignKey("chat_sessions.id", ondelete="SET NULL"),
         nullable=True,
+        index=True
     )
     channel: Mapped[str] = mapped_column(String(20), nullable=False)
     # image | audio | video | file

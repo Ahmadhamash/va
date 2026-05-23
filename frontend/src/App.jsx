@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes, Link } from "react-router-dom";
+import { Navigate, Route, Routes, Link, useNavigate } from "react-router-dom";
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import Navbar from "./components/Navbar.jsx";
@@ -74,10 +74,19 @@ function Home() {
 
 export default function App() {
   const { i18n } = useTranslation();
+  const navigate = useNavigate();
 
   useEffect(() => {
     document.documentElement.dir = i18n.language === "ar" ? "rtl" : "ltr";
   }, [i18n.language]);
+
+  useEffect(() => {
+    const handleUnauthorized = () => {
+      navigate("/login", { replace: true });
+    };
+    window.addEventListener("unauthorized", handleUnauthorized);
+    return () => window.removeEventListener("unauthorized", handleUnauthorized);
+  }, [navigate]);
 
   return (
     <Routes>

@@ -93,11 +93,13 @@ class AutomationRun(Base):
         UUID(as_uuid=True),
         ForeignKey("chat_sessions.id", ondelete="SET NULL"),
         nullable=True,
+        index=True
     )
     message_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("messages.id", ondelete="SET NULL"),
         nullable=True,
+        index=True
     )
 
     trigger_matched: Mapped[bool] = mapped_column(

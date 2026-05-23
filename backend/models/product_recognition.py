@@ -30,6 +30,7 @@ class ProductCandidate(Base):
         UUID(as_uuid=True),
         ForeignKey("messages.id", ondelete="SET NULL"),
         nullable=True,
+        index=True
     )
     # same_page_post | external_reference | screenshot | product_image | link
     source_type: Mapped[str] = mapped_column(String(30), nullable=False)
@@ -45,6 +46,7 @@ class ProductCandidate(Base):
         UUID(as_uuid=True),
         ForeignKey("items.id", ondelete="SET NULL"),
         nullable=True,
+        index=True
     )
     confidence_score: Mapped[float] = mapped_column(
         Float, default=0.0, server_default="0.0"
@@ -92,6 +94,7 @@ class SocialPostMapping(Base):
         UUID(as_uuid=True),
         ForeignKey("items.id", ondelete="SET NULL"),
         nullable=True,
+        index=True
     )
     post_metadata: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     is_verified: Mapped[bool] = mapped_column(

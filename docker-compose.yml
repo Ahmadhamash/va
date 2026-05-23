@@ -19,14 +19,31 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    command: ["redis-server", "--appendonly", "yes"]
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD}"]
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "sh", "-c", "redis-cli -a $$REDIS_PASSWORD ping"]
       interval: 5s
       timeout: 3s
       retries: 10
+
+  init:
+    build: ./backend
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-user}:${POSTGRES_PASSWORD:-password}@db:5432/${POSTGRES_DB:-ai_assistant_db}
+    command: ["alembic", "upgrade", "head"]
+
+  init-volume:
+    image: alpine
+    volumes:
+      - ./uploads:/app/uploads
+    command: chown -R 10001:10001 /app/uploads
 
   backend:
     build: ./backend
@@ -38,12 +55,16 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      init:
+        condition: service_completed_successfully
+      init-volume:
+        condition: service_completed_successfully
     env_file:
       - .env
     environment:
       # Override hosts so containers reach the compose services, not localhost
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-user}:${POSTGRES_PASSWORD:-password}@db:5432/${POSTGRES_DB:-ai_assistant_db}
-      REDIS_URL: redis://redis:6379/0
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
     volumes:
       - ./uploads:/app/uploads
 
@@ -56,11 +77,15 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      init:
+        condition: service_completed_successfully
+      init-volume:
+        condition: service_completed_successfully
     env_file:
       - .env
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-user}:${POSTGRES_PASSWORD:-password}@db:5432/${POSTGRES_DB:-ai_assistant_db}
-      REDIS_URL: redis://redis:6379/0
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
     volumes:
       - ./uploads:/app/uploads
 

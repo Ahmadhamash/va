@@ -40,6 +40,9 @@ async def get_current_user(
     if user is None or not user.is_active:
         raise _credentials_exc
 
+    if payload.get("v") != user.token_version:
+        raise _credentials_exc
+
     return user
 
 

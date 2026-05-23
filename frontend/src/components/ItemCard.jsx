@@ -101,7 +101,7 @@ export default function ItemCard({ item, onEdit, onDelete, onToggle }) {
         </button>
         <button
           onClick={() => onDelete(item)}
-          className="px-3 py-1.5 rounded-md border border-red-300 text-red-600 hover:bg-red-50mr-auto"
+          className="px-3 py-1.5 rounded-md border border-red-300 text-red-600 hover:bg-red-50 me-auto"
         >
           {t("delete")}
         </button>

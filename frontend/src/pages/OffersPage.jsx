@@ -145,7 +145,7 @@ export default function OffersPage() {
               }} className="text-xs text-red-600">{t("txt_25")}</button>
               </div>
             </div>
-            <div className="text-sm text-gray-600 mt-1">{o.discount_value && <span className="text-green-600 font-bold ml-2">{o.discount_value}{o.offer_type === "percentage" ? "%" : ""}</span>}{o.promo_code && <span className="text-xs bg-gray-100 px-2 py-0.5 rounded">🏷️{o.promo_code}</span>}</div>
+            <div className="text-sm text-gray-600 mt-1">{o.discount_value && <span className="text-green-600 font-bold ms-2">{o.discount_value}{o.offer_type === "percentage" ? "%" : ""}</span>}{o.promo_code && <span className="text-xs bg-gray-100 px-2 py-0.5 rounded">🏷️{o.promo_code}</span>}</div>
           </div>)}</div>}
       </>}
 

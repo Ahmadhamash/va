@@ -104,8 +104,8 @@ export default function BookingsPage() {
         {!loading && <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {slots.map(s => <div key={s.id} className="bg-white rounded-xl shadow-sm p-4 flex justify-between items-center">
               <div><span className="font-medium">{DAYS[s.day_of_week]}</span>
-                <span className="text-sm text-gray-500 mr-2">{s.start_time?.slice(0, 5)} - {s.end_time?.slice(0, 5)}</span>
-                <span className="text-xs text-gray-400 mr-2">({s.slot_duration_minutes}{t("txt_24")}</span></div>
+                <span className="text-sm text-gray-500 ms-2">{s.start_time?.slice(0, 5)} - {s.end_time?.slice(0, 5)}</span>
+                <span className="text-xs text-gray-400 ms-2">({s.slot_duration_minutes}{t("txt_24")}</span></div>
               <button onClick={() => deleteSlot(s.id)} className="text-xs text-red-600">{t("txt_25")}</button>
             </div>)}
         </div>}

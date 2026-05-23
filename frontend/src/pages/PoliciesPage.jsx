@@ -131,7 +131,7 @@ export default function PoliciesPage() {
           {policies.map(p => <div key={p.id} className="bg-white rounded-xl shadow-sm p-4">
               <div className="flex justify-between items-start">
                 <div>
-                  <span className="text-xs bg-brand-50 text-brand-600 px-2 py-0.5 rounded-full ml-2">
+                  <span className="text-xs bg-brand-50 text-brand-600 px-2 py-0.5 rounded-full ms-2">
                     {POLICY_TYPES.find(opt => opt.value === p.policy_type)?.label || p.policy_type}
                   </span>
                   <span className="font-semibold text-gray-900">{p.title}</span>

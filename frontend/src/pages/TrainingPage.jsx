@@ -319,7 +319,7 @@ export default function TrainingPage() {
             </span>
           </label>
           {voiceReplyEnabled && (
-            <div className="pl-8 rtl:pr-8 rtl:pl-0">
+            <div className="ps-8">
               <label className="block text-xs font-semibold text-gray-600 mb-1">
                 {t("tts_voice")}
               </label>
@@ -396,7 +396,7 @@ export default function TrainingPage() {
                 ref={fileRef}
                 type="file"
                 accept=".txt,.json,.csv"
-                className="block w-full text-sm text-gray-600 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-brand-50 file:text-brand-700 text-xs sm:text-sm"
+                className="block w-full text-sm text-gray-600 file:me-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-brand-50 file:text-brand-700 text-xs sm:text-sm"
               />
             </div>
 

@@ -68,7 +68,7 @@ export default function Navbar() {
             {links.map((l) => (
               <Link key={l.to} to={l.to} className={linkCls(l.to)}>
                 {l.label}
-                {l.badge > 0 && <span className="mr-1 inline-flex items-center justify-center w-4 h-4 text-[9px] font-bold bg-red-500 text-white rounded-full">{l.badge}</span>}
+                {l.badge > 0 && <span className="me-1 inline-flex items-center justify-center w-4 h-4 text-[9px] font-bold bg-red-500 text-white rounded-full">{l.badge}</span>}
               </Link>
             ))}
           </div>
@@ -98,7 +98,7 @@ export default function Navbar() {
           {links.map((l) => (
             <Link key={l.to} to={l.to} onClick={() => setMenuOpen(false)} className={`block px-3 py-2 rounded-md text-sm font-medium ${pathname === l.to ? "bg-brand-50 text-brand-700" : "text-gray-700 hover:bg-gray-50"}`}>
               {l.label}
-              {l.badge > 0 && <span className="mr-2 inline-flex items-center justify-center w-5 h-5 text-[10px] font-bold bg-red-500 text-white rounded-full">{l.badge}</span>}
+              {l.badge > 0 && <span className="me-2 inline-flex items-center justify-center w-5 h-5 text-[10px] font-bold bg-red-500 text-white rounded-full">{l.badge}</span>}
             </Link>
           ))}
         </div>
@@ -112,7 +112,7 @@ export default function Navbar() {
             <h4 className="font-bold text-gray-900">{toast.title}</h4>
             <p className="text-sm text-gray-600">{toast.message}</p>
           </div>
-          <button onClick={() => setToast(null)} className="text-gray-400 hover:text-gray-600 shrink-0 ml-2">
+          <button onClick={() => setToast(null)} className="text-gray-400 hover:text-gray-600 shrink-0 ms-2">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
         </div>

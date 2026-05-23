@@ -357,7 +357,7 @@ class AnswerVerifier:
         serialised = json.dumps(data, ensure_ascii=False)
         if len(serialised) <= max_chars:
             return data
-        return json.loads(serialised[:max_chars] + "...")
+        return {"_truncated_data_string": serialised[:max_chars] + "..."}
 
     # ── Logging helper ───────────────────────────────────────────────────
     async def log_verification(

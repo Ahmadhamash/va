@@ -267,7 +267,7 @@ export default function ItemForm({
                   <span className={v.available ? "text-green-600" : "text-red-500"}>
                     {v.available ? "✓" : "✗"}
                   </span>
-                  <button type="button" onClick={() => deleteVariant(v.id)} className="text-red-400 hover:text-red-600 mr-auto">
+                  <button type="button" onClick={() => deleteVariant(v.id)} className="text-red-400 hover:text-red-600 ms-auto">
                     ×
                   </button>
                 </div>)}
@@ -362,7 +362,7 @@ export default function ItemForm({
           </label>
           <div className="flex items-center gap-3">
             {initial.image_url && <img src={imgSrc(initial.image_url)} alt="" className="h-16 w-16 rounded-lg object-cover border" />}
-            <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={pickImage} className="text-sm text-gray-600 file:mr-3 file:py-2 file:px-4 file:rounded-md file:border-0 file:bg-brand-50 file:text-brand-700" />
+            <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={pickImage} className="text-sm text-gray-600 file:me-3 file:py-2 file:px-4 file:rounded-md file:border-0 file:bg-brand-50 file:text-brand-700" />
           </div>
         </div>}
 

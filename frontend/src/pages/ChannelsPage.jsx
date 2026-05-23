@@ -158,7 +158,7 @@ export default function ChannelsPage() {
               <div>
                 <span className="font-semibold capitalize">{ch.platform}</span>
                 <span
-                  className={`ml-2 text-xs px-2 py-0.5 rounded-full ${
+                  className={`ms-2 text-xs px-2 py-0.5 rounded-full ${
                     ch.is_active
                       ? "bg-green-100 text-green-700"
                       : "bg-gray-200 text-gray-600"

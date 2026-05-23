@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Float, ForeignKey, String, Text, func
+from sqlalchemy import Float, ForeignKey, String, Text, func, Index
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -17,6 +17,9 @@ class AIVerificationLog(Base):
     """
 
     __tablename__ = "ai_verification_logs"
+    __table_args__ = (
+        Index("idx_ai_verification_log_session_status", "session_id", "verifier_status"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
@@ -25,6 +28,7 @@ class AIVerificationLog(Base):
         UUID(as_uuid=True),
         ForeignKey("messages.id", ondelete="SET NULL"),
         nullable=True,
+        index=True
     )
     session_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),

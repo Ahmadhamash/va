@@ -41,8 +41,10 @@ async def meta_verify(
         raise HTTPException(status_code=404, detail="Unknown webhook")
 
     expected = (integration.credentials or {}).get("verify_token")
-    if mode == "subscribe" and token and token == expected:
-        return PlainTextResponse(challenge or "")
+    if mode == "subscribe" and token and expected:
+        import hmac
+        if hmac.compare_digest(token.encode(), expected.encode()):
+            return PlainTextResponse(challenge or "")
     raise HTTPException(status_code=403, detail="Verification failed")
 
 
@@ -202,8 +204,10 @@ async def generic_inbound(
         raise HTTPException(status_code=404, detail="Unknown webhook")
 
     secret = (integration.credentials or {}).get("webhook_secret")
-    if secret and x_webhook_secret != secret:
-        raise HTTPException(status_code=403, detail="Invalid secret")
+    if secret:
+        import hmac
+        if not x_webhook_secret or not hmac.compare_digest(x_webhook_secret.encode(), secret.encode()):
+            raise HTTPException(status_code=403, detail="Invalid secret")
 
     try:
         body = await request.json()
@@ -243,9 +247,14 @@ async def widget_init(public_id: str, request: Request, db: AsyncSession = Depen
         return JSONResponse({"detail": "Unknown widget"}, status_code=404, headers=_CORS)
     import uuid
     import jwt
+    from datetime import datetime, timedelta, timezone
     from config import settings
     visitor_id = str(uuid.uuid4())
-    token = jwt.encode({"vid": visitor_id}, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+    payload = {
+        "vid": visitor_id,
+        "exp": datetime.now(timezone.utc) + timedelta(days=30)
+    }
+    token = jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
     return JSONResponse({"token": token}, headers=_CORS)
 
 
