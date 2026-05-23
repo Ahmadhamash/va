@@ -118,11 +118,7 @@ export default function ChatPage() {
 
         let sid = activeId;
         const tmpId = `bot-${Date.now()}`;
-        setSending(false); // remove "is thinking" since we start streaming
-        setMessages((prev) => [
-          ...prev,
-          { id: tmpId, role: "assistant", content: "", media_type: "text", media_url: null },
-        ]);
+        let startedStreaming = false;
 
         let done = false;
         while (!done) {
@@ -142,12 +138,28 @@ export default function ChatPage() {
                       loadSessions().then(() => setActiveId(sid));
                     }
                   } else if (parsed.text) {
+                    if (!startedStreaming) {
+                      startedStreaming = true;
+                      setSending(false); // remove "is thinking" now that we have text
+                      setMessages((prev) => [
+                        ...prev,
+                        { id: tmpId, role: "assistant", content: "", media_type: "text", media_url: null },
+                      ]);
+                    }
                     setMessages((prev) =>
                       prev.map((m) =>
                         m.id === tmpId ? { ...m, content: m.content + parsed.text } : m
                       )
                     );
                   } else if (parsed.url) {
+                    if (!startedStreaming) {
+                      startedStreaming = true;
+                      setSending(false); // remove "is thinking" now that we have content
+                      setMessages((prev) => [
+                        ...prev,
+                        { id: tmpId, role: "assistant", content: "", media_type: "text", media_url: null },
+                      ]);
+                    }
                     setMessages((prev) =>
                       prev.map((m) =>
                         m.id === tmpId ? { ...m, media_type: "audio", media_url: parsed.url } : m

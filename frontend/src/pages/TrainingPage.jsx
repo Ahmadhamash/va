@@ -14,8 +14,7 @@ export default function TrainingPage() {
   const [dialect, setDialect] = useState("jordanian");
   const [emoji, setEmoji] = useState("medium");
   const [tone, setTone] = useState("friendly");
-  const [voiceReplyEnabled, setVoiceReplyEnabled] = useState(false);
-  const [ttsVoice, setTtsVoice] = useState("alloy");
+
   
   const [settingsBusy, setSettingsBusy] = useState(false);
   const [settingsMsg, setSettingsMsg] = useState("");
@@ -51,20 +50,14 @@ export default function TrainingPage() {
           setDialect(config.dialect || "jordanian");
           setEmoji(config.emoji || "medium");
           setTone(config.tone || "friendly");
-          setVoiceReplyEnabled(config.voice_reply_enabled || false);
-          setTtsVoice(config.tts_voice || "alloy");
           setPlainPersona(persona.replace(match[0], "").trim());
         } catch (e) {
           setPlainPersona(persona);
           setPromptMode("default");
-          setVoiceReplyEnabled(false);
-          setTtsVoice("alloy");
         }
       } else {
         setPlainPersona(persona);
         setPromptMode("default");
-        setVoiceReplyEnabled(false);
-        setTtsVoice("alloy");
       }
     }
   }, [user]);
@@ -81,8 +74,7 @@ export default function TrainingPage() {
 
     const config = {
       prompt_mode: promptMode,
-      voice_reply_enabled: voiceReplyEnabled,
-      tts_voice: ttsVoice,
+
       dialect,
       emoji,
       tone
@@ -305,39 +297,7 @@ export default function TrainingPage() {
           </div>
         )}
 
-        {/* Voice Replies Section */}
-        <div className="pt-6 border-t border-gray-100">
-          <label className="flex items-center space-x-3 space-x-reverse cursor-pointer mb-4">
-            <input
-              type="checkbox"
-              checked={voiceReplyEnabled}
-              onChange={(e) => setVoiceReplyEnabled(e.target.checked)}
-              className="form-checkbox h-5 w-5 text-brand-600 rounded focus:ring-brand-500 border-gray-300"
-            />
-            <span className="text-sm font-semibold text-gray-700">
-              {t("voice_replies")}
-            </span>
-          </label>
-          {voiceReplyEnabled && (
-            <div className="ps-8">
-              <label className="block text-xs font-semibold text-gray-600 mb-1">
-                {t("tts_voice")}
-              </label>
-              <select
-                value={ttsVoice}
-                onChange={(e) => setTtsVoice(e.target.value)}
-                className="w-full md:w-1/3 rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white text-sm"
-              >
-                <option value="alloy">{t("voice_alloy")}</option>
-                <option value="echo">{t("voice_echo")}</option>
-                <option value="nova">{t("voice_nova")}</option>
-                <option value="shimmer">{t("voice_shimmer")}</option>
-                <option value="onyx">{t("voice_onyx")}</option>
-                <option value="fable">{t("voice_fable")}</option>
-              </select>
-            </div>
-          )}
-        </div>
+
 
         {/* Submit Actions */}
         <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-6 border-t border-gray-100">
