@@ -4,6 +4,7 @@
   debounced worker job is scheduled; the worker answers the whole batch once.
 - Generic webhook: synchronous request/response (no debounce — it's an API).
 """
+
 import hashlib
 import hmac
 import logging
@@ -95,16 +96,23 @@ async def enqueue_inbound(
         client, integration.platform, external_user_id, db
     )
     media_url, media_type = await _cache_external_media(
-        client, media_type, media_url
+        integration, client, media_type, media_url
     )
     await save_message(
-        session.id, "user", text, media_type, media_url, db, processed=False,
+        session.id,
+        "user",
+        text,
+        media_type,
+        media_url,
+        db,
+        processed=False,
     )
     await schedule_session(session.id, db)
     return session
 
 
 async def _cache_external_media(
+    integration: ChannelIntegration,
     client: User,
     media_type: str,
     media_url: str | None,
@@ -112,6 +120,35 @@ async def _cache_external_media(
     """Copy temporary channel CDN media into local uploads before it expires."""
     if media_type not in {"image", "audio"} or not media_url:
         return media_url, media_type
+
+    if integration.platform == "whatsapp" and not media_url.lower().startswith(
+        ("http://", "https://")
+    ):
+        try:
+            from services.channels.factory import get_adapter
+
+            adapter = get_adapter("whatsapp")
+            content, mime_type = await adapter.download_media(
+                media_url, integration.credentials
+            )
+            stored_url, stored_type = await save_external_file_bytes(
+                content,
+                mime_type,
+                client.id,
+            )
+            logger.info(
+                "Cached whatsapp %s media for user=%s as %s",
+                media_type,
+                client.id,
+                stored_url,
+            )
+            return stored_url, stored_type
+        except Exception:
+            logger.warning(
+                "Could not download WhatsApp media %s", media_url, exc_info=True
+            )
+            return media_url, media_type
+
     if not media_url.lower().startswith(("http://", "https://")):
         return media_url, media_type
 
@@ -174,35 +211,36 @@ async def send_meta_message(
     if not page_access_token:
         logger.warning("No page_access_token; cannot send reply")
         return
-        
+
     payloads = []
-    
-    # Send text only if no audio, or maybe we send both? 
-    # Let's send text first, then audio if present, because users usually want both. 
-    # But wait, the user asked "why does it send text with it" -> let's send ONLY audio if audio_url is present, 
-    # OR we can just send the audio attachment instead of text. Let's stick to sending both since text is useful, 
+
+    # Send text only if no audio, or maybe we send both?
+    # Let's send text first, then audio if present, because users usually want both.
+    # But wait, the user asked "why does it send text with it" -> let's send ONLY audio if audio_url is present,
+    # OR we can just send the audio attachment instead of text. Let's stick to sending both since text is useful,
     # but I'll let them know it's a feature. Actually, I'll send only audio if they want.
     if audio_url:
-        payloads.append({
-            "recipient": {"id": recipient_id},
-            "message": {
-                "attachment": {
-                    "type": "audio",
-                    "payload": {
-                        "url": audio_url,
-                        "is_reusable": True
+        payloads.append(
+            {
+                "recipient": {"id": recipient_id},
+                "message": {
+                    "attachment": {
+                        "type": "audio",
+                        "payload": {"url": audio_url, "is_reusable": True},
                     }
-                }
-            },
-            "messaging_type": "RESPONSE",
-        })
+                },
+                "messaging_type": "RESPONSE",
+            }
+        )
     else:
-        payloads.append({
-            "recipient": {"id": recipient_id},
-            "message": {"text": text[:1900]},
-            "messaging_type": "RESPONSE",
-        })
-        
+        payloads.append(
+            {
+                "recipient": {"id": recipient_id},
+                "message": {"text": text[:1900]},
+                "messaging_type": "RESPONSE",
+            }
+        )
+
     try:
         async with httpx.AsyncClient(timeout=15) as http:
             for payload in payloads:
@@ -212,6 +250,9 @@ async def send_meta_message(
                     json=payload,
                 )
                 if resp.status_code >= 400:
-                    logger.error("Meta send failed (%s): %s", resp.status_code, resp.text)
+                    logger.error(
+                        "Meta send failed (%s): %s", resp.status_code, resp.text
+                    )
+
     except Exception:  # noqa: BLE001
         logger.exception("Meta send error")

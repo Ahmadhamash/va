@@ -531,7 +531,7 @@ async def process_pending(session_id: uuid.UUID, db: AsyncSession) -> dict | Non
         if m.media_type == "audio" and m.media_url:
             incoming_media_type = "audio"
             try:
-                transcription = await _transcribe_from_url(m.media_url, db)
+                transcription = await transcribe_audio(m.media_url, db)
                 if transcription.strip():
                     text_parts.append(transcription.strip())
             except Exception:  # noqa: BLE001
@@ -565,8 +565,8 @@ async def process_pending(session_id: uuid.UUID, db: AsyncSession) -> dict | Non
         images_added = 0
         for img_url in image_urls:
             try:
-                logger.info("Downloading image from: %s", img_url[:120])
-                b64, mime = await _encode_image_from_url(img_url)
+                logger.info("Reading local image from: %s", img_url)
+                b64, mime = encode_image_base64(img_url)
                 logger.info("Image encoded: mime=%s size=%d bytes", mime, len(b64))
                 content.append({
                     "type": "image_url",
