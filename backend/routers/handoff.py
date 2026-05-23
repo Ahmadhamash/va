@@ -194,9 +194,17 @@ async def assign_to_agent(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Assign a handoff to a support agent."""
-    if current_user.role not in ("admin", "support_agent"):
+    """Assign a handoff to a support agent or allow client to take over."""
+    if current_user.role not in ("admin", "support_agent", "client"):
         raise HTTPException(status_code=403, detail="Not authorized")
+
+    if current_user.role == "client":
+        handoff = await db.get(HandoffSession, handoff_id)
+        if not handoff or handoff.user_id != current_user.id:
+            raise HTTPException(status_code=404, detail="Handoff not found")
+        handoff.status = "assigned"
+        await db.commit()
+        return {"status": "assigned"}
 
     agent_id = body.agent_id if body else None
     if agent_id is None:
@@ -242,8 +250,13 @@ async def resolve(
     db: AsyncSession = Depends(get_db),
 ):
     """Resolve a handoff session."""
-    if current_user.role not in ("admin", "support_agent"):
+    if current_user.role not in ("admin", "support_agent", "client"):
         raise HTTPException(status_code=403, detail="Not authorized")
+
+    if current_user.role == "client":
+        handoff = await db.get(HandoffSession, handoff_id)
+        if not handoff or handoff.user_id != current_user.id:
+            raise HTTPException(status_code=404, detail="Handoff not found")
 
     handoff = await handoff_service.resolve_handoff(
         handoff_id, db, return_to_ai=body.return_to_ai
