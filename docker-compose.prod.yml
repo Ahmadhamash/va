@@ -1,0 +1,120 @@
+services:
+  db:
+    image: postgres:16
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: always
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build: ./backend
+    restart: always
+    depends_on:
+      db: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    env_file: [.env]
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      REDIS_URL: redis://redis:6379/0
+      APP_ENV: production
+      WEB_CONCURRENCY: ${WEB_CONCURRENCY:-4}
+      CORS_ORIGINS: '["https://${DOMAIN}"]'
+    volumes:
+      - uploads_data:/app/uploads
+    expose:
+      - "8000"
+
+  worker:
+    build: ./backend
+    restart: always
+    command: ["arq", "queue_app.WorkerSettings"]
+    depends_on:
+      db: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    env_file: [.env]
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      REDIS_URL: redis://redis:6379/0
+      APP_ENV: production
+    volumes:
+      - uploads_data:/app/uploads
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: ""
+    restart: always
+    depends_on:
+      - backend
+    expose:
+      - "3000"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - backend
+      - frontend
+
+  backup:
+    image: postgres:16
+    restart: always
+    depends_on:
+      db: { condition: service_healthy }
+    env_file: [.env]
+    volumes:
+      - backups_data:/backups
+    command: >
+      sh -c "
+      echo 'Backup service started';
+      while true; do
+        TIMESTAMP=$$(date +'%Y%m%d_%H%M%S');
+        echo \"Starting backup at $$TIMESTAMP\";
+        pg_dump -h db -U $${POSTGRES_USER} -d $${POSTGRES_DB} -F c -f /backups/db_backup_$$TIMESTAMP.dump;
+        echo \"Backup completed\";
+        # Placeholder for AWS S3 upload:
+        # aws s3 cp /backups/db_backup_$$TIMESTAMP.dump s3://your-bucket-name/
+        # Cleanup older than 7 days
+        find /backups -type f -name '*.dump' -mtime +7 -delete;
+        sleep 86400;
+      done
+      "
+
+volumes:
+  postgres_data:
+  redis_data:
+  uploads_data:
+  caddy_data:
+  caddy_config:
+  backups_data:
