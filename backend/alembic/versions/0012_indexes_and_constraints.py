@@ -32,23 +32,11 @@ def upgrade() -> None:
     op.create_index(op.f('ix_automation_runs_session_id'), 'automation_runs', ['session_id'], unique=False)
     op.create_index(op.f('ix_automation_runs_message_id'), 'automation_runs', ['message_id'], unique=False)
     op.create_index(op.f('ix_bookings_session_id'), 'bookings', ['session_id'], unique=False)
-    op.create_index(op.f('ix_message_delivery_logs_session_id'), 'message_delivery_logs', ['session_id'], unique=False)
-    op.create_index(op.f('ix_message_delivery_logs_message_id'), 'message_delivery_logs', ['message_id'], unique=False)
-    op.create_index(op.f('ix_escalations_session_id'), 'escalations', ['session_id'], unique=False)
-    op.create_index(op.f('ix_handoff_sessions_session_id'), 'handoff_sessions', ['session_id'], unique=False)
-    op.create_index(op.f('ix_handoff_assignments_handoff_session_id'), 'handoff_assignments', ['handoff_session_id'], unique=False)
-    op.create_index(op.f('ix_product_candidates_session_id'), 'product_candidates', ['session_id'], unique=False)
     op.create_index(op.f('ix_product_candidates_message_id'), 'product_candidates', ['message_id'], unique=False)
 
 def downgrade() -> None:
     # 3. Drop individual foreign key indexes
     op.drop_index(op.f('ix_product_candidates_message_id'), table_name='product_candidates')
-    op.drop_index(op.f('ix_product_candidates_session_id'), table_name='product_candidates')
-    op.drop_index(op.f('ix_handoff_assignments_handoff_session_id'), table_name='handoff_assignments')
-    op.drop_index(op.f('ix_handoff_sessions_session_id'), table_name='handoff_sessions')
-    op.drop_index(op.f('ix_escalations_session_id'), table_name='escalations')
-    op.drop_index(op.f('ix_message_delivery_logs_message_id'), table_name='message_delivery_logs')
-    op.drop_index(op.f('ix_message_delivery_logs_session_id'), table_name='message_delivery_logs')
     op.drop_index(op.f('ix_bookings_session_id'), table_name='bookings')
     op.drop_index(op.f('ix_automation_runs_message_id'), table_name='automation_runs')
     op.drop_index(op.f('ix_automation_runs_session_id'), table_name='automation_runs')
