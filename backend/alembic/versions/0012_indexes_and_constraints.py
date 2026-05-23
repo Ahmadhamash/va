@@ -29,29 +29,29 @@ def upgrade() -> None:
     # 3. Add individual foreign key indexes missing in some tables
     op.create_index(op.f('ix_ai_verification_logs_message_id'), 'ai_verification_logs', ['message_id'], unique=False)
 
-    op.create_index(op.f('ix_automation_runs_chat_session_id'), 'automation_runs', ['chat_session_id'], unique=False)
+    op.create_index(op.f('ix_automation_runs_session_id'), 'automation_runs', ['session_id'], unique=False)
     op.create_index(op.f('ix_automation_runs_message_id'), 'automation_runs', ['message_id'], unique=False)
-    op.create_index(op.f('ix_bookings_chat_session_id'), 'bookings', ['chat_session_id'], unique=False)
-    op.create_index(op.f('ix_delivery_logs_chat_session_id'), 'delivery_logs', ['chat_session_id'], unique=False)
+    op.create_index(op.f('ix_bookings_session_id'), 'bookings', ['session_id'], unique=False)
+    op.create_index(op.f('ix_delivery_logs_session_id'), 'delivery_logs', ['session_id'], unique=False)
     op.create_index(op.f('ix_delivery_logs_message_id'), 'delivery_logs', ['message_id'], unique=False)
-    op.create_index(op.f('ix_escalations_chat_session_id'), 'escalations', ['chat_session_id'], unique=False)
-    op.create_index(op.f('ix_handoff_sessions_chat_session_id'), 'handoff_sessions', ['chat_session_id'], unique=False)
+    op.create_index(op.f('ix_escalations_session_id'), 'escalations', ['session_id'], unique=False)
+    op.create_index(op.f('ix_handoff_sessions_session_id'), 'handoff_sessions', ['session_id'], unique=False)
     op.create_index(op.f('ix_handoff_messages_handoff_session_id'), 'handoff_messages', ['handoff_session_id'], unique=False)
-    op.create_index(op.f('ix_product_recognitions_chat_session_id'), 'product_recognitions', ['chat_session_id'], unique=False)
+    op.create_index(op.f('ix_product_recognitions_session_id'), 'product_recognitions', ['session_id'], unique=False)
     op.create_index(op.f('ix_product_recognitions_message_id'), 'product_recognitions', ['message_id'], unique=False)
 
 def downgrade() -> None:
     # 3. Drop individual foreign key indexes
     op.drop_index(op.f('ix_product_recognitions_message_id'), table_name='product_recognitions')
-    op.drop_index(op.f('ix_product_recognitions_chat_session_id'), table_name='product_recognitions')
+    op.drop_index(op.f('ix_product_recognitions_session_id'), table_name='product_recognitions')
     op.drop_index(op.f('ix_handoff_messages_handoff_session_id'), table_name='handoff_messages')
-    op.drop_index(op.f('ix_handoff_sessions_chat_session_id'), table_name='handoff_sessions')
-    op.drop_index(op.f('ix_escalations_chat_session_id'), table_name='escalations')
+    op.drop_index(op.f('ix_handoff_sessions_session_id'), table_name='handoff_sessions')
+    op.drop_index(op.f('ix_escalations_session_id'), table_name='escalations')
     op.drop_index(op.f('ix_delivery_logs_message_id'), table_name='delivery_logs')
-    op.drop_index(op.f('ix_delivery_logs_chat_session_id'), table_name='delivery_logs')
-    op.drop_index(op.f('ix_bookings_chat_session_id'), table_name='bookings')
+    op.drop_index(op.f('ix_delivery_logs_session_id'), table_name='delivery_logs')
+    op.drop_index(op.f('ix_bookings_session_id'), table_name='bookings')
     op.drop_index(op.f('ix_automation_runs_message_id'), table_name='automation_runs')
-    op.drop_index(op.f('ix_automation_runs_chat_session_id'), table_name='automation_runs')
+    op.drop_index(op.f('ix_automation_runs_session_id'), table_name='automation_runs')
 
     op.drop_index(op.f('ix_ai_verification_logs_message_id'), table_name='ai_verification_logs')
 
