@@ -28,8 +28,7 @@ def upgrade() -> None:
 
     # 3. Add individual foreign key indexes missing in some tables
     op.create_index(op.f('ix_ai_verification_logs_message_id'), 'ai_verification_logs', ['message_id'], unique=False)
-    op.create_index(op.f('ix_audit_logs_message_id'), 'audit_logs', ['message_id'], unique=False)
-    op.create_index(op.f('ix_audit_logs_session_id'), 'audit_logs', ['session_id'], unique=False)
+
     op.create_index(op.f('ix_automation_runs_chat_session_id'), 'automation_runs', ['chat_session_id'], unique=False)
     op.create_index(op.f('ix_automation_runs_message_id'), 'automation_runs', ['message_id'], unique=False)
     op.create_index(op.f('ix_bookings_chat_session_id'), 'bookings', ['chat_session_id'], unique=False)
@@ -53,8 +52,7 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_bookings_chat_session_id'), table_name='bookings')
     op.drop_index(op.f('ix_automation_runs_message_id'), table_name='automation_runs')
     op.drop_index(op.f('ix_automation_runs_chat_session_id'), table_name='automation_runs')
-    op.drop_index(op.f('ix_audit_logs_session_id'), table_name='audit_logs')
-    op.drop_index(op.f('ix_audit_logs_message_id'), table_name='audit_logs')
+
     op.drop_index(op.f('ix_ai_verification_logs_message_id'), table_name='ai_verification_logs')
 
     # 2. Drop Composite Indexes
