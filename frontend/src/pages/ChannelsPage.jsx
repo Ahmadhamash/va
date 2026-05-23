@@ -34,6 +34,7 @@ const PLATFORMS = [
       { k: "access_token", label: "Permanent Access Token" },
       { k: "waba_id", label: "WhatsApp Business Account ID" },
       { k: "verify_token", label: "Webhook Verify Token (you choose)" },
+      { k: "app_secret", label: "App Secret (for Webhook validation)" },
     ],
   },
 ];
