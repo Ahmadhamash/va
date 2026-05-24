@@ -14,7 +14,7 @@
     # Legacy preview route now redirects to the main app
     @whatsappSaasLegacy path /wa-saas /wa-saas/*
     handle @whatsappSaasLegacy {
-        redir / 308
+        redir * / 308
     }
 
     # API routes owned by the new Masar multi-channel SaaS app
