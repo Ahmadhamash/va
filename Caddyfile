@@ -11,6 +11,12 @@
         reverse_proxy backend:8000
     }
 
+    # Preview route for the new WhatsApp AI SaaS app
+    @whatsappSaas path /wa-saas /wa-saas/*
+    handle @whatsappSaas {
+        reverse_proxy whatsapp-agent-saas:3000
+    }
+
     # All API requests → backend
     @api path /api/*
     handle @api {

@@ -1,0 +1,196 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum WhatsAppProvider {
+  CLOUD_API
+  MOCK
+}
+
+enum WhatsAppConnectionStatus {
+  DISCONNECTED
+  SETUP_REQUIRED
+  PENDING_VERIFICATION
+  CONNECTED
+  READY
+  ERROR
+  DEMO_MODE
+}
+
+enum ConversationStatus {
+  AI_HANDLING
+  NEEDS_HUMAN
+  HUMAN_ACTIVE
+  CLOSED
+}
+
+enum MessageSender {
+  CUSTOMER
+  AI
+  HUMAN
+  SYSTEM
+}
+
+enum TeamRole {
+  OWNER
+  AGENT
+  SUPPORT
+}
+
+model User {
+  id        String       @id @default(cuid())
+  email     String       @unique
+  name      String
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  businesses Business[]
+  teamLinks TeamMember[]
+}
+
+model Business {
+  id                  String               @id @default(cuid())
+  ownerId             String
+  name                String
+  type                String
+  mainLanguage        String               @default("Both")
+  tone                String               @default("Friendly")
+  description         String?
+  openingHours        String?
+  location            String?
+  deliveryAreas       String?
+  pricingNotes        String?
+  returnRefundPolicy  String?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  owner               User                 @relation(fields: [ownerId], references: [id])
+  whatsappConnection  WhatsAppConnection?
+  agent               Agent?
+  knowledgeItems      KnowledgeItem[]
+  products            Product[]
+  conversations       Conversation[]
+  handoffRules        HandoffRule[]
+  teamMembers         TeamMember[]
+  subscription        Subscription?
+}
+
+model WhatsAppConnection {
+  id                   String                   @id @default(cuid())
+  businessId           String                   @unique
+  provider             WhatsAppProvider
+  status               WhatsAppConnectionStatus @default(DISCONNECTED)
+  phoneNumber          String?
+  displayName          String?
+  businessAccountId    String?
+  phoneNumberId        String?
+  accessTokenEncrypted String?
+  lastConnectedAt      DateTime?
+  createdAt            DateTime                 @default(now())
+  updatedAt            DateTime                 @updatedAt
+  business             Business                 @relation(fields: [businessId], references: [id], onDelete: Cascade)
+}
+
+model Agent {
+  id                 String   @id @default(cuid())
+  businessId         String   @unique
+  name               String   @default("Mira")
+  replyLanguage      String   @default("Both")
+  tone               String   @default("Friendly")
+  knowledgeStrictness String  @default("Balanced")
+  autoReplyEnabled   Boolean  @default(true)
+  askBeforeSensitive Boolean  @default(true)
+  transferAngry      Boolean  @default(true)
+  transferRefund     Boolean  @default(true)
+  onlyKnowledgeBase  Boolean  @default(true)
+  useShortReplies    Boolean  @default(true)
+  workingHours       String?
+  fallbackMessage    String   @default("I will connect you with a team member who can help.")
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  business           Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+}
+
+model KnowledgeItem {
+  id         String   @id @default(cuid())
+  businessId String
+  type       String
+  title      String
+  content    String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+}
+
+model Product {
+  id          String   @id @default(cuid())
+  businessId  String
+  name        String
+  price       String?
+  available   Boolean  @default(true)
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+}
+
+model Conversation {
+  id            String             @id @default(cuid())
+  businessId    String
+  customerName  String
+  customerPhone String
+  status        ConversationStatus @default(AI_HANDLING)
+  lastMessage   String?
+  lastMessageAt DateTime           @default(now())
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  business      Business           @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  messages      Message[]
+}
+
+model Message {
+  id             String        @id @default(cuid())
+  conversationId String
+  sender         MessageSender
+  body           String
+  createdAt      DateTime      @default(now())
+  conversation   Conversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+}
+
+model HandoffRule {
+  id         String   @id @default(cuid())
+  businessId String
+  label      String
+  keywords   String
+  enabled    Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+}
+
+model TeamMember {
+  id         String   @id @default(cuid())
+  businessId String
+  userId     String?
+  email      String
+  name       String
+  role       TeamRole @default(SUPPORT)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  user       User?    @relation(fields: [userId], references: [id])
+}
+
+model Subscription {
+  id              String   @id @default(cuid())
+  businessId      String   @unique
+  plan            String   @default("Starter")
+  status          String   @default("trialing")
+  currentPeriodEnd DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  business        Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+}
