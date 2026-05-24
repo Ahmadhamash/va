@@ -49,6 +49,16 @@ class Settings(BaseSettings):
     # Voice / TTS
     ELEVENLABS_API_KEY: str = ""
 
+    # Chatwoot bridge
+    CHATWOOT_BASE_URL: str = ""
+    CHATWOOT_ACCOUNT_ID: str = ""
+    CHATWOOT_API_ACCESS_TOKEN: str = ""
+    CHATWOOT_BOT_AGENT_ID: str = ""
+    CHATWOOT_WEBHOOK_SECRET: str = ""
+    CHATWOOT_USER_ID: str = ""
+    AI_AUTO_REPLY_ENABLED: bool = True
+    AI_HUMAN_HANDOFF_LABEL: str = "human_handoff"
+
     # WhatsApp Cloud API (disabled until credentials are added)
     WHATSAPP_VERIFY_TOKEN: str = ""
 

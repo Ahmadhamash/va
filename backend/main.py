@@ -15,7 +15,7 @@ from pythonjsonlogger import jsonlogger
 from asgi_correlation_id import CorrelationIdMiddleware, correlation_id
 
 from config import settings
-from routers import admin, auth, automation, billing, bookings, channels, chat, delivery, escalations, handoff, items, offers, policies, style, verification_logs, voice_settings, webhooks, workflows, catalog_import
+from routers import admin, auth, automation, billing, bookings, channels, chat, chatwoot, delivery, escalations, handoff, items, offers, policies, style, verification_logs, voice_settings, webhooks, workflows, catalog_import
 from services.business_templates import list_business_types
 from services.ratelimit import limiter
 import sentry_sdk
@@ -114,6 +114,7 @@ api_router.include_router(bookings.router)
 api_router.include_router(workflows.router)
 api_router.include_router(billing.router)
 api_router.include_router(webhooks.router)  # public — routed by unguessable public_id
+api_router.include_router(chatwoot.router)
 api_router.include_router(handoff.router)
 api_router.include_router(verification_logs.router)
 api_router.include_router(voice_settings.router)
