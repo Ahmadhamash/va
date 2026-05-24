@@ -7,6 +7,7 @@ import logging
 import os
 import uuid
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select
@@ -78,6 +79,48 @@ ELEVENLABS_ARABIC_VOICES = [
         "sample_text": "مرحبا، كيفاش نقدر نعاونك اليوم؟",
     },
 ]
+
+
+ELEVENLABS_API_BASE = "https://api.elevenlabs.io/v1"
+
+DIALECT_SAMPLES = {
+    "Jordanian / Levantine": "مرحبا، كيف بقدر أساعدك اليوم؟",
+    "Palestinian / Levantine": "أهلا وسهلا، احكيلي شو بدك وأنا بساعدك.",
+    "Syrian / Levantine": "أهلا فيك، خبرني كيف فيني ساعدك اليوم؟",
+    "Lebanese / Levantine": "أهلا، كيف فيي ساعدك اليوم؟",
+    "Egyptian": "أهلا بيك، تحب أساعدك في إيه؟",
+    "Gulf": "حياك الله، كيف أقدر أخدمك؟",
+    "Saudi / Gulf": "حياك الله، أبشر كيف أقدر أخدمك؟",
+    "Iraqi": "هلا بيك، شلون أگدر أساعدك؟",
+    "Moroccan": "مرحبا، كيفاش نقدر نعاونك اليوم؟",
+    "Arabic": "مرحبا، كيف أقدر أساعدك اليوم؟",
+}
+
+DIALECT_RULES = [
+    ("Jordanian / Levantine", ("jordan", "jordanian", "amman")),
+    ("Palestinian / Levantine", ("palestin", "palestinian")),
+    ("Syrian / Levantine", ("syrian", "syria")),
+    ("Lebanese / Levantine", ("leban", "lebanese")),
+    ("Egyptian", ("egypt", "egyptian", "masri", "cairo", "ar-eg")),
+    ("Saudi / Gulf", ("saudi", "ksa", "riyadh", "ar-sa")),
+    ("Gulf", ("gulf", "khaleeji", "emirati", "kuwait", "qatar", "bahrain", "ar-ae")),
+    ("Iraqi", ("iraq", "iraqi", "baghdad", "ar-iq")),
+    ("Moroccan", ("morocco", "moroccan", "darija", "maghrebi", "ar-ma")),
+    ("Arabic", ("arabic", "arab", "msa", "ar")),
+]
+
+DIALECT_PRIORITY = {
+    "Jordanian / Levantine": 0,
+    "Palestinian / Levantine": 1,
+    "Syrian / Levantine": 2,
+    "Lebanese / Levantine": 3,
+    "Egyptian": 4,
+    "Saudi / Gulf": 5,
+    "Gulf": 6,
+    "Iraqi": 7,
+    "Moroccan": 8,
+    "Arabic": 9,
+}
 
 
 # ── Schemas ──────────────────────────────────────────────────────────────
@@ -161,10 +204,15 @@ async def list_voice_options(
     current_user: User = Depends(get_current_user),
 ):
     """List voice options for the dashboard."""
+    elevenlabs_key = os.getenv("ELEVENLABS_API_KEY", "").strip()
+    elevenlabs_voices, elevenlabs_meta = await _load_elevenlabs_arabic_voices(
+        elevenlabs_key
+    )
     return {
         "openai": OPENAI_VOICES,
-        "elevenlabs": ELEVENLABS_ARABIC_VOICES,
-        "elevenlabs_available": bool(os.getenv("ELEVENLABS_API_KEY", "").strip()),
+        "elevenlabs": elevenlabs_voices,
+        "elevenlabs_available": bool(elevenlabs_key),
+        **elevenlabs_meta,
     }
 
 
@@ -303,6 +351,203 @@ async def preview_voice(
             "success": False,
             "error": str(e),
         }
+
+
+async def _load_elevenlabs_arabic_voices(
+    api_key: str,
+) -> tuple[list[dict], dict]:
+    """Load real Arabic voices from the user's ElevenLabs account/library."""
+    if not api_key:
+        return [], {
+            "elevenlabs_dynamic": False,
+            "elevenlabs_message": "ELEVENLABS_API_KEY is not configured.",
+            "elevenlabs_missing_permissions": False,
+        }
+
+    headers = {"xi-api-key": api_key}
+    voices: list[dict] = []
+    messages: list[str] = []
+    missing_permissions = False
+
+    async with httpx.AsyncClient(timeout=25) as client:
+        for source, url, params in (
+            (
+                "account",
+                f"{ELEVENLABS_API_BASE}/voices",
+                {"show_legacy": "false"},
+            ),
+            (
+                "library",
+                f"{ELEVENLABS_API_BASE}/shared-voices",
+                {
+                    "language": "ar",
+                    "page_size": 100,
+                    "sort": "usage_character_count_7d",
+                },
+            ),
+        ):
+            try:
+                resp = await client.get(url, headers=headers, params=params)
+            except httpx.HTTPError as exc:
+                logger.warning("ElevenLabs %s voice lookup failed: %s", source, exc)
+                messages.append(f"Could not reach ElevenLabs {source} voices.")
+                continue
+
+            if resp.status_code in (401, 403):
+                missing_permissions = True
+                messages.append(
+                    "Your ElevenLabs API key is missing voices_read permission."
+                )
+                continue
+            if resp.status_code >= 400:
+                logger.warning(
+                    "ElevenLabs %s voice lookup failed (%s): %s",
+                    source,
+                    resp.status_code,
+                    resp.text[:300],
+                )
+                messages.append(f"ElevenLabs {source} voices returned {resp.status_code}.")
+                continue
+
+            payload = resp.json()
+            for voice in payload.get("voices", []):
+                mapped = _map_elevenlabs_voice(voice, source)
+                if mapped is not None:
+                    voices.append(mapped)
+
+    voices = _dedupe_and_sort_voices(voices)
+    if voices:
+        return voices[:36], {
+            "elevenlabs_dynamic": True,
+            "elevenlabs_message": "; ".join(dict.fromkeys(messages)),
+            "elevenlabs_missing_permissions": missing_permissions,
+        }
+
+    # Do not pretend generic premade/library voices are Arabic.
+    return [], {
+        "elevenlabs_dynamic": False,
+        "elevenlabs_message": "; ".join(dict.fromkeys(messages))
+        or "No Arabic ElevenLabs voices were found for this API key.",
+        "elevenlabs_missing_permissions": missing_permissions,
+    }
+
+
+def _map_elevenlabs_voice(voice: dict, source: str) -> dict | None:
+    if not _is_arabic_voice(voice):
+        return None
+
+    voice_id = voice.get("voice_id")
+    name = voice.get("name")
+    if not voice_id or not name:
+        return None
+
+    dialect = _detect_dialect(voice)
+    labels = voice.get("labels") or {}
+    gender = (
+        voice.get("gender")
+        or labels.get("gender")
+        or labels.get("Gender")
+        or "voice"
+    )
+
+    source_label = "Your ElevenLabs voices" if source == "account" else "ElevenLabs Library"
+    free_users_allowed = voice.get("free_users_allowed")
+    usable_note = ""
+    if source == "library" and free_users_allowed is False:
+        usable_note = "May require a paid ElevenLabs plan"
+
+    return {
+        "value": f"el_{voice_id}",
+        "label": name,
+        "dialect": dialect,
+        "gender": str(gender).lower(),
+        "voice_id": voice_id,
+        "sample_text": DIALECT_SAMPLES.get(dialect, DIALECT_SAMPLES["Arabic"]),
+        "preview_url": voice.get("preview_url"),
+        "source": source,
+        "source_label": source_label,
+        "public_owner_id": voice.get("public_owner_id"),
+        "free_users_allowed": free_users_allowed,
+        "usable_note": usable_note,
+        "score": _voice_score(voice, source, dialect),
+    }
+
+
+def _is_arabic_voice(voice: dict) -> bool:
+    fields = _voice_search_text(voice)
+    if "ar-" in fields or " arabic" in f" {fields}" or "العربية" in fields:
+        return True
+    if str(voice.get("language") or "").lower() == "ar":
+        return True
+    for lang in voice.get("verified_languages") or []:
+        language = str(lang.get("language") or "").lower()
+        locale = str(lang.get("locale") or "").lower()
+        if language == "ar" or locale.startswith("ar-"):
+            return True
+    return False
+
+
+def _detect_dialect(voice: dict) -> str:
+    fields = _voice_search_text(voice)
+    for dialect, terms in DIALECT_RULES:
+        if any(term in fields for term in terms):
+            return dialect
+    return "Arabic"
+
+
+def _voice_search_text(voice: dict) -> str:
+    labels = voice.get("labels") or {}
+    parts = [
+        voice.get("name"),
+        voice.get("accent"),
+        voice.get("language"),
+        voice.get("description"),
+        voice.get("descriptive"),
+        voice.get("use_case"),
+        voice.get("category"),
+        " ".join(str(v) for v in labels.values()),
+    ]
+    for lang in voice.get("verified_languages") or []:
+        parts.extend(
+            [
+                lang.get("language"),
+                lang.get("locale"),
+                lang.get("accent"),
+                lang.get("model_id"),
+            ]
+        )
+    return " ".join(str(part or "") for part in parts).lower()
+
+
+def _voice_score(voice: dict, source: str, dialect: str) -> int:
+    score = 0
+    if source == "account":
+        score += 300
+    if voice.get("category") in {"professional", "high_quality"}:
+        score += 50
+    if voice.get("free_users_allowed") is True:
+        score += 25
+    if voice.get("featured") is True:
+        score += 20
+    score += int(voice.get("usage_character_count_7d") or 0) // 1000
+    score += max(0, 20 - DIALECT_PRIORITY.get(dialect, 20))
+    return score
+
+
+def _dedupe_and_sort_voices(voices: list[dict]) -> list[dict]:
+    by_id: dict[str, dict] = {}
+    for voice in voices:
+        existing = by_id.get(voice["voice_id"])
+        if existing is None or voice["score"] > existing["score"]:
+            by_id[voice["voice_id"]] = voice
+    return sorted(
+        by_id.values(),
+        key=lambda item: (
+            DIALECT_PRIORITY.get(item["dialect"], 99),
+            -item["score"],
+            item["label"].lower(),
+        ),
+    )
 
 
 async def _get_or_create(user_id: uuid.UUID, db: AsyncSession) -> VoiceSettings:
