@@ -1,0 +1,102 @@
+=== ROUTES DEFINED ===
+*
+/
+/ai-safety
+/automation
+/bookings
+/channels
+/chat
+/delivery
+/escalations
+/handoff
+/login
+/offers
+/payments
+/policies
+/privacy
+/register
+/terms
+/training
+/voice-settings
+/workflows
+
+=== LINKS FOUND ===
+App.jsx: /terms
+App.jsx: /privacy
+components\Navbar.jsx: /
+components\Navbar.jsx: /login
+components\Navbar.jsx: /register
+pages\DashboardPage.jsx: /channels
+pages\DashboardPage.jsx: /chat
+pages\DashboardPage.jsx: /channels
+pages\LandingPage.jsx: /
+pages\LandingPage.jsx: /login
+pages\LandingPage.jsx: /register
+pages\LandingPage.jsx: /register
+pages\LandingPage.jsx: /login
+pages\LandingPage.jsx: /register
+pages\LandingPage.jsx: /terms
+pages\LandingPage.jsx: /privacy
+pages\LoginPage.jsx: /login
+pages\LoginPage.jsx: /register
+pages\RegisterPage.jsx: /login
+pages\RegisterPage.jsx: /login
+
+=== A TAGS FOUND ===
+pages\LandingPage.jsx: #channels
+pages\LandingPage.jsx: #workflow
+pages\LandingPage.jsx: #handoff
+
+=== API CALLS ===
+components\OnboardingWizard.jsx: put /auth/me
+components\OnboardingWizard.jsx: post /bookings/timeslots
+context\AuthContext.jsx: get /auth/me
+context\AuthContext.jsx: post /auth/login
+context\AuthContext.jsx: post /auth/register
+pages\AdminPage.jsx: get /admin/stats
+pages\AdminPage.jsx: get /admin/clients
+pages\AdminPage.jsx: get /admin/settings
+pages\AdminPage.jsx: get /handoff/agents
+pages\AdminPage.jsx: post /admin/clients
+pages\AdminPage.jsx: post /handoff/agents
+pages\AdminPage.jsx: put /admin/settings
+pages\AdminPage.jsx: put /admin/settings
+pages\AISafetyPage.jsx: get /verification-logs/
+pages\AutomationPage.jsx: get /automation/rules
+pages\AutomationPage.jsx: get /automation/templates
+pages\AutomationPage.jsx: get /automation/runs
+pages\BookingsPage.jsx: get /time-slots
+pages\BookingsPage.jsx: get /bookings
+pages\BookingsPage.jsx: post /time-slots
+pages\ChannelsPage.jsx: get /channels
+pages\ChannelsPage.jsx: post /channels
+pages\ChatPage.jsx: get /chat/sessions
+pages\ChatPage.jsx: get /chat/sessions
+pages\ChatPage.jsx: post /chat/send
+pages\DashboardPage.jsx: get /items
+pages\DashboardPage.jsx: get /channels
+pages\DashboardPage.jsx: get /items/search
+pages\DashboardPage.jsx: post /items
+pages\DeliveryPage.jsx: get /delivery-rules
+pages\DeliveryPage.jsx: post /delivery-rules
+pages\EscalationsPage.jsx: get /escalations
+pages\HandoffInboxPage.jsx: get /handoff/
+pages\OffersPage.jsx: get /offers
+pages\OffersPage.jsx: get /packages
+pages\OffersPage.jsx: post /offers
+pages\OffersPage.jsx: post /packages
+pages\PaymentSettingsPage.jsx: get /payment-settings
+pages\PaymentSettingsPage.jsx: put /payment-settings
+pages\PoliciesPage.jsx: get /policies
+pages\PoliciesPage.jsx: post /policies
+pages\RegisterPage.jsx: get /business-types
+pages\TrainingPage.jsx: get /style/samples
+pages\TrainingPage.jsx: put /auth/me
+pages\TrainingPage.jsx: post /style/upload
+pages\TrainingPage.jsx: delete /style/samples
+pages\VoiceSettingsPage.jsx: get /voice-settings/
+pages\VoiceSettingsPage.jsx: get /voice-settings/voices
+pages\VoiceSettingsPage.jsx: put /voice-settings/
+pages\VoiceSettingsPage.jsx: post /voice-settings/preview
+pages\WorkflowsPage.jsx: get /workflows
+pages\WorkflowsPage.jsx: post /workflows

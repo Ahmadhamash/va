@@ -1,0 +1,294 @@
+"""Inbound routing + outbound delivery for external messaging channels.
+
+- Messenger / Instagram / widget: message is buffered (processed=False) and a
+  debounced worker job is scheduled; the worker answers the whole batch once.
+- Generic webhook: synchronous request/response (no debounce — it's an API).
+"""
+
+import hashlib
+import hmac
+import logging
+
+import httpx
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from models import ChannelIntegration, ChatSession, User
+from services.ai_chat import process_message, save_message
+from services.file_service import save_external_file_bytes
+from services.queue_service import schedule_session
+
+logger = logging.getLogger("messaging")
+
+GRAPH_API = "https://graph.facebook.com/v21.0"
+
+
+def verify_meta_signature(
+    app_secret: str | None, raw_body: bytes, signature_header: str | None
+) -> bool:
+    if not app_secret:
+        return False
+    if not signature_header or not signature_header.startswith("sha256="):
+        return False
+    expected = hmac.new(
+        app_secret.encode("utf-8"), raw_body, hashlib.sha256
+    ).hexdigest()
+    return hmac.compare_digest(expected, signature_header.split("=", 1)[1])
+
+
+async def get_integration(
+    public_id: str, db: AsyncSession
+) -> ChannelIntegration | None:
+    result = await db.execute(
+        select(ChannelIntegration).where(
+            ChannelIntegration.public_id == public_id,
+            ChannelIntegration.is_active.is_(True),
+        )
+    )
+    return result.scalar_one_or_none()
+
+
+async def _get_or_create_session(
+    client: User, channel: str, external_user_id: str, db: AsyncSession
+) -> ChatSession:
+    result = await db.execute(
+        select(ChatSession).where(
+            ChatSession.user_id == client.id,
+            ChatSession.channel == channel,
+            ChatSession.external_user_id == external_user_id,
+        )
+    )
+    session = result.scalar_one_or_none()
+    if session is None:
+        session = ChatSession(
+            user_id=client.id,
+            channel=channel,
+            external_user_id=external_user_id,
+            title=f"{channel}:{external_user_id}",
+        )
+        db.add(session)
+        await db.commit()
+        await db.refresh(session)
+    return session
+
+
+async def _client_for(integration: ChannelIntegration, db: AsyncSession) -> User | None:
+    client = await db.get(User, integration.user_id)
+    if client is None or not client.is_active:
+        return None
+    return client
+
+
+async def enqueue_inbound(
+    integration: ChannelIntegration,
+    external_user_id: str,
+    text: str | None,
+    db: AsyncSession,
+    *,
+    media_type: str = "text",
+    media_url: str | None = None,
+) -> ChatSession | None:
+    """Buffer an inbound message and schedule debounced processing."""
+    client = await _client_for(integration, db)
+    if client is None:
+        return None
+    session = await _get_or_create_session(
+        client, integration.platform, external_user_id, db
+    )
+    media_url, media_type = await _cache_external_media(
+        integration, client, media_type, media_url
+    )
+    await save_message(
+        session.id,
+        "user",
+        text,
+        media_type,
+        media_url,
+        db,
+        processed=False,
+    )
+    await schedule_session(session.id, db)
+    return session
+
+
+async def _cache_external_media(
+    integration: ChannelIntegration,
+    client: User,
+    media_type: str,
+    media_url: str | None,
+) -> tuple[str | None, str]:
+    """Copy temporary channel CDN media into local uploads before it expires."""
+    if media_type not in {"image", "audio"} or not media_url:
+        return media_url, media_type
+
+    if integration.platform == "whatsapp" and not media_url.lower().startswith(
+        ("http://", "https://")
+    ):
+        try:
+            from services.channels.factory import get_adapter
+
+            adapter = get_adapter("whatsapp")
+            content, mime_type = await adapter.download_media(
+                media_url, integration.credentials
+            )
+            stored_url, stored_type = await save_external_file_bytes(
+                content,
+                mime_type,
+                client.id,
+            )
+            logger.info(
+                "Cached whatsapp %s media for user=%s as %s",
+                media_type,
+                client.id,
+                stored_url,
+            )
+            return stored_url, stored_type
+        except Exception:
+            logger.warning(
+                "Could not download WhatsApp media %s", media_url, exc_info=True
+            )
+            return media_url, media_type
+
+    if not media_url.lower().startswith(("http://", "https://")):
+        return media_url, media_type
+
+    try:
+        import socket
+        import ipaddress
+        from urllib.parse import urlparse, urljoin
+        
+        current_url = media_url
+        content = None
+        content_type = None
+        
+        async with httpx.AsyncClient(timeout=30, follow_redirects=False) as http:
+            for _ in range(5):
+                parsed = urlparse(current_url)
+                if not parsed.hostname:
+                    raise ValueError("Invalid URL")
+                
+                ip = socket.gethostbyname(parsed.hostname)
+                ip_obj = ipaddress.ip_address(ip)
+                if ip_obj.is_private or ip_obj.is_loopback or ip_obj.is_link_local or ip_obj.is_multicast:
+                    raise ValueError(f"SSRF Protection: Blocked download from private IP {ip}")
+
+                netloc = parsed.netloc.replace(parsed.hostname, f"[{ip}]" if ":" in ip else ip, 1)
+                replaced_url = parsed._replace(netloc=netloc).geturl()
+                headers = {"Host": parsed.hostname}
+                
+                resp = await http.get(replaced_url, headers=headers)
+                
+                if 300 <= resp.status_code < 400:
+                    loc = resp.headers.get("Location")
+                    if not loc:
+                        raise ValueError("Redirect without location")
+                    current_url = urljoin(current_url, loc)
+                    continue
+                
+                resp.raise_for_status()
+                content = resp.content
+                content_type = resp.headers.get("content-type")
+                break
+            else:
+                raise ValueError("Too many redirects")
+                
+        stored_url, stored_type = await save_external_file_bytes(
+            content,
+            content_type,
+            client.id,
+        )
+        logger.info(
+            "Cached external %s media for user=%s as %s",
+            media_type,
+            client.id,
+            stored_url,
+        )
+        return stored_url, stored_type
+    except Exception:
+        logger.warning(
+            "Could not cache external %s media; keeping original URL",
+            media_type,
+            exc_info=True,
+        )
+        return media_url, media_type
+
+
+async def sync_reply(
+    integration: ChannelIntegration,
+    external_user_id: str,
+    text: str,
+    db: AsyncSession,
+) -> str:
+    """Synchronous answer for the generic webhook (request/response)."""
+    client = await _client_for(integration, db)
+    if client is None:
+        return "This assistant is currently unavailable."
+    session = await _get_or_create_session(
+        client, integration.platform, external_user_id, db
+    )
+    result = await process_message(
+        user_message=text,
+        user=client,
+        session_id=session.id,
+        db=db,
+        media_type="text",
+        media_url=None,
+    )
+    return result["reply"]
+
+
+async def send_meta_message(
+    page_access_token: str,
+    recipient_id: str,
+    text: str,
+    platform: str = "messenger",
+    audio_url: str | None = None,
+) -> None:
+    if not page_access_token:
+        logger.warning("No page_access_token; cannot send reply")
+        return
+
+    payloads = []
+
+    # Send text only if no audio, or maybe we send both?
+    # Let's send text first, then audio if present, because users usually want both.
+    # But wait, the user asked "why does it send text with it" -> let's send ONLY audio if audio_url is present,
+    # OR we can just send the audio attachment instead of text. Let's stick to sending both since text is useful,
+    # but I'll let them know it's a feature. Actually, I'll send only audio if they want.
+    if audio_url:
+        payloads.append(
+            {
+                "recipient": {"id": recipient_id},
+                "message": {
+                    "attachment": {
+                        "type": "audio",
+                        "payload": {"url": audio_url, "is_reusable": True},
+                    }
+                },
+                "messaging_type": "RESPONSE",
+            }
+        )
+    else:
+        payloads.append(
+            {
+                "recipient": {"id": recipient_id},
+                "message": {"text": text[:1900]},
+                "messaging_type": "RESPONSE",
+            }
+        )
+
+    try:
+        async with httpx.AsyncClient(timeout=15) as http:
+            for payload in payloads:
+                resp = await http.post(
+                    f"{GRAPH_API}/me/messages",
+                    params={"access_token": page_access_token},
+                    json=payload,
+                )
+                if resp.status_code >= 400:
+                    logger.error(
+                        "Meta send failed (%s): %s", resp.status_code, resp.text
+                    )
+
+    except Exception:  # noqa: BLE001
+        logger.exception("Meta send error")

@@ -1,0 +1,169 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --app-bg: #f6f8fb;
+  --app-surface: #ffffff;
+  --app-border: #dce5ee;
+  --app-text: #101418;
+  --app-muted: #64748b;
+  --app-soft: #eef5f2;
+}
+
+.dark {
+  --app-bg: #071015;
+  --app-surface: #0f1a21;
+  --app-border: #263343;
+  --app-text: #eef4f8;
+  --app-muted: #9aa9ba;
+  --app-soft: #10251f;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, "Noto Sans Arabic", sans-serif;
+  background-color: var(--app-bg);
+  color: var(--app-text);
+  -webkit-font-smoothing: antialiased;
+}
+
+body::selection {
+  background: #13b77a;
+  color: white;
+}
+
+/* Correctly render mixed Arabic + Latin/numbers anywhere */
+.bidi-auto {
+  unicode-bidi: plaintext;
+}
+
+/* Subtle scrollbars */
+*::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+*::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+@keyframes fadein {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.animate-fadein {
+  animation: fadein 0.18s ease-out;
+}
+
+@layer components {
+  .app-container {
+    @apply mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8;
+  }
+
+  .surface {
+    @apply rounded-lg border border-gray-200 bg-white shadow-sm shadow-slate-200/70 dark:border-slate-800 dark:bg-slate-900 dark:shadow-black/20;
+  }
+
+  .surface-soft {
+    @apply rounded-lg border border-gray-200 bg-gray-50/90 dark:border-slate-800 dark:bg-slate-900/60;
+  }
+
+  .btn-primary {
+    @apply inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-mint-600 px-4 text-sm font-bold text-white shadow-sm shadow-mint-600/20 transition hover:bg-mint-500 disabled:cursor-not-allowed disabled:opacity-60;
+  }
+
+  .btn-secondary {
+    @apply inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 text-sm font-bold text-gray-700 transition hover:border-gray-400 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800;
+  }
+
+  .btn-danger {
+    @apply inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-red-200 bg-white px-4 text-sm font-semibold text-red-600 transition hover:bg-red-50 dark:border-red-900/60 dark:bg-slate-900 dark:text-red-300 dark:hover:bg-red-950/30;
+  }
+
+  .icon-button {
+    @apply inline-flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-600 transition hover:border-gray-300 hover:bg-gray-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800;
+  }
+
+  .input-field {
+    @apply w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:placeholder:text-slate-500;
+  }
+
+  .label {
+    @apply mb-1 block text-sm font-semibold text-gray-700 dark:text-slate-200;
+  }
+
+  .eyebrow {
+    @apply text-xs font-black uppercase tracking-normal text-mint-600 dark:text-mint-400;
+  }
+
+  .hero-band {
+    background:
+      radial-gradient(circle at 78% 12%, rgba(19, 183, 122, 0.16), transparent 34%),
+      radial-gradient(circle at 12% 28%, rgba(59, 108, 255, 0.12), transparent 30%),
+      linear-gradient(180deg, #ffffff 0%, #f4f8fb 100%);
+  }
+
+  .dark .hero-band {
+    background:
+      radial-gradient(circle at 78% 12%, rgba(19, 183, 122, 0.18), transparent 34%),
+      radial-gradient(circle at 12% 28%, rgba(59, 108, 255, 0.12), transparent 30%),
+      linear-gradient(180deg, #081117 0%, #0b131a 100%);
+  }
+
+  .status-pill {
+    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-black;
+  }
+}
+
+.dark .bg-white {
+  background-color: #101821 !important;
+}
+
+.dark .bg-gray-50 {
+  background-color: #0b1118 !important;
+}
+
+.dark .bg-gray-100 {
+  background-color: #172231 !important;
+}
+
+.dark .text-gray-900,
+.dark .text-gray-800,
+.dark .text-gray-700 {
+  color: #eef4f8 !important;
+}
+
+.dark .text-gray-600,
+.dark .text-gray-500,
+.dark .text-gray-400 {
+  color: #a7b4c4 !important;
+}
+
+.dark .border-gray-300,
+.dark .border-gray-200 {
+  border-color: #263343 !important;
+}
+
+.dark input,
+.dark select,
+.dark textarea {
+  background-color: #0b1118;
+  color: #eef4f8;
+}
