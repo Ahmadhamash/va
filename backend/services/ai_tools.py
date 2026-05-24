@@ -25,9 +25,10 @@ TOOLS = [
                 "Pass `query` with the product name or keyword the customer mentioned "
                 "(e.g. 'سماعة', 'headphone', 'charger'). Leave `query` empty for "
                 "general questions like 'what do you have' or 'which sections'. "
-                "Returns matching items (name, price, currency, availability, "
-                "description, warranty info, stock status, variants/options) "
-                "plus the list of categories."
+                "For an empty `query`, returns a short overview only "
+                "(names/categories) so the assistant can answer broad questions "
+                "without prices or long details. For a non-empty query, returns "
+                "matching items with full details."
             ),
             "parameters": {
                 "type": "object",
@@ -296,7 +297,6 @@ async def _exec_get_catalog(func_args: dict, user_id: uuid.UUID, db: AsyncSessio
         rows = list((await db.execute(base)).scalars().unique().all())
         matched = True
 
-
     cats = sorted({r.category for r in rows if r.category})
     
     # Cap to max 50 items
@@ -306,9 +306,36 @@ async def _exec_get_catalog(func_args: dict, user_id: uuid.UUID, db: AsyncSessio
     else:
         capped = False
 
+    if not query:
+        overview_items = [
+            {
+                "name": item.name,
+                "category": item.category,
+            }
+            for item in rows
+        ]
+        return {
+            "query": query,
+            "matched": matched,
+            "overview_only": True,
+            "count": len(rows),
+            "items": overview_items,
+            "categories": cats,
+            "instruction": (
+                "Broad catalog overview only: reply with product/category names "
+                "only. Do not mention prices, descriptions, stock, warranty, "
+                "availability, variants, or other details. Ask what the customer "
+                "is interested in so you can explain more."
+            ),
+            "note": "no items in catalog" if not rows else (
+                "showing top 50 names/categories" if capped else ""
+            ),
+        }
+
     return {
         "query": query,
         "matched": matched,
+        "overview_only": False,
         "count": len(rows),
         "items": [_serialize_item(i) for i in rows] if rows else [],
         "categories": cats,

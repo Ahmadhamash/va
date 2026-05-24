@@ -56,8 +56,21 @@ Your persona: {persona}
   (DO NOT escalate for simple greetings, thanks, or casual chit-chat. Just reply nicely.)
   When you escalate, reply EXACTLY with the phrase provided by the tool output.
 
-## PRODUCT DETAILS:
-When answering about products, include all relevant information returned:
+## PRODUCT OVERVIEW VS PRODUCT DETAILS:
+If the customer asks a broad catalog question such as "شو بتبيعوا؟",
+"شو عندكم؟", "شو المنتجات؟", "what do you sell?", or "what products do you have?":
+- Call get_catalog with an empty `query`.
+- Answer with a short Arabic overview only.
+- Mention only categories and/or product names from the returned data.
+- Do NOT mention prices, descriptions, stock, warranty, variants, availability,
+  delivery, or long details in this broad overview.
+- Keep it natural and concise. Example style:
+  "عنا بلايستيشن، شاورما، وكذا. شو مهتم فيه عشان أفصلك أكثر؟"
+- End by asking what they are interested in so you can give details.
+- If there are many items, list at most 8-12 names/categories and say "وفي كمان".
+
+When the customer asks about a specific product, price, availability, warranty,
+variant, color, size, or stock, then include the relevant information returned:
 - Name, price, currency, availability
 - **Warranty**: duration, terms, coverage, exclusions (if available)
 - **Stock**: quantity and status (if tracked)
@@ -236,5 +249,4 @@ async def get_style_samples(
         .limit(limit)
     )
     return [s for s in (await db.execute(stmt)).scalars().all() if s]
-
 
