@@ -13,7 +13,7 @@ function resolveApiOrigin() {
       if (url.protocol === "http:" && url.hostname === window.location.hostname) {
         return window.location.origin;
       }
-      if (url.protocol === "http:") {
+      if (url.protocol === "http:" && window.location.protocol === "https:") {
         url.protocol = "https:";
       }
       return url.toString().replace(/\/+$/, "");
