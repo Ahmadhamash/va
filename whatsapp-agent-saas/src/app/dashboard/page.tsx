@@ -14,15 +14,17 @@ import {
   Users
 } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { AppShell } from "@/components/app-shell";
 import { ChannelConnectionCard } from "@/components/channel-connection-card";
 import { GradientCard } from "@/components/gradient-card";
 import { MetricCard } from "@/components/metric-card";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
-import { mockChannels, mockConversations } from "@/lib/mock-data";
-import type { ChannelProvider } from "@/lib/types";
+import { mockChannels } from "@/lib/mock-data";
+import type { ChannelProvider, Conversation } from "@/lib/types";
+import { useAuthStore } from "@/store/use-auth-store";
+import { Loader2 } from "lucide-react";
 
 const channelNames: Record<ChannelProvider, string> = {
   WHATSAPP: "واتساب",
@@ -33,6 +35,29 @@ const channelNames: Record<ChannelProvider, string> = {
 export default function DashboardPage() {
   const [notice, setNotice] = useState("كل الأنظمة تعمل بشكل طبيعي.");
   const [aiPaused, setAiPaused] = useState(false);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [loading, setLoading] = useState(true);
+  const { token } = useAuthStore();
+
+  useEffect(() => {
+    async function load() {
+      if (!token) return;
+      try {
+        const res = await fetch("/api/conversations", {
+          headers: { Authorization: "Bearer " + token }
+        });
+        const data = await res.json();
+        if (data.ok && data.conversations) {
+          setConversations(data.conversations.slice(0, 5)); // show latest 5
+        }
+      } catch (err) {
+        console.error("Failed to load dashboard data", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    load();
+  }, [token]);
 
   function connect(provider: ChannelProvider) {
     setNotice(`تم تجهيز مسار ربط ${channelNames[provider]}. الربط الحقيقي يحتاج مفاتيح Meta الرسمية.`);
@@ -66,19 +91,27 @@ export default function DashboardPage() {
                 <Button variant="secondary">افتح المحادثات</Button>
               </Link>
             </div>
-            <div className="space-y-3">
-              {mockConversations.map((conversation) => (
-                <div key={conversation.id} className="flex flex-wrap items-center justify-between gap-3 rounded-3xl border border-white/10 bg-white/[0.045] p-4">
-                  <div>
-                    <div className="flex items-center gap-2 font-semibold text-white">
-                      {conversation.channel === "WHATSAPP" ? <MessageCircle className="h-4 w-4 text-emeraldx-400" /> : conversation.channel === "FACEBOOK" ? <Facebook className="h-4 w-4 text-cyanx-400" /> : <Instagram className="h-4 w-4 text-violet-200" />}
-                      {conversation.customerName}
-                    </div>
-                    <div className="mt-1 text-sm text-white/45">{conversation.lastMessage}</div>
-                  </div>
-                  <StatusBadge status={conversation.status} />
+            <div className="space-y-3 min-h-[200px]">
+              {loading ? (
+                <div className="flex h-full items-center justify-center">
+                  <Loader2 className="h-6 w-6 animate-spin text-cyanx-400" />
                 </div>
-              ))}
+              ) : conversations.length === 0 ? (
+                <div className="text-center text-white/45 py-8">لا توجد محادثات حديثة</div>
+              ) : (
+                conversations.map((conversation) => (
+                  <div key={conversation.id} className="flex flex-wrap items-center justify-between gap-3 rounded-3xl border border-white/10 bg-white/[0.045] p-4">
+                    <div>
+                      <div className="flex items-center gap-2 font-semibold text-white">
+                        {conversation.channel === "WHATSAPP" ? <MessageCircle className="h-4 w-4 text-emeraldx-400" /> : conversation.channel === "FACEBOOK" ? <Facebook className="h-4 w-4 text-cyanx-400" /> : <Instagram className="h-4 w-4 text-violet-200" />}
+                        {conversation.customerName}
+                      </div>
+                      <div className="mt-1 text-sm text-white/45">{conversation.lastMessage}</div>
+                    </div>
+                    <StatusBadge status={conversation.status} />
+                  </div>
+                ))
+              )}
             </div>
           </GradientCard>
 

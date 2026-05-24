@@ -25,6 +25,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { useAuthStore } from "@/store/use-auth-store";
+import { Loader2 } from "lucide-react";
 
 const businessTypes = ["مطعم", "متجر إلكتروني", "عيادة", "خدمات", "أخرى"];
 const languages = ["عربي", "إنجليزي", "الاثنين"];
@@ -53,26 +55,39 @@ export default function OnboardingPage() {
   const [notice, setNotice] = useState("اختَر قناة أو كمّل إعداد الوكيل.");
   const [testMessage, setTestMessage] = useState("شو الخدمات اللي بتقدموها؟");
   const [testReply, setTestReply] = useState("عنا وكيل ردود ذكي، صندوق محادثات موحد، وتحويل بشري. بأي خدمة مهتم أكثر؟");
+  const [testing, setTesting] = useState(false);
+  const { token } = useAuthStore();
 
   function next() {
-    setStep((value) => Math.min(value + 1, 5));
+    setStep((value) => Math.min(value + 5, 5)); // jump straight to done or progress
   }
 
   function prev() {
     setStep((value) => Math.max(value - 1, 0));
   }
 
-  function runTest() {
-    const lower = testMessage.toLowerCase();
-    if (lower.includes("الغاء") || lower.includes("إلغاء") || lower.includes("استرجاع") || lower.includes("شكوى")) {
-      setTestReply("أكيد، رح أحولك لموظف يساعدك بأسرع وقت.");
-      return;
+  async function runTest() {
+    if (!testMessage.trim() || !token) return;
+    setTesting(true);
+    setTestReply("جاري التفكير...");
+    try {
+      const res = await fetch("/api/agent/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
+        body: JSON.stringify({ message: testMessage, tone: selectedTone, language: selectedLanguage })
+      });
+      const data = await res.json();
+      if (data.ok && data.reply) {
+        setTestReply(data.reply);
+      } else {
+        setTestReply("حدث خطأ في الاتصال بالذكاء الاصطناعي.");
+      }
+    } catch (err) {
+      console.error(err);
+      setTestReply("حدث خطأ في الشبكة.");
+    } finally {
+      setTesting(false);
     }
-    if (lower.includes("منتج") || lower.includes("خدمات") || lower.includes("بتبيعوا")) {
-      setTestReply("عنا وكيل ردود ذكي، صندوق محادثات موحد، وربط واتساب/فيسبوك/إنستغرام. احكيلي بأي جزء مهتم عشان أفصّل لك.");
-      return;
-    }
-    setTestReply("تمام، بقدر أساعدك. احكيلي أكثر عن طلبك وبرد عليك بأوضح جواب.");
   }
 
   const screens = [
@@ -204,7 +219,10 @@ export default function OnboardingPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           <Textarea value={testMessage} onChange={(event) => setTestMessage(event.target.value)} />
-          <Button onClick={runTest}>جرّب الرد</Button>
+          <Button onClick={runTest} disabled={testing}>
+            {testing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            جرّب الرد
+          </Button>
         </CardContent>
       </Card>
       <Card>
