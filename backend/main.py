@@ -132,6 +132,7 @@ async def business_types():
 
 
 app.include_router(api_router)
+app.include_router(chatwoot.router)
 
 
 

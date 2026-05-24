@@ -5,6 +5,12 @@
 {$DOMAIN} {
     encode zstd gzip
 
+    # Chatwoot webhook bridge → backend
+    @chatwootWebhook path /webhooks/chatwoot
+    handle @chatwootWebhook {
+        reverse_proxy backend:8000
+    }
+
     # All API requests → backend
     @api path /api/*
     handle @api {
