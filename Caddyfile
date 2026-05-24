@@ -12,8 +12,12 @@
     }
 
     # Preview route for the new WhatsApp AI SaaS app
-    @whatsappSaas path /wa-saas /wa-saas/*
-    handle @whatsappSaas {
+    @whatsappSaasRoot path /wa-saas
+    handle @whatsappSaasRoot {
+        redir /wa-saas/ 308
+    }
+
+    handle_path /wa-saas/* {
         reverse_proxy whatsapp-agent-saas:3000
     }
 
