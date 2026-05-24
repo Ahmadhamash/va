@@ -1,10 +1,13 @@
-import React, { useState } from "react";
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { Bot, Building2, CheckCircle2, Clock3, LogOut, Moon, Store, Sun } from "lucide-react";
 import api from "../services/api";
 import { useAuth } from "../context/AuthContext";
-import { useNavigate } from "react-router-dom";
+import { useTheme } from "../context/ThemeContext.jsx";
 
 export default function OnboardingWizard() {
-  const { user, setUser, logout } = useAuth();
+  const { setUser, logout } = useAuth();
+  const { isDark, toggleTheme } = useTheme();
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
@@ -16,10 +19,10 @@ export default function OnboardingWizard() {
   });
 
   const businessTypes = [
-    { value: "retail", label: "Retail / E-commerce" },
-    { value: "restaurant", label: "Restaurant / Cafe" },
-    { value: "services", label: "Professional Services" },
-    { value: "healthcare", label: "Healthcare / Clinic" },
+    { value: "retail", label: "متجر / تجارة إلكترونية", hint: "منتجات، أسعار، مخزون" },
+    { value: "restaurant", label: "مطعم / كافيه", hint: "قوائم، طلبات، عروض" },
+    { value: "services", label: "خدمات", hint: "استفسارات، مواعيد، متابعة" },
+    { value: "healthcare", label: "عيادة / رعاية", hint: "حجوزات، تعليمات، تحويل" },
   ];
 
   const handleChange = (e) => {
@@ -33,13 +36,11 @@ export default function OnboardingWizard() {
     e.preventDefault();
     setLoading(true);
     try {
-      // 1. Update user profile (business name and type)
       const { data: updatedUser } = await api.put("/auth/me", {
         business_name: formData.business_name,
         business_type: formData.business_type,
       });
 
-      // 2. Add default time slots for business hours (Monday-Friday for simplicity)
       const days = ["monday", "tuesday", "wednesday", "thursday", "friday"];
       for (const day of days) {
         await api.post("/bookings/timeslots", {
@@ -54,7 +55,7 @@ export default function OnboardingWizard() {
       navigate("/");
     } catch (err) {
       console.error("Failed to complete onboarding:", err);
-      alert("Failed to save settings. Please try again.");
+      alert("تعذر حفظ الإعدادات. حاول مرة ثانية.");
     } finally {
       setLoading(false);
     }
@@ -66,159 +67,157 @@ export default function OnboardingWizard() {
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-gray-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl shadow-2xl p-8 max-w-lg w-full relative">
-        <button
-          onClick={handleLogout}
-          className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition-colors"
-          title="Logout"
-        >
-          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-          </svg>
-        </button>
-        <div className="mb-8 pe-8">
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">
-            Welcome to AI Assistant! 👋
-          </h2>
-          <p className="text-gray-600">
-            Let's set up your business profile in just a few steps.
-          </p>
-        </div>
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-gray-50 p-4 text-gray-950 dark:bg-[#0b1118] dark:text-white" dir="rtl">
+      <div className="mx-auto grid min-h-full max-w-6xl items-center gap-6 lg:grid-cols-[0.95fr_1.05fr]">
+        <section className="hidden lg:block">
+          <p className="eyebrow">Setup journey</p>
+          <h1 className="mt-3 text-4xl font-black leading-tight">
+            ثلاث خطوات، وبعدها بتدخل على مسارات الربط والتجربة.
+          </h1>
+          <div className="mt-8 space-y-3">
+            {[
+              { icon: Building2, title: "اسم العمل", text: "حتى تظهر الردود باسم مشروعك." },
+              { icon: Store, title: "نوع العمل", text: "نستخدمه لاختيار قالب بداية مناسب." },
+              { icon: Clock3, title: "أوقات العمل", text: "حتى يعرف المساعد متى يقترح الحجوزات." },
+            ].map((item, index) => {
+              const Icon = item.icon;
+              return (
+                <div key={item.title} className="surface flex items-start gap-4 p-4">
+                  <span className="grid h-11 w-11 place-items-center rounded-lg bg-mint-50 text-mint-600 dark:bg-mint-500/10 dark:text-mint-300">
+                    <Icon className="h-5 w-5" />
+                  </span>
+                  <div>
+                    <div className="text-xs font-bold text-gray-400 dark:text-slate-500">خطوة {index + 1}</div>
+                    <h3 className="font-black">{item.title}</h3>
+                    <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">{item.text}</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
 
-        {/* Progress Bar */}
-        <div className="flex gap-2 mb-8">
-          {[1, 2, 3].map((i) => (
-            <div
-              key={i}
-              className={`h-2 flex-1 rounded-full ${
-                step >= i ? "bg-indigo-600" : "bg-gray-200"
-              }`}
-            />
-          ))}
-        </div>
+        <section className="surface relative mx-auto w-full max-w-xl p-6 sm:p-8">
+          <div className="absolute left-4 top-4 flex gap-2">
+            <button onClick={toggleTheme} className="icon-button" title={isDark ? "الوضع النهاري" : "الوضع الليلي"}>
+              {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            </button>
+            <button onClick={handleLogout} className="icon-button" title="خروج">
+              <LogOut className="h-4 w-4" />
+            </button>
+          </div>
 
-        <form onSubmit={step === 3 ? handleSubmit : (e) => { e.preventDefault(); nextStep(); }}>
-          {step === 1 && (
-            <div className="space-y-4 animate-fadeIn">
-              <h3 className="text-xl font-semibold">What's your business name?</h3>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Business Name
-                </label>
-                <input
-                  type="text"
-                  name="business_name"
-                  required
-                  value={formData.business_name}
-                  onChange={handleChange}
-                  className="w-full border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500 p-3 border"
-                  placeholder="e.g. Acme Corp"
-                />
-              </div>
+          <div className="mb-8 pe-24">
+            <div className="mb-4 grid h-12 w-12 place-items-center rounded-lg bg-ink-900 text-white dark:bg-white dark:text-ink-900">
+              <Bot className="h-6 w-6" />
             </div>
-          )}
+            <p className="eyebrow">Welcome</p>
+            <h2 className="mt-2 text-2xl font-black text-gray-950 dark:text-white">
+              خلينا نجهز مساحة العمل
+            </h2>
+            <p className="mt-2 text-sm leading-7 text-gray-500 dark:text-slate-400">
+              بعدها رح تشوف الداشبورد الجديد مع مسارات الربط والصوت وتجربة العميل.
+            </p>
+          </div>
 
-          {step === 2 && (
-            <div className="space-y-4 animate-fadeIn">
-              <h3 className="text-xl font-semibold">Choose your business type</h3>
-              <p className="text-sm text-gray-500 mb-4">
-                This helps us configure the perfect AI template for you.
-              </p>
-              <div className="grid grid-cols-1 gap-3">
-                {businessTypes.map((type) => (
-                  <label
-                    key={type.value}
-                    className={`border p-4 rounded-lg cursor-pointer transition-colors ${
-                      formData.business_type === type.value
-                        ? "border-indigo-600 bg-indigo-50"
-                        : "border-gray-200 hover:border-indigo-300"
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
+          <div className="mb-8 grid grid-cols-3 gap-2">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="h-2 overflow-hidden rounded-full bg-gray-100 dark:bg-slate-800">
+                <div className={`h-full rounded-full ${step >= i ? "bg-mint-500" : "bg-transparent"}`} />
+              </div>
+            ))}
+          </div>
+
+          <form onSubmit={step === 3 ? handleSubmit : (e) => { e.preventDefault(); nextStep(); }}>
+            {step === 1 && (
+              <div className="space-y-4 animate-fadein">
+                <h3 className="text-xl font-black">ما اسم العمل؟</h3>
+                <div>
+                  <label className="label">اسم العمل</label>
+                  <input
+                    type="text"
+                    name="business_name"
+                    required
+                    value={formData.business_name}
+                    onChange={handleChange}
+                    className="input-field"
+                    placeholder="مثال: Masar Store"
+                  />
+                </div>
+              </div>
+            )}
+
+            {step === 2 && (
+              <div className="space-y-4 animate-fadein">
+                <h3 className="text-xl font-black">اختار نوع العمل</h3>
+                <p className="text-sm text-gray-500 dark:text-slate-400">هذا يساعدنا نرتب تجربة البداية بشكل أقرب لك.</p>
+                <div className="grid gap-3">
+                  {businessTypes.map((type) => (
+                    <label
+                      key={type.value}
+                      className={`flex cursor-pointer items-center gap-3 rounded-lg border p-4 transition ${
+                        formData.business_type === type.value
+                          ? "border-ink-900 bg-ink-900 text-white dark:border-white dark:bg-white dark:text-ink-900"
+                          : "border-gray-200 bg-white hover:border-gray-300 dark:border-slate-700 dark:bg-slate-900"
+                      }`}
+                    >
                       <input
                         type="radio"
                         name="business_type"
                         value={type.value}
                         checked={formData.business_type === type.value}
                         onChange={handleChange}
-                        className="text-indigo-600 focus:ring-indigo-500 h-4 w-4"
+                        className="h-4 w-4"
                       />
-                      <span className="font-medium text-gray-900">
-                        {type.label}
+                      <span>
+                        <span className="block font-black">{type.label}</span>
+                        <span className="block text-xs opacity-70">{type.hint}</span>
                       </span>
-                    </div>
-                  </label>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {step === 3 && (
-            <div className="space-y-4 animate-fadeIn">
-              <h3 className="text-xl font-semibold">Set your business hours</h3>
-              <p className="text-sm text-gray-500 mb-4">
-                When are you typically open for business? (Monday-Friday)
-              </p>
-              <div className="flex gap-4">
-                <div className="flex-1">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Opening Time
-                  </label>
-                  <input
-                    type="time"
-                    name="start_time"
-                    required
-                    value={formData.start_time}
-                    onChange={handleChange}
-                    className="w-full border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500 p-3 border"
-                  />
-                </div>
-                <div className="flex-1">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Closing Time
-                  </label>
-                  <input
-                    type="time"
-                    name="end_time"
-                    required
-                    value={formData.end_time}
-                    onChange={handleChange}
-                    className="w-full border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500 p-3 border"
-                  />
+                    </label>
+                  ))}
                 </div>
               </div>
-            </div>
-          )}
-
-          <div className="mt-8 flex justify-between">
-            {step > 1 ? (
-              <button
-                type="button"
-                onClick={prevStep}
-                className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
-              >
-                Back
-              </button>
-            ) : (
-              <div /> // Spacer
             )}
-            
-            <button
-              type="submit"
-              disabled={loading || (step === 1 && !formData.business_name.trim())}
-              className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center gap-2"
-            >
-              {loading ? (
-                <>Saving...</>
-              ) : step === 3 ? (
-                "Finish Setup"
+
+            {step === 3 && (
+              <div className="space-y-4 animate-fadein">
+                <h3 className="text-xl font-black">أوقات العمل الأساسية</h3>
+                <p className="text-sm text-gray-500 dark:text-slate-400">رح نضيفها كبداية من الاثنين للجمعة، وبتقدر تعدّلها لاحقاً.</p>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="label">من الساعة</label>
+                    <input type="time" name="start_time" required value={formData.start_time} onChange={handleChange} className="input-field" />
+                  </div>
+                  <div>
+                    <label className="label">إلى الساعة</label>
+                    <input type="time" name="end_time" required value={formData.end_time} onChange={handleChange} className="input-field" />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="mt-8 flex justify-between gap-3">
+              {step > 1 ? (
+                <button type="button" onClick={prevStep} className="btn-secondary">
+                  رجوع
+                </button>
               ) : (
-                "Next Step"
+                <div />
               )}
-            </button>
-          </div>
-        </form>
+
+              <button type="submit" disabled={loading || (step === 1 && !formData.business_name.trim())} className="btn-primary">
+                {loading ? "جاري الحفظ..." : step === 3 ? (
+                  <>
+                    <CheckCircle2 className="h-4 w-4" />
+                    إنهاء الإعداد
+                  </>
+                ) : (
+                  "التالي"
+                )}
+              </button>
+            </div>
+          </form>
+        </section>
       </div>
     </div>
   );

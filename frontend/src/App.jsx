@@ -25,34 +25,44 @@ import TrainingPage from "./pages/TrainingPage.jsx";
 import VoiceSettingsPage from "./pages/VoiceSettingsPage.jsx";
 import WorkflowsPage from "./pages/WorkflowsPage.jsx";
 
-function Shell({ children }) { 
+function Shell({ children }) {
   const { i18n } = useTranslation();
-  
+
   useEffect(() => {
     document.documentElement.dir = i18n.language === "ar" ? "rtl" : "ltr";
     document.documentElement.lang = i18n.language;
   }, [i18n.language]);
 
   return (
-    <div className="flex flex-col min-h-screen bg-gray-50">
+    <div className="flex min-h-screen flex-col bg-gray-50 text-gray-950 dark:bg-[#0b1118] dark:text-slate-100">
       <Navbar />
       <main className="flex-1">{children}</main>
-      <footer className="py-4 border-t border-gray-200 mt-auto">
-        <div className="mx-auto max-w-6xl px-4 flex items-center justify-center gap-6 text-sm text-gray-500">
-          <Link to="/terms" className="hover:text-brand-600">شروط الخدمة</Link>
-          <Link to="/privacy" className="hover:text-brand-600">سياسة الخصوصية</Link>
+      <footer className="mt-auto border-t border-gray-200 bg-white/70 py-4 dark:border-slate-800 dark:bg-slate-950/60">
+        <div className="app-container flex items-center justify-center gap-6 text-sm text-gray-500 dark:text-slate-400">
+          <Link to="/terms" className="hover:text-brand-600 dark:hover:text-white">
+            شروط الخدمة
+          </Link>
+          <Link to="/privacy" className="hover:text-brand-600 dark:hover:text-white">
+            سياسة الخصوصية
+          </Link>
         </div>
       </footer>
     </div>
-  ); 
+  );
 }
 
 function Protected({ children, role }) {
   const { user, loading } = useAuth();
-  if (loading) return <div className="flex h-screen items-center justify-center text-gray-500">جاري التحميل…</div>;
+  if (loading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-gray-50 text-gray-500 dark:bg-[#0b1118] dark:text-slate-300">
+        جاري التحميل...
+      </div>
+    );
+  }
   if (!user) return <Navigate to="/login" replace />;
   if (role && user.role !== role) return <Navigate to="/" replace />;
-  
+
   if (user.role === "client" && !user.business_name) {
     return <OnboardingWizard />;
   }

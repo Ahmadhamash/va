@@ -2,6 +2,22 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --app-bg: #f4f7fb;
+  --app-surface: #ffffff;
+  --app-border: #d9e2ee;
+  --app-text: #101418;
+  --app-muted: #64748b;
+}
+
+.dark {
+  --app-bg: #0b1118;
+  --app-surface: #101821;
+  --app-border: #263343;
+  --app-text: #eef4f8;
+  --app-muted: #9aa9ba;
+}
+
 html,
 body,
 #root {
@@ -12,8 +28,8 @@ body {
   margin: 0;
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
     "Helvetica Neue", Arial, "Noto Sans Arabic", sans-serif;
-  background-color: #f3f4f8;
-  color: #0f172a;
+  background-color: var(--app-bg);
+  color: var(--app-text);
   -webkit-font-smoothing: antialiased;
 }
 
@@ -47,4 +63,82 @@ body {
 }
 .animate-fadein {
   animation: fadein 0.18s ease-out;
+}
+
+@layer components {
+  .app-container {
+    @apply mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8;
+  }
+
+  .surface {
+    @apply rounded-lg border border-gray-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900;
+  }
+
+  .surface-soft {
+    @apply rounded-lg border border-gray-200 bg-gray-50 dark:border-slate-700 dark:bg-slate-900/60;
+  }
+
+  .btn-primary {
+    @apply inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-ink-900 px-4 text-sm font-semibold text-white transition hover:bg-ink-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white dark:text-ink-900 dark:hover:bg-slate-100;
+  }
+
+  .btn-secondary {
+    @apply inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800;
+  }
+
+  .btn-danger {
+    @apply inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-red-200 bg-white px-4 text-sm font-semibold text-red-600 transition hover:bg-red-50 dark:border-red-900/60 dark:bg-slate-900 dark:text-red-300 dark:hover:bg-red-950/30;
+  }
+
+  .icon-button {
+    @apply inline-flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-600 transition hover:border-gray-300 hover:bg-gray-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800;
+  }
+
+  .input-field {
+    @apply w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:placeholder:text-slate-500;
+  }
+
+  .label {
+    @apply mb-1 block text-sm font-semibold text-gray-700 dark:text-slate-200;
+  }
+
+  .eyebrow {
+    @apply text-xs font-bold uppercase text-mint-600 dark:text-mint-400;
+  }
+}
+
+.dark .bg-white {
+  background-color: #101821 !important;
+}
+
+.dark .bg-gray-50 {
+  background-color: #0b1118 !important;
+}
+
+.dark .bg-gray-100 {
+  background-color: #172231 !important;
+}
+
+.dark .text-gray-900,
+.dark .text-gray-800,
+.dark .text-gray-700 {
+  color: #eef4f8 !important;
+}
+
+.dark .text-gray-600,
+.dark .text-gray-500,
+.dark .text-gray-400 {
+  color: #a7b4c4 !important;
+}
+
+.dark .border-gray-300,
+.dark .border-gray-200 {
+  border-color: #263343 !important;
+}
+
+.dark input,
+.dark select,
+.dark textarea {
+  background-color: #0b1118;
+  color: #eef4f8;
 }
