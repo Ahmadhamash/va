@@ -13,6 +13,9 @@ router = APIRouter(tags=["chatwoot"])
 
 
 def _extract_secret(request: Request) -> str:
+    auth = request.headers.get("authorization") or ""
+    if auth.lower().startswith("bearer "):
+        return auth.split(" ", 1)[1].strip()
     return (
         request.headers.get("x-chatwoot-webhook-secret")
         or request.headers.get("x-webhook-secret")
