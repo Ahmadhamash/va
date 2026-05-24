@@ -11,27 +11,21 @@
         reverse_proxy backend:8000
     }
 
-    # Legacy preview route now redirects to the main app
-    @whatsappSaasLegacy path /wa-saas /wa-saas/*
-    handle @whatsappSaasLegacy {
-        redir * / 308
-    }
-
-    # API routes owned by the new Masar multi-channel SaaS app
-    @masarSaasApi path /api/agent/* /api/channels/* /api/conversations* /api/knowledge* /api/onboarding/* /api/products* /api/whatsapp/*
-    handle @masarSaasApi {
-        reverse_proxy whatsapp-agent-saas:3000
-    }
-
-    # All remaining API requests -> existing backend
-    @api path /api/*
-    handle @api {
+    # Backend API routes that the FastAPI backend owns
+    @backendApi path /api/auth/* /api/items* /api/chat/* /api/admin/* /api/style/* /api/channels* /api/delivery* /api/escalations* /api/policies* /api/offers* /api/bookings* /api/workflows* /api/billing* /api/webhooks/* /api/chatwoot/* /api/handoff/* /api/verification-logs* /api/voice-settings* /api/automation* /api/health /api/business-types /api/uploads/* /api/catalog-import/*
+    handle @backendApi {
         reverse_proxy backend:8000
     }
 
-    # Everything else -> the new Masar multi-channel SaaS app
+    # Next.js BFF API routes (conversations, products, knowledge, agent, whatsapp, onboarding)
+    @nextApi path /api/conversations* /api/products* /api/knowledge* /api/agent/* /api/whatsapp/* /api/onboarding/*
+    handle @nextApi {
+        reverse_proxy frontend:3000
+    }
+
+    # Everything else -> the new Next.js frontend
     handle {
-        reverse_proxy whatsapp-agent-saas:3000
+        reverse_proxy frontend:3000
     }
 }
 
