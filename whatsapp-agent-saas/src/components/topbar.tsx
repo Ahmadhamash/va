@@ -2,11 +2,12 @@ import Link from "next/link";
 import { Bell, MessageCircle, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 export function Topbar({
   title,
   subtitle,
-  actionLabel = "Connect WhatsApp Business"
+  actionLabel = "ربط قناة"
 }: {
   title: string;
   subtitle?: string;
@@ -21,9 +22,10 @@ export function Topbar({
         </div>
         <div className="hidden min-w-80 items-center gap-3 md:flex">
           <div className="relative flex-1">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/30" />
-            <Input className="pl-9" placeholder="Search customers, products..." />
+            <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/30" />
+            <Input className="pr-9" placeholder="ابحث عن عميل أو منتج..." />
           </div>
+          <ThemeToggle />
           <Button variant="secondary" size="sm" aria-label="Notifications">
             <Bell className="h-4 w-4" />
           </Button>

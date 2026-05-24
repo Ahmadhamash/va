@@ -9,6 +9,17 @@ export type ConnectionStatus =
 
 export type ConversationStatus = "AI_HANDLING" | "NEEDS_HUMAN" | "HUMAN_ACTIVE" | "CLOSED";
 export type MessageSender = "CUSTOMER" | "AI" | "HUMAN" | "SYSTEM";
+export type ChannelProvider = "WHATSAPP" | "FACEBOOK" | "INSTAGRAM";
+
+export type ChannelConnection = {
+  id: string;
+  provider: ChannelProvider;
+  name: string;
+  handle: string;
+  status: ConnectionStatus;
+  description: string;
+  metric: string;
+};
 
 export type Message = {
   id: string;
@@ -22,6 +33,7 @@ export type Conversation = {
   id: string;
   customerName: string;
   customerPhone: string;
+  channel: ChannelProvider;
   status: ConversationStatus;
   lastMessage: string;
   lastMessageAt: string;

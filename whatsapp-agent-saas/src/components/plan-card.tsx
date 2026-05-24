@@ -1,4 +1,7 @@
+"use client";
+
 import { CheckCircle2 } from "lucide-react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { GradientCard } from "@/components/gradient-card";
 import { cn } from "@/lib/utils";
@@ -16,6 +19,7 @@ export function PlanCard({
   features: string[];
   highlighted?: boolean;
 }) {
+  const [selected, setSelected] = useState(false);
   return (
     <GradientCard className={cn(highlighted && "border-emeraldx-400/40 shadow-glow")}>
       <div className="flex items-start justify-between gap-3">
@@ -25,13 +29,13 @@ export function PlanCard({
         </div>
         {highlighted ? (
           <span className="rounded-full bg-emeraldx-500 px-3 py-1 text-xs font-bold text-ink-950">
-            Best value
+            الأفضل
           </span>
         ) : null}
       </div>
       <div className="mt-7 text-4xl font-semibold text-white">{price}</div>
-      <Button variant={highlighted ? "primary" : "secondary"} className="mt-6 w-full">
-        Choose plan
+      <Button variant={highlighted || selected ? "primary" : "secondary"} className="mt-6 w-full" onClick={() => setSelected(true)}>
+        {selected ? "تم اختيار الباقة" : "اختيار الباقة"}
       </Button>
       <div className="mt-6 space-y-3">
         {features.map((feature) => (

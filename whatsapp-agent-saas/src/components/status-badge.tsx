@@ -8,19 +8,19 @@ type StatusBadgeProps = {
 };
 
 const labels: Record<string, string> = {
-  DISCONNECTED: "Not connected",
-  SETUP_REQUIRED: "Setup required",
-  PENDING_VERIFICATION: "Pending verification",
-  CONNECTED: "Connected",
-  READY: "Ready",
-  ERROR: "Error",
-  DEMO_MODE: "Demo mode",
-  AI_HANDLING: "AI Handling",
-  NEEDS_HUMAN: "Human Needed",
-  HUMAN_ACTIVE: "Human Active",
-  CLOSED: "Closed",
-  ACTIVE: "Active",
-  PAUSED: "Paused"
+  DISCONNECTED: "غير مربوط",
+  SETUP_REQUIRED: "يحتاج إعداد",
+  PENDING_VERIFICATION: "بانتظار التحقق",
+  CONNECTED: "مربوط",
+  READY: "جاهز",
+  ERROR: "خطأ",
+  DEMO_MODE: "وضع تجريبي",
+  AI_HANDLING: "الذكاء يتابع",
+  NEEDS_HUMAN: "يحتاج موظف",
+  HUMAN_ACTIVE: "موظف يتابع",
+  CLOSED: "مغلق",
+  ACTIVE: "نشط",
+  PAUSED: "متوقف"
 };
 
 export function StatusBadge({ status }: StatusBadgeProps) {

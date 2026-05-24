@@ -1,7 +1,7 @@
 import { CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const steps = ["Business", "Connect", "Teach", "Behavior", "Test", "Done"];
+const steps = ["النشاط", "القنوات", "المعرفة", "السلوك", "اختبار", "جاهز"];
 
 export function OnboardingStepper({ current }: { current: number }) {
   return (

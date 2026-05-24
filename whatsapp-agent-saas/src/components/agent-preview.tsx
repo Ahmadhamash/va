@@ -2,8 +2,8 @@ import { Bot, MessageCircle } from "lucide-react";
 import { GradientCard } from "@/components/gradient-card";
 
 export function AgentPreview({
-  tone = "Friendly",
-  strictness = "Balanced"
+  tone = "ودود",
+  strictness = "متوازن"
 }: {
   tone?: string;
   strictness?: string;
@@ -15,17 +15,17 @@ export function AgentPreview({
           <Bot className="h-6 w-6" />
         </div>
         <div>
-          <h3 className="text-lg font-semibold text-white">Your agent will sound like this</h3>
-          <p className="text-sm text-white/45">{tone} tone · {strictness} knowledge mode</p>
+          <h3 className="text-lg font-semibold text-white">هكذا سيبدو صوت الوكيل</h3>
+          <p className="text-sm text-white/45">أسلوب {tone} · معرفة {strictness}</p>
         </div>
       </div>
       <div className="mt-5 rounded-3xl bg-white/[0.06] p-4">
         <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-emeraldx-400">
           <MessageCircle className="h-4 w-4" />
-          Preview reply
+          معاينة الرد
         </div>
         <p className="text-sm leading-7 text-white/72">
-          Hi! Yes, we deliver to your area. Delivery starts from 2 JOD. What would you like to order?
+          أهلا! عنا ربط واتساب وفيسبوك وإنستغرام وصندوق محادثات موحد. احكيلي بأي قناة حاب تبدأ؟
         </p>
       </div>
     </GradientCard>

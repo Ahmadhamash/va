@@ -1,7 +1,11 @@
+"use client";
+
 import {
   Bot,
   Clock3,
+  Facebook,
   Inbox,
+  Instagram,
   MessageCircle,
   PauseCircle,
   PenLine,
@@ -10,44 +14,66 @@ import {
   Users
 } from "lucide-react";
 import Link from "next/link";
+import { useState } from "react";
 import { AppShell } from "@/components/app-shell";
+import { ChannelConnectionCard } from "@/components/channel-connection-card";
 import { GradientCard } from "@/components/gradient-card";
 import { MetricCard } from "@/components/metric-card";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
-import { WhatsAppConnectionCard } from "@/components/whatsapp-connection-card";
-import { mockConnection, mockConversations } from "@/lib/mock-data";
+import { mockChannels, mockConversations } from "@/lib/mock-data";
+import type { ChannelProvider } from "@/lib/types";
+
+const channelNames: Record<ChannelProvider, string> = {
+  WHATSAPP: "واتساب",
+  FACEBOOK: "فيسبوك",
+  INSTAGRAM: "إنستغرام"
+};
 
 export default function DashboardPage() {
+  const [notice, setNotice] = useState("كل الأنظمة تعمل بشكل طبيعي.");
+  const [aiPaused, setAiPaused] = useState(false);
+
+  function connect(provider: ChannelProvider) {
+    setNotice(`تم تجهيز مسار ربط ${channelNames[provider]}. الربط الحقيقي يحتاج مفاتيح Meta الرسمية.`);
+  }
+
   return (
-    <AppShell title="Dashboard" subtitle="A simple command center for your AI customer support agent.">
+    <AppShell title="الرئيسية" subtitle="مركز تحكم بسيط لكل قنوات خدمة العملاء الذكية.">
       <div className="space-y-6">
-        <WhatsAppConnectionCard status={mockConnection.status} />
+        <ChannelConnectionCard channels={mockChannels} onConnect={connect} />
+
+        <div className="rounded-3xl border border-cyanx-400/20 bg-cyanx-500/10 px-5 py-4 text-sm font-semibold text-cyanx-400">
+          {notice}
+        </div>
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-          <MetricCard label="WhatsApp status" value="Demo" hint="Ready" icon={MessageCircle} />
-          <MetricCard label="AI Agent" value="Active" hint="Live" icon={Bot} />
-          <MetricCard label="Today conversations" value="128" hint="+18%" icon={Inbox} />
-          <MetricCard label="Human handoffs" value="11" hint="8.5%" icon={Users} />
-          <MetricCard label="Avg response time" value="4.8s" hint="Fast" icon={Clock3} />
+          <MetricCard label="القنوات النشطة" value="3" hint="Meta" icon={MessageCircle} />
+          <MetricCard label="الوكيل الذكي" value={aiPaused ? "متوقف" : "نشط"} hint={aiPaused ? "Paused" : "Live"} icon={Bot} />
+          <MetricCard label="محادثات اليوم" value="184" hint="+24%" icon={Inbox} />
+          <MetricCard label="تحويل بشري" value="16" hint="8.6%" icon={Users} />
+          <MetricCard label="سرعة الرد" value="3.9 ث" hint="سريع" icon={Clock3} />
         </div>
 
         <div className="grid gap-6 xl:grid-cols-[1.12fr_0.88fr]">
           <GradientCard>
             <div className="mb-5 flex items-center justify-between gap-3">
               <div>
-                <h2 className="text-xl font-semibold text-white">Live Inbox preview</h2>
-                <p className="mt-1 text-sm text-white/45">Recent customer conversations and handoff status.</p>
+                <h2 className="text-xl font-semibold text-white">آخر المحادثات</h2>
+                <p className="mt-1 text-sm text-white/45">نظرة سريعة على العملاء والقناة وحالة المتابعة.</p>
               </div>
               <Link href="/inbox">
-                <Button variant="secondary">Open Inbox</Button>
+                <Button variant="secondary">افتح المحادثات</Button>
               </Link>
             </div>
             <div className="space-y-3">
               {mockConversations.map((conversation) => (
                 <div key={conversation.id} className="flex flex-wrap items-center justify-between gap-3 rounded-3xl border border-white/10 bg-white/[0.045] p-4">
                   <div>
-                    <div className="font-semibold text-white">{conversation.customerName}</div>
+                    <div className="flex items-center gap-2 font-semibold text-white">
+                      {conversation.channel === "WHATSAPP" ? <MessageCircle className="h-4 w-4 text-emeraldx-400" /> : conversation.channel === "FACEBOOK" ? <Facebook className="h-4 w-4 text-cyanx-400" /> : <Instagram className="h-4 w-4 text-violet-200" />}
+                      {conversation.customerName}
+                    </div>
                     <div className="mt-1 text-sm text-white/45">{conversation.lastMessage}</div>
                   </div>
                   <StatusBadge status={conversation.status} />
@@ -60,16 +86,16 @@ export default function DashboardPage() {
             <GradientCard>
               <div className="flex items-center justify-between">
                 <div>
-                  <h2 className="text-xl font-semibold text-white">Agent health</h2>
-                  <p className="mt-1 text-sm text-white/45">Your agent is responding from saved knowledge.</p>
+                  <h2 className="text-xl font-semibold text-white">صحة الوكيل</h2>
+                  <p className="mt-1 text-sm text-white/45">يرد من معلومات محفوظة ويتوقف عند الحساسية.</p>
                 </div>
-                <StatusBadge status="ACTIVE" />
+                <StatusBadge status={aiPaused ? "PAUSED" : "ACTIVE"} />
               </div>
               <div className="mt-6 space-y-3">
                 {[
-                  ["Knowledge coverage", "82%"],
-                  ["Safe handoff rules", "6 active"],
-                  ["Demo readiness", "Ready"]
+                  ["تغطية المعرفة", "88%"],
+                  ["قواعد التحويل", "7 نشطة"],
+                  ["جاهزية الديمو", "جاهز"]
                 ].map(([label, value]) => (
                   <div key={label} className="flex items-center justify-between rounded-2xl bg-white/[0.055] px-4 py-3 text-sm">
                     <span className="text-white/50">{label}</span>
@@ -80,14 +106,17 @@ export default function DashboardPage() {
             </GradientCard>
 
             <GradientCard>
-              <h2 className="text-xl font-semibold text-white">Quick actions</h2>
+              <h2 className="text-xl font-semibold text-white">إجراءات سريعة</h2>
               <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                <Button variant="secondary" className="w-full justify-start" onClick={() => setAiPaused((value) => !value)}>
+                  <PauseCircle className="h-4 w-4" />
+                  {aiPaused ? "تشغيل الذكاء" : "إيقاف الذكاء"}
+                </Button>
                 {[
-                  { label: "Pause AI", icon: PauseCircle, href: "/agent" },
-                  { label: "Edit knowledge", icon: PenLine, href: "/knowledge" },
-                  { label: "Test agent", icon: TestTube2, href: "/onboarding" },
-                  { label: "Invite team member", icon: UserPlus, href: "/team" },
-                  { label: "Connect WhatsApp Business", icon: MessageCircle, href: "/onboarding" }
+                  { label: "تعديل المعرفة", icon: PenLine, href: "/knowledge" },
+                  { label: "اختبار الوكيل", icon: TestTube2, href: "/onboarding" },
+                  { label: "دعوة موظف", icon: UserPlus, href: "/team" },
+                  { label: "ربط قناة", icon: MessageCircle, href: "/onboarding" }
                 ].map((action) => {
                   const Icon = action.icon;
                   return (

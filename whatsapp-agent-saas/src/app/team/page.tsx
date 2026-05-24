@@ -1,3 +1,6 @@
+"use client";
+
+import { useState } from "react";
 import { Mail, UserPlus, Users } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { EmptyState } from "@/components/empty-state";
@@ -5,20 +8,38 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 
-const members = [
-  { name: "Demo Owner", email: "owner@demo.com", role: "Owner" },
-  { name: "Support Agent", email: "support@demo.com", role: "Agent" },
-  { name: "Evening Support", email: "evening@demo.com", role: "Support" }
+const initialMembers = [
+  { name: "أحمد", email: "owner@masarjo.com", role: "مالك" },
+  { name: "موظف الدعم", email: "support@masarjo.com", role: "موظف" },
+  { name: "فريق المساء", email: "evening@masarjo.com", role: "دعم" }
 ];
 
 export default function TeamPage() {
+  const [members, setMembers] = useState(initialMembers);
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [role, setRole] = useState("موظف");
+  const [notice, setNotice] = useState("");
+
+  function invite() {
+    if (!name.trim() || !email.trim()) {
+      setNotice("اكتب الاسم والبريد قبل إرسال الدعوة.");
+      return;
+    }
+    setMembers((items) => [...items, { name, email, role }]);
+    setNotice(`تم تجهيز دعوة ${name}.`);
+    setName("");
+    setEmail("");
+    setRole("موظف");
+  }
+
   return (
-    <AppShell title="Team" subtitle="Invite people who can take over conversations when the AI needs help.">
+    <AppShell title="الفريق" subtitle="أضف الأشخاص الذين يستلمون المحادثات عند التحويل البشري.">
       <div className="grid gap-6 xl:grid-cols-[1fr_420px]">
         <Card>
           <CardHeader>
-            <CardTitle>Team members</CardTitle>
-            <CardDescription>Owner, agents, and support users.</CardDescription>
+            <CardTitle>أعضاء الفريق</CardTitle>
+            <CardDescription>مالك، موظفون، ودعم.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             {members.map((member) => (
@@ -40,22 +61,23 @@ export default function TeamPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Invite member</CardTitle>
-            <CardDescription>Placeholder invite modal content.</CardDescription>
+            <CardTitle>دعوة عضو</CardTitle>
+            <CardDescription>واجهة جاهزة للربط مع البريد لاحقا.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <Input placeholder="Full name" />
-            <Input placeholder="Email address" />
-            <Input placeholder="Role: Owner, Agent, Support" />
-            <Button className="w-full">
+            {notice ? <div className="rounded-2xl bg-cyanx-500/10 px-4 py-3 text-sm font-semibold text-cyanx-400">{notice}</div> : null}
+            <Input placeholder="الاسم الكامل" value={name} onChange={(event) => setName(event.target.value)} />
+            <Input placeholder="البريد الإلكتروني" value={email} onChange={(event) => setEmail(event.target.value)} />
+            <Input placeholder="الدور" value={role} onChange={(event) => setRole(event.target.value)} />
+            <Button className="w-full" onClick={invite}>
               <UserPlus className="h-4 w-4" />
-              Send invite
+              إرسال دعوة
             </Button>
           </CardContent>
         </Card>
       </div>
       <div className="mt-6">
-        <EmptyState icon={Mail} title="Invite flow is ready for integration" text="Hook this to your email provider when team invitations go live." />
+        <EmptyState icon={Mail} title="نظام الدعوات جاهز للربط" text="اربطه بمزوّد البريد عند إطلاق حسابات الفريق الحقيقية." />
       </div>
     </AppShell>
   );

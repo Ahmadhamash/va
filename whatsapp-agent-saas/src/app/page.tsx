@@ -2,40 +2,52 @@
 
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { ArrowRight, Bot, CheckCircle2, MessageCircle, ShieldCheck, Sparkles, UserCheck, WalletCards } from "lucide-react";
+import {
+  ArrowLeft,
+  Bot,
+  CheckCircle2,
+  Facebook,
+  Instagram,
+  MessageCircle,
+  ShieldCheck,
+  Sparkles,
+  UserCheck,
+  WalletCards
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { GradientCard } from "@/components/gradient-card";
 import { PremiumButton } from "@/components/premium-button";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 const featureCards = [
   {
     icon: MessageCircle,
-    title: "Connect WhatsApp Business",
-    text: "Use the official WhatsApp Business Platform path with Demo Mode while production setup is pending."
+    title: "كل القنوات من مكان واحد",
+    text: "واتساب، فيسبوك، وإنستغرام داخل صندوق محادثات مرتب وسهل على صاحب العمل."
   },
   {
     icon: WalletCards,
-    title: "Train Your Agent",
-    text: "Add products, policies, hours, location, delivery areas, and simple rules in plain language."
+    title: "علّم الوكيل بدون تعقيد",
+    text: "أضف المنتجات، الأسعار، السياسات، أوقات العمل، واللهجة المطلوبة بكلمات بسيطة."
   },
   {
     icon: UserCheck,
-    title: "Auto-Reply + Human Handoff",
-    text: "Let AI handle simple questions and transfer sensitive conversations to your team."
+    title: "تحويل بشري ذكي",
+    text: "الشكاوى، الإلغاء، الاسترجاع، والغضب تتحول لفريقك بدل ما يرد الذكاء بشكل خاطئ."
   }
 ];
 
 function PhoneMockup() {
   const messages = [
-    { from: "customer", text: "Hi, do you deliver to Khalda?" },
-    { from: "ai", text: "Yes, we do. Delivery starts from 2 JOD. What would you like to order?" },
-    { from: "customer", text: "What meals do you have?" },
-    { from: "ai", text: "We have shawarma meals, burgers, and family grill boxes. Which one are you interested in?" }
+    { from: "customer", channel: "Instagram", text: "مرحبا، شو بتقدموا؟" },
+    { from: "ai", channel: "AI", text: "عنا وكيل ردود ذكي، صندوق محادثات موحد، وتحويل بشري. بأي خدمة مهتم؟" },
+    { from: "customer", channel: "Facebook", text: "بدي أربط صفحة الفيسبوك" },
+    { from: "ai", channel: "AI", text: "تمام، بنجهز الربط الرسمي ونخليك تتابع كل الرسائل من لوحة واحدة." }
   ];
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 24, rotate: -2 }}
+      initial={{ opacity: 0, y: 24, rotate: 2 }}
       animate={{ opacity: 1, y: 0, rotate: 0 }}
       transition={{ duration: 0.7, ease: "easeOut" }}
       className="relative mx-auto w-full max-w-sm"
@@ -49,28 +61,33 @@ function PhoneMockup() {
                 <Bot className="h-5 w-5" />
               </div>
               <div>
-                <div className="text-sm font-semibold text-white">Mira AI</div>
-                <div className="text-xs text-emeraldx-400">Online now</div>
+                <div className="text-sm font-semibold text-white">وكيل مسار</div>
+                <div className="text-xs text-emeraldx-400">متصل الآن</div>
               </div>
             </div>
-            <ShieldCheck className="h-5 w-5 text-cyanx-400" />
+            <div className="flex gap-2 text-white/55">
+              <MessageCircle className="h-4 w-4" />
+              <Facebook className="h-4 w-4" />
+              <Instagram className="h-4 w-4" />
+            </div>
           </div>
           <div className="space-y-3">
             {messages.map((message, index) => (
               <motion.div
-                key={message.text}
+                key={`${message.channel}-${message.text}`}
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.35 + index * 0.14 }}
-                className={message.from === "ai" ? "flex justify-end" : "flex justify-start"}
+                className={message.from === "ai" ? "flex justify-start" : "flex justify-end"}
               >
                 <div
                   className={
                     message.from === "ai"
-                      ? "max-w-[78%] rounded-3xl rounded-br-md bg-emeraldx-500 px-4 py-3 text-sm leading-6 text-ink-950"
-                      : "max-w-[78%] rounded-3xl rounded-bl-md bg-white/9 px-4 py-3 text-sm leading-6 text-white/80"
+                      ? "max-w-[78%] rounded-3xl rounded-bl-md bg-emeraldx-500 px-4 py-3 text-sm leading-6 text-ink-950"
+                      : "max-w-[78%] rounded-3xl rounded-br-md bg-white/9 px-4 py-3 text-sm leading-6 text-white/80"
                   }
                 >
+                  <div className="mb-1 text-[11px] font-semibold opacity-60">{message.channel}</div>
                   {message.text}
                 </div>
               </motion.div>
@@ -91,16 +108,17 @@ export default function LandingPage() {
             <MessageCircle className="h-6 w-6" />
           </span>
           <span>
-            <span className="block text-lg font-semibold text-white">AgentFlow</span>
-            <span className="block text-xs text-white/42">AI WhatsApp support</span>
+            <span className="block text-lg font-semibold text-white">مسار</span>
+            <span className="block text-xs text-white/42">وكيل ذكاء اصطناعي لكل قنواتك</span>
           </span>
         </Link>
         <div className="flex items-center gap-3">
+          <ThemeToggle />
           <Link href="/dashboard">
-            <Button variant="ghost">View Demo</Button>
+            <Button variant="ghost">شاهد الديمو</Button>
           </Link>
           <Link href="/onboarding">
-            <Button>Start Setup</Button>
+            <Button>ابدأ الإعداد</Button>
           </Link>
         </div>
       </header>
@@ -113,7 +131,7 @@ export default function LandingPage() {
             className="mb-6 inline-flex items-center gap-2 rounded-full border border-emeraldx-400/20 bg-emeraldx-500/10 px-3 py-1.5 text-sm font-semibold text-emeraldx-400"
           >
             <Sparkles className="h-4 w-4" />
-            Official WhatsApp Business Platform ready
+            واتساب + فيسبوك + إنستغرام في تجربة واحدة
           </motion.div>
           <motion.h1
             initial={{ opacity: 0, y: 18 }}
@@ -121,7 +139,7 @@ export default function LandingPage() {
             transition={{ delay: 0.1 }}
             className="max-w-4xl text-5xl font-semibold tracking-tight text-white sm:text-6xl lg:text-7xl"
           >
-            Your AI WhatsApp Agent, Live in Minutes
+            خلي مسار يرد على عملاءك بذكاء وبأسلوب عربي مرتب
           </motion.h1>
           <motion.p
             initial={{ opacity: 0, y: 18 }}
@@ -129,7 +147,7 @@ export default function LandingPage() {
             transition={{ delay: 0.2 }}
             className="mt-6 max-w-2xl text-lg leading-8 text-white/58"
           >
-            Connect WhatsApp Business, teach your agent, and let it handle customer messages with human handoff when needed.
+            اربط قنوات Meta الرسمية، علّم الوكيل معلومات نشاطك، وخليه يرد على الأسئلة المتكررة مع تحويل بشري وقت الحاجة.
           </motion.p>
           <motion.div
             initial={{ opacity: 0, y: 18 }}
@@ -139,22 +157,22 @@ export default function LandingPage() {
           >
             <Link href="/onboarding">
               <PremiumButton className="h-14 px-7 text-base">
-                Start Setup
-                <ArrowRight className="h-5 w-5" />
+                ابدأ الآن
+                <ArrowLeft className="h-5 w-5" />
               </PremiumButton>
             </Link>
             <Link href="/dashboard">
               <Button variant="secondary" className="h-14 px-7 text-base">
-                View Demo
+                ادخل لوحة التحكم
               </Button>
             </Link>
           </motion.div>
 
           <div className="mt-10 grid gap-3 sm:grid-cols-3">
             {[
-              ["Customer-initiated", "Support conversations"],
-              ["Demo Mode", "Test before launch"],
-              ["Human handoff", "For sensitive cases"]
+              ["محادثات العملاء", "بدون حملات مزعجة أو سبام"],
+              ["وضع تجريبي", "جرّب الوكيل قبل الربط الحقيقي"],
+              ["تسليم بشري", "للحالات الحساسة والمشتكية"]
             ].map(([title, text]) => (
               <div key={title} className="rounded-3xl border border-white/10 bg-white/[0.055] p-4">
                 <CheckCircle2 className="h-5 w-5 text-emeraldx-400" />
@@ -182,6 +200,12 @@ export default function LandingPage() {
               </GradientCard>
             );
           })}
+        </div>
+        <div className="mt-5 rounded-3xl border border-white/10 bg-white/[0.045] p-5">
+          <div className="flex flex-wrap items-center gap-3 text-sm font-semibold text-white/65">
+            <ShieldCheck className="h-5 w-5 text-cyanx-400" />
+            مصمم لمحادثات الدعم التي يبدأها العميل والردود التجارية المسموحة، وليس للإرسال الجماعي أو الأتمتة غير الرسمية.
+          </div>
         </div>
       </section>
     </main>

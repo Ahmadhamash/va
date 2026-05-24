@@ -5,31 +5,33 @@
 {$DOMAIN} {
     encode zstd gzip
 
-    # Chatwoot webhook bridge → backend
+    # Chatwoot webhook bridge -> backend
     @chatwootWebhook path /webhooks/chatwoot
     handle @chatwootWebhook {
         reverse_proxy backend:8000
     }
 
-    # Preview route for the new WhatsApp AI SaaS app
-    @whatsappSaasRoot path /wa-saas
-    handle @whatsappSaasRoot {
-        redir /wa-saas/ 308
+    # Legacy preview route now redirects to the main app
+    @whatsappSaasLegacy path /wa-saas /wa-saas/*
+    handle @whatsappSaasLegacy {
+        redir / 308
     }
 
-    handle_path /wa-saas/* {
+    # API routes owned by the new Masar multi-channel SaaS app
+    @masarSaasApi path /api/agent/* /api/channels/* /api/conversations* /api/knowledge* /api/onboarding/* /api/products* /api/whatsapp/*
+    handle @masarSaasApi {
         reverse_proxy whatsapp-agent-saas:3000
     }
 
-    # All API requests → backend
+    # All remaining API requests -> existing backend
     @api path /api/*
     handle @api {
         reverse_proxy backend:8000
     }
 
-    # Everything else → the React SPA (nginx)
+    # Everything else -> the new Masar multi-channel SaaS app
     handle {
-        reverse_proxy frontend:3000
+        reverse_proxy whatsapp-agent-saas:3000
     }
 }
 

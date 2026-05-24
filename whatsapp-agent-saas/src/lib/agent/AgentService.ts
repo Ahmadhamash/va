@@ -10,10 +10,13 @@ const handoffWords = [
   "human",
   "agent",
   "استرجاع",
+  "إلغاء",
   "الغاء",
   "شكوى",
   "موظف",
-  "انسان"
+  "انسان",
+  "زعلان",
+  "مشكلة"
 ];
 
 export type AgentResult = {
@@ -39,37 +42,37 @@ export class AgentService {
       return {
         status: "NEEDS_HUMAN",
         handoffReason: `Matched handoff keyword: ${handoffMatch}`,
-        reply: "I can help connect you with a team member who can handle this carefully."
+        reply: "أكيد، رح أحولك لموظف يساعدك بأسرع وقت."
       };
     }
 
-    if (lower.includes("deliver") || lower.includes("delivery")) {
+    if (lower.includes("منتج") || lower.includes("خدمات") || lower.includes("بتبيعوا") || lower.includes("product") || lower.includes("sell")) {
+      const names = mockProducts.slice(0, 3).map((product) => product.name).join("، ");
       return {
         status: "AI_HANDLING",
-        reply: `Yes, ${mockBusiness.name} delivers to ${mockBusiness.deliveryAreas}. Delivery starts from ${mockBusiness.pricingNotes}`
+        reply: `عنا ${names}. احكيلي بأي خدمة مهتم عشان أفصّل لك أكثر.`
       };
     }
 
-    if (lower.includes("product") || lower.includes("menu") || lower.includes("sell")) {
-      const names = mockProducts.slice(0, 3).map((product) => product.name).join(", ");
+    if (lower.includes("وقت") || lower.includes("دوام") || lower.includes("open") || lower.includes("hours")) {
       return {
         status: "AI_HANDLING",
-        reply: `We currently offer ${names}. Which one are you interested in so I can share the right details?`
+        reply: `أوقات العمل: ${mockBusiness.openingHours}.`
       };
     }
 
-    if (lower.includes("open") || lower.includes("hours")) {
+    if (lower.includes("واتساب") || lower.includes("فيسبوك") || lower.includes("انست") || lower.includes("instagram") || lower.includes("facebook")) {
       return {
         status: "AI_HANDLING",
-        reply: `We are open ${mockBusiness.openingHours}.`
+        reply: "نعم، مسار يدعم واتساب بزنس وفيسبوك ماسنجر وإنستغرام DM من لوحة واحدة، والربط الحقيقي يتم عبر إعدادات Meta الرسمية."
       };
     }
 
     const knowledgeHint = mockKnowledge[0]?.content || mockBusiness.description;
-    const contextSize = history.length ? ` I can see ${history.length} earlier messages in this conversation.` : "";
+    const contextSize = history.length ? ` عندي ${history.length} رسائل سابقة في هذه المحادثة.` : "";
     return {
       status: "AI_HANDLING",
-      reply: `Thanks for reaching out. ${knowledgeHint}${contextSize} How can I help you today?`
+      reply: `${knowledgeHint}${contextSize} كيف بقدر أساعدك اليوم؟`
     };
   }
 }

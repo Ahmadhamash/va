@@ -6,12 +6,12 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export function formatTime(date: string | Date) {
-  return new Intl.DateTimeFormat("en", {
+  return new Intl.DateTimeFormat("ar-JO", {
     hour: "2-digit",
     minute: "2-digit"
   }).format(new Date(date));
 }
 
 export function formatNumber(value: number) {
-  return new Intl.NumberFormat("en").format(value);
+  return new Intl.NumberFormat("ar-JO").format(value);
 }

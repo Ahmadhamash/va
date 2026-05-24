@@ -8,21 +8,37 @@ import { Textarea } from "@/components/ui/textarea";
 
 export function KnowledgeEditor() {
   const [title, setTitle] = useState("");
+  const [category, setCategory] = useState("");
+  const [content, setContent] = useState("");
+  const [notice, setNotice] = useState("");
+
+  function saveKnowledge() {
+    if (!title.trim() || !content.trim()) {
+      setNotice("اكتب عنوان ومعلومة قبل الحفظ.");
+      return;
+    }
+    setNotice(`تمت إضافة "${title}" إلى معرفة الوكيل.`);
+    setTitle("");
+    setCategory("");
+    setContent("");
+  }
+
   return (
     <div className="space-y-4">
+      {notice ? <div className="rounded-2xl bg-emeraldx-500/10 px-4 py-3 text-sm font-semibold text-emeraldx-400">{notice}</div> : null}
       <div className="grid gap-4 md:grid-cols-2">
-        <Input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Product, policy, or FAQ title" />
-        <Input placeholder="Category" />
+        <Input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="عنوان المعلومة أو السؤال" />
+        <Input value={category} onChange={(event) => setCategory(event.target.value)} placeholder="التصنيف" />
       </div>
-      <Textarea placeholder="Write the exact information your AI agent can use when replying..." />
+      <Textarea value={content} onChange={(event) => setContent(event.target.value)} placeholder="اكتب المعلومة الدقيقة التي يسمح للوكيل باستخدامها..." />
       <div className="flex flex-wrap gap-3">
-        <Button>
+        <Button onClick={saveKnowledge}>
           <Plus className="h-4 w-4" />
-          Add knowledge
+          إضافة معرفة
         </Button>
-        <Button variant="secondary">
+        <Button variant="secondary" onClick={() => setNotice("واجهة رفع الملفات جاهزة، وسيتم ربط التخزين لاحقا.")}>
           <Upload className="h-4 w-4" />
-          Upload files
+          رفع ملفات
         </Button>
       </div>
     </div>
