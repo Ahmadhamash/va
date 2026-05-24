@@ -1,0 +1,36 @@
+{
+    email {$ACME_EMAIL}
+}
+
+{$DOMAIN} {
+    encode zstd gzip
+
+    # Chatwoot webhook bridge -> backend
+    @chatwootWebhook path /webhooks/chatwoot
+    handle @chatwootWebhook {
+        reverse_proxy backend:8000
+    }
+
+    # Legacy preview route now redirects to the main app
+    @whatsappSaasLegacy path /wa-saas /wa-saas/*
+    handle @whatsappSaasLegacy {
+        redir * / 308
+    }
+
+    # All API requests -> FastAPI backend
+    @api path /api/*
+    handle @api {
+        reverse_proxy backend:8000
+    }
+
+    # Everything else -> the Masar frontend app
+    handle {
+        reverse_proxy frontend:3000
+    }
+}
+
+chat.masarjo.com {
+    encode zstd gzip
+
+    reverse_proxy chatwoot-rails:3000
+}
