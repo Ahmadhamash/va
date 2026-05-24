@@ -1,3 +1,4 @@
+name: va
 services:
   db:
     image: postgres:16
