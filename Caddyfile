@@ -16,3 +16,9 @@
         reverse_proxy frontend:3000
     }
 }
+
+chat.masarjo.com {
+    encode zstd gzip
+
+    reverse_proxy chatwoot-rails:3000
+}
