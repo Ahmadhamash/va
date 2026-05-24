@@ -3,19 +3,21 @@
 @tailwind utilities;
 
 :root {
-  --app-bg: #f4f7fb;
+  --app-bg: #f6f8fb;
   --app-surface: #ffffff;
-  --app-border: #d9e2ee;
+  --app-border: #dce5ee;
   --app-text: #101418;
   --app-muted: #64748b;
+  --app-soft: #eef5f2;
 }
 
 .dark {
-  --app-bg: #0b1118;
-  --app-surface: #101821;
+  --app-bg: #071015;
+  --app-surface: #0f1a21;
   --app-border: #263343;
   --app-text: #eef4f8;
   --app-muted: #9aa9ba;
+  --app-soft: #10251f;
 }
 
 html,
@@ -31,6 +33,11 @@ body {
   background-color: var(--app-bg);
   color: var(--app-text);
   -webkit-font-smoothing: antialiased;
+}
+
+body::selection {
+  background: #13b77a;
+  color: white;
 }
 
 /* Correctly render mixed Arabic + Latin/numbers anywhere */
@@ -71,19 +78,19 @@ body {
   }
 
   .surface {
-    @apply rounded-lg border border-gray-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900;
+    @apply rounded-lg border border-gray-200 bg-white shadow-sm shadow-slate-200/70 dark:border-slate-800 dark:bg-slate-900 dark:shadow-black/20;
   }
 
   .surface-soft {
-    @apply rounded-lg border border-gray-200 bg-gray-50 dark:border-slate-700 dark:bg-slate-900/60;
+    @apply rounded-lg border border-gray-200 bg-gray-50/90 dark:border-slate-800 dark:bg-slate-900/60;
   }
 
   .btn-primary {
-    @apply inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-ink-900 px-4 text-sm font-semibold text-white transition hover:bg-ink-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white dark:text-ink-900 dark:hover:bg-slate-100;
+    @apply inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-mint-600 px-4 text-sm font-bold text-white shadow-sm shadow-mint-600/20 transition hover:bg-mint-500 disabled:cursor-not-allowed disabled:opacity-60;
   }
 
   .btn-secondary {
-    @apply inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800;
+    @apply inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 text-sm font-bold text-gray-700 transition hover:border-gray-400 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800;
   }
 
   .btn-danger {
@@ -103,7 +110,25 @@ body {
   }
 
   .eyebrow {
-    @apply text-xs font-bold uppercase text-mint-600 dark:text-mint-400;
+    @apply text-xs font-black uppercase tracking-normal text-mint-600 dark:text-mint-400;
+  }
+
+  .hero-band {
+    background:
+      radial-gradient(circle at 78% 12%, rgba(19, 183, 122, 0.16), transparent 34%),
+      radial-gradient(circle at 12% 28%, rgba(59, 108, 255, 0.12), transparent 30%),
+      linear-gradient(180deg, #ffffff 0%, #f4f8fb 100%);
+  }
+
+  .dark .hero-band {
+    background:
+      radial-gradient(circle at 78% 12%, rgba(19, 183, 122, 0.18), transparent 34%),
+      radial-gradient(circle at 12% 28%, rgba(59, 108, 255, 0.12), transparent 30%),
+      linear-gradient(180deg, #081117 0%, #0b131a 100%);
+  }
+
+  .status-pill {
+    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-black;
   }
 }
 

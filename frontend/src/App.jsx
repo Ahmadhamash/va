@@ -14,6 +14,7 @@ import DashboardPage from "./pages/DashboardPage.jsx";
 import DeliveryPage from "./pages/DeliveryPage.jsx";
 import EscalationsPage from "./pages/EscalationsPage.jsx";
 import HandoffInboxPage from "./pages/HandoffInboxPage.jsx";
+import LandingPage from "./pages/LandingPage.jsx";
 import LoginPage from "./pages/LoginPage.jsx";
 import OffersPage from "./pages/OffersPage.jsx";
 import PaymentSettingsPage from "./pages/PaymentSettingsPage.jsx";
@@ -82,6 +83,29 @@ function Home() {
   return user?.role === "admin" ? <AdminPage /> : <DashboardPage />;
 }
 
+function HomeGate() {
+  const { user, loading } = useAuth();
+  if (loading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-gray-50 text-gray-500 dark:bg-[#071015] dark:text-slate-300">
+        جاري التحميل...
+      </div>
+    );
+  }
+
+  if (!user) return <LandingPage />;
+
+  if (user.role === "client" && !user.business_name) {
+    return <OnboardingWizard />;
+  }
+
+  return (
+    <Shell>
+      <Home />
+    </Shell>
+  );
+}
+
 export default function App() {
   const { i18n } = useTranslation();
   const navigate = useNavigate();
@@ -104,7 +128,7 @@ export default function App() {
       <Route path="/register" element={<PublicOnly><RegisterPage /></PublicOnly>} />
       <Route path="/terms" element={<Shell><TermsPage /></Shell>} />
       <Route path="/privacy" element={<Shell><PrivacyPage /></Shell>} />
-      <Route path="/" element={<Protected><Home /></Protected>} />
+      <Route path="/" element={<HomeGate />} />
       <Route path="/delivery" element={<Protected role="client"><DeliveryPage /></Protected>} />
       <Route path="/escalations" element={<Protected role="client"><EscalationsPage /></Protected>} />
       <Route path="/policies" element={<Protected role="client"><PoliciesPage /></Protected>} />

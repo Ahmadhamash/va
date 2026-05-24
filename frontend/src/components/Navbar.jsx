@@ -78,8 +78,9 @@ export default function Navbar() {
     navigate("/login");
   }
 
-  const groups =
-    user?.role === "admin"
+  const groups = !user
+    ? []
+    : user?.role === "admin"
       ? [
           {
             title: "Admin",
@@ -147,11 +148,13 @@ export default function Navbar() {
     <header className="sticky top-0 z-40 border-b border-gray-200 bg-white/92 backdrop-blur dark:border-slate-800 dark:bg-[#0b1118]/92">
       <div className="app-container flex min-h-16 items-center justify-between gap-3 py-3">
         <div className="flex min-w-0 items-center gap-3">
-          <button className="icon-button md:hidden" onClick={() => setMenuOpen((open) => !open)} aria-label="فتح القائمة">
-            {menuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-          </button>
+          {user && (
+            <button className="icon-button md:hidden" onClick={() => setMenuOpen((open) => !open)} aria-label="فتح القائمة">
+              {menuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+            </button>
+          )}
           <Link to="/" className="flex min-w-0 items-center gap-3">
-            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-ink-900 text-white shadow-sm dark:bg-white dark:text-ink-900">
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-mint-600 text-white shadow-sm shadow-mint-600/20">
               <Bot className="h-5 w-5" />
             </span>
             <span className="min-w-0">
@@ -215,7 +218,7 @@ export default function Navbar() {
         </div>
       )}
 
-      {menuOpen && (
+      {user && menuOpen && (
         <div className="border-t border-gray-100 bg-white px-4 pb-4 dark:border-slate-800 dark:bg-[#0b1118] md:hidden">
           <div className="space-y-4 pt-3">
             {groups.map((group) => (

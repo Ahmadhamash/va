@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { useTranslation } from "react-i18next";
 import {
-  ArrowUpRight,
+  ArrowLeft,
   Cable,
   CheckCircle2,
   MessageSquareText,
@@ -21,8 +20,52 @@ import ItemCard from "../components/ItemCard.jsx";
 import ItemForm from "../components/ItemForm.jsx";
 import api from "../services/api";
 
+const journeyCards = [
+  {
+    to: "/channels",
+    icon: Cable,
+    title: "ربط القنوات",
+    text: "واتساب، إنستغرام، ماسنجر، وودجت الموقع بواجهة واضحة للعميل.",
+    action: "افتح الربط",
+  },
+  {
+    to: "/voice-settings",
+    icon: Mic2,
+    title: "الصوت واللغة",
+    text: "اختيار مزود الصوت، اللهجة، وسلوك الرد الصوتي بدون تعقيد.",
+    action: "إعداد الصوت",
+  },
+  {
+    to: "/handoff",
+    icon: UserCheck,
+    title: "التحويل البشري",
+    text: "كل محادثة حساسة تظهر في صندوق واضح مع سبب التحويل.",
+    action: "فتح الصندوق",
+  },
+  {
+    to: "/ai-safety",
+    icon: ShieldCheck,
+    title: "الأمان",
+    text: "مراقبة الردود، المخاطر، والقواعد التي تمنع إجابات غير مناسبة.",
+    action: "مراجعة الأمان",
+  },
+  {
+    to: "/automation",
+    icon: Workflow,
+    title: "المسارات",
+    text: "تدفقات بسيطة للحجز، المتابعة، والتنبيهات حسب القناة.",
+    action: "تنظيم التدفقات",
+  },
+  {
+    to: "/chat",
+    icon: MessageSquareText,
+    title: "تجربة العميل",
+    text: "اختبر الرد كما سيظهر للعميل النهائي قبل إطلاق القنوات.",
+    action: "جرّب الآن",
+  },
+];
+
 export default function DashboardPage() {
-  const { t } = useTranslation();
   const [items, setItems] = useState([]);
   const [channels, setChannels] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -103,68 +146,23 @@ export default function DashboardPage() {
     { done: stats.total > 0, label: "أضف منتجات أو خدمات" },
     { done: stats.activeChannels > 0, label: "اربط قناة تواصل" },
     { done: true, label: "اختبر تجربة العميل" },
-    { done: true, label: "فعّل التحويل البشري عند الحاجة" },
+    { done: true, label: "فعّل التحويل البشري" },
   ];
   const readinessScore = Math.round((readiness.filter((item) => item.done).length / readiness.length) * 100);
-
-  const journeyCards = [
-    {
-      to: "/",
-      icon: PackageSearch,
-      title: "مسار المنتجات",
-      text: "جهّز أسماء المنتجات، الأسعار، والتصنيفات التي يقرأها المساعد.",
-      action: "إدارة الكاتالوج",
-    },
-    {
-      to: "/channels",
-      icon: Cable,
-      title: "مسار الربط",
-      text: "اربط واتساب، إنستغرام، ماسنجر، أو ويدجت الموقع بنسخ واضح للروابط.",
-      action: "ربط قناة",
-    },
-    {
-      to: "/voice-settings",
-      icon: Mic2,
-      title: "مسار الصوت",
-      text: "اختار مزود الصوت، اللهجة، والصوت المناسب قبل إرسال الردود الصوتية.",
-      action: "إعداد الصوت",
-    },
-    {
-      to: "/ai-safety",
-      icon: ShieldCheck,
-      title: "مسار الأمان",
-      text: "راقب الردود الخطرة، التحويلات، والأجوبة التي تحتاج موافقة.",
-      action: "مراجعة الأمان",
-    },
-    {
-      to: "/handoff",
-      icon: UserCheck,
-      title: "مسار التحويل البشري",
-      text: "كل طلب يحتاج شخص يظهر كقائمة واضحة بدل ما يضيع داخل المحادثات.",
-      action: "فتح التحويلات",
-    },
-    {
-      to: "/chat",
-      icon: MessageSquareText,
-      title: "مسار التجربة",
-      text: "جرّب كيف الزبون النهائي رح يشوف الرد قبل ما تطلقه على القنوات.",
-      action: "تجربة الآن",
-    },
-  ];
 
   return (
     <div className="py-7" dir="rtl">
       <div className="app-container space-y-7">
-        <section className="grid gap-5 lg:grid-cols-[1.25fr_0.75fr]">
+        <section className="grid gap-5 lg:grid-cols-[1.15fr_0.85fr]">
           <div className="surface overflow-hidden p-5 sm:p-6">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
                 <p className="eyebrow">Control center</p>
                 <h1 className="mt-2 text-2xl font-black text-gray-950 dark:text-white sm:text-3xl">
-                  لوحة تشغيل المساعد
+                  لوحة تشغيل مسار
                 </h1>
                 <p className="mt-3 max-w-2xl text-sm leading-7 text-gray-600 dark:text-slate-300">
-                  كل شيء مهم واضح من هون: المنتجات، الربط، الصوت، الأمان، وتجربة العميل النهائي قبل النشر.
+                  كل ما يحتاجه العميل يظهر كمسار واضح: اربط القنوات، أضف المنتجات، اختبر الردود، واترك التحويل البشري للحالات الحساسة.
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -190,7 +188,7 @@ export default function DashboardPage() {
                 return (
                   <div key={card.label} className="surface-soft p-4">
                     <div className="flex items-center justify-between gap-3">
-                      <span className="text-sm font-semibold text-gray-500 dark:text-slate-400">{card.label}</span>
+                      <span className="text-sm font-bold text-gray-500 dark:text-slate-400">{card.label}</span>
                       <Icon className={`h-5 w-5 ${card.tone}`} />
                     </div>
                     <div className="mt-3 text-3xl font-black text-gray-950 dark:text-white">{card.value}</div>
@@ -203,10 +201,10 @@ export default function DashboardPage() {
           <aside className="surface p-5 sm:p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="eyebrow">Ready</p>
+                <p className="eyebrow">Launch readiness</p>
                 <h2 className="mt-2 text-xl font-black text-gray-950 dark:text-white">جاهزية الإطلاق</h2>
               </div>
-              <span className="rounded-lg bg-mint-50 px-3 py-2 text-lg font-black text-mint-600 dark:bg-mint-500/10 dark:text-mint-300">
+              <span className="rounded-lg bg-mint-50 px-3 py-2 text-lg font-black text-mint-700 dark:bg-mint-500/10 dark:text-mint-300">
                 {readinessScore}%
               </span>
             </div>
@@ -219,7 +217,7 @@ export default function DashboardPage() {
                   <span className={`grid h-6 w-6 place-items-center rounded-lg ${item.done ? "bg-mint-50 text-mint-600 dark:bg-mint-500/10 dark:text-mint-300" : "bg-gray-100 text-gray-400 dark:bg-slate-800"}`}>
                     <CheckCircle2 className="h-4 w-4" />
                   </span>
-                  <span className="font-semibold text-gray-700 dark:text-slate-200">{item.label}</span>
+                  <span className="font-bold text-gray-700 dark:text-slate-200">{item.label}</span>
                 </div>
               ))}
             </div>
@@ -229,15 +227,15 @@ export default function DashboardPage() {
         <section>
           <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
             <div>
-              <p className="eyebrow">End-user routes</p>
+              <p className="eyebrow">End-user paths</p>
               <h2 className="mt-2 text-xl font-black text-gray-950 dark:text-white">مسارات تجربة العميل النهائي</h2>
               <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">
-                نفس رحلة المستخدم من أول سؤال لحد التحويل أو الحجز أو الرد الصوتي.
+                كل بطاقة تفتح خطوة عملية، حتى يعرف صاحب العمل ماذا يفعل بعد تسجيل الدخول مباشرة.
               </p>
             </div>
             <Link to="/channels" className="btn-secondary">
               فتح صفحة الربط
-              <ArrowUpRight className="h-4 w-4" />
+              <ArrowLeft className="h-4 w-4" />
             </Link>
           </div>
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -246,15 +244,15 @@ export default function DashboardPage() {
               return (
                 <Link key={card.title} to={card.to} className="surface group p-4 transition hover:-translate-y-0.5 hover:shadow-md">
                   <div className="flex items-start gap-3">
-                    <span className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-gray-100 text-gray-700 transition group-hover:bg-ink-900 group-hover:text-white dark:bg-slate-800 dark:text-slate-200 dark:group-hover:bg-white dark:group-hover:text-ink-900">
+                    <span className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-gray-100 text-gray-700 transition group-hover:bg-mint-600 group-hover:text-white dark:bg-slate-800 dark:text-slate-200">
                       <Icon className="h-5 w-5" />
                     </span>
                     <div className="min-w-0">
                       <h3 className="font-black text-gray-950 dark:text-white">{card.title}</h3>
                       <p className="mt-1 text-sm leading-6 text-gray-500 dark:text-slate-400">{card.text}</p>
-                      <span className="mt-3 inline-flex items-center gap-1 text-sm font-bold text-brand-600 dark:text-mint-300">
+                      <span className="mt-3 inline-flex items-center gap-1 text-sm font-bold text-mint-700 dark:text-mint-300">
                         {card.action}
-                        <ArrowUpRight className="h-4 w-4" />
+                        <ArrowLeft className="h-4 w-4" />
                       </span>
                     </div>
                   </div>
@@ -268,7 +266,10 @@ export default function DashboardPage() {
           <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="eyebrow">Catalog</p>
-              <h2 className="mt-2 text-xl font-black text-gray-950 dark:text-white">{t("txt_35")}</h2>
+              <h2 className="mt-2 text-xl font-black text-gray-950 dark:text-white">المنتجات والخدمات</h2>
+              <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">
+                المساعد يستخدم هذه القائمة للرد المختصر ثم يسأل العميل عن اهتمامه قبل التفاصيل.
+              </p>
             </div>
             <div className="flex flex-wrap gap-2">
               <form onSubmit={handleSearch} className="flex min-w-[260px] flex-1 gap-2 sm:flex-none">
@@ -277,12 +278,12 @@ export default function DashboardPage() {
                   <input
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
-                    placeholder={t("txt_36")}
+                    placeholder="ابحث عن منتج أو خدمة"
                     dir="auto"
                     className="input-field pe-10"
                   />
                 </div>
-                <button className="btn-secondary" title={t("txt_37")}>
+                <button className="btn-secondary" title="بحث">
                   <Search className="h-4 w-4" />
                 </button>
               </form>
@@ -297,7 +298,7 @@ export default function DashboardPage() {
                 className="btn-primary"
               >
                 <Plus className="h-4 w-4" />
-                {t("txt_38")}
+                إضافة
               </button>
             </div>
           </div>
@@ -319,14 +320,14 @@ export default function DashboardPage() {
           {loading ? (
             <div className="surface-soft flex items-center justify-center gap-3 p-8 text-gray-500 dark:text-slate-400">
               <RefreshCw className="h-4 w-4 animate-spin" />
-              {t("txt_39")}
+              جاري التحميل...
             </div>
           ) : items.length === 0 ? (
             <div className="surface-soft p-8 text-center">
               <PackagePlus className="mx-auto h-10 w-10 text-gray-400" />
-              <h3 className="mt-3 font-black text-gray-950 dark:text-white">{t("txt_40")}</h3>
+              <h3 className="mt-3 font-black text-gray-950 dark:text-white">لا يوجد منتجات بعد</h3>
               <p className="mt-2 text-sm text-gray-500 dark:text-slate-400">
-                أضف أول منتج حتى يعرف المساعد ماذا يبيع ومتى يعطي تفاصيل.
+                أضف أول منتج حتى يعرف المساعد ماذا تبيع ومتى يعطي تفاصيل.
               </p>
               <button
                 onClick={() => {
