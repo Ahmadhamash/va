@@ -23,18 +23,9 @@ import { GradientCard } from "@/components/gradient-card";
 import { MetricCard } from "@/components/metric-card";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
-import type { ChannelProvider, Conversation } from "@/lib/types";
+import type { Conversation } from "@/lib/types";
 import { useAuthStore } from "@/store/use-auth-store";
 import { Loader2 } from "lucide-react";
-
-const channelNames: Record<string, string> = {
-  WHATSAPP: "واتساب",
-  FACEBOOK: "فيسبوك",
-  MESSENGER: "فيسبوك ماسنجر",
-  INSTAGRAM: "إنستغرام",
-  WEBHOOK: "ويب هوك",
-  WIDGET: "ويدجت"
-};
 
 export default function DashboardPage() {
   const [notice, setNotice] = useState("كل الأنظمة تعمل بشكل طبيعي.");
@@ -91,27 +82,21 @@ export default function DashboardPage() {
     load();
   }, [token]);
 
-  async function connect(provider: ChannelProvider) {
+  async function deleteChannel(channelId: string) {
     if (!token) return;
     try {
-      const res = await fetch("/api/integrations/connect", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
-        body: JSON.stringify({ provider })
-      });
-      const data = await res.json();
-      setNotice(data.message || `تم تجهيز مسار ربط ${channelNames[provider]}.`);
-
-      // Refresh channels
-      const cRes = await fetch("/api/integrations/connect", {
+      const res = await fetch(`/api/integrations/connect/${channelId}`, {
+        method: "DELETE",
         headers: { Authorization: "Bearer " + token }
       });
-      const cData = await cRes.json();
-      if (cRes.ok && cData.channels) {
-        setChannels(cData.channels);
+      if (res.ok) {
+        setChannels((prev) => prev.filter((c: any) => c.id !== channelId));
+        setNotice("تم حذف القناة بنجاح.");
+      } else {
+        setNotice("حدث خطأ أثناء حذف القناة.");
       }
     } catch (e) {
-      setNotice("حدث خطأ أثناء الربط.");
+      setNotice("حدث خطأ أثناء الحذف.");
     }
   }
 
@@ -122,7 +107,7 @@ export default function DashboardPage() {
   return (
     <AppShell title="الرئيسية" subtitle="مركز تحكم بسيط لكل قنوات خدمة العملاء الذكية.">
       <div className="space-y-6">
-        <ChannelConnectionCard channels={channels} onConnect={connect} />
+        <ChannelConnectionCard channels={channels} onDelete={deleteChannel} />
 
         <div className="rounded-3xl border border-cyanx-400/20 bg-cyanx-500/10 px-5 py-4 text-sm font-semibold text-cyanx-400">
           {notice}
@@ -196,7 +181,7 @@ export default function DashboardPage() {
                 {[
                   ["حقائق وقواعد المعرفة", `${knowledgeCount} عناصر`],
                   ["المنتجات والخدمات", `${productsCount} متاح`],
-                  ["قواعد التحويل البشري", "3 قواعد نشطة"]
+                  ["قواعد التحويل البشري", "مفعّل"]
                 ].map(([label, value]) => (
                   <div key={label} className="flex items-center justify-between rounded-2xl bg-white/[0.055] px-4 py-3 text-sm">
                     <span className="text-white/50">{label}</span>
