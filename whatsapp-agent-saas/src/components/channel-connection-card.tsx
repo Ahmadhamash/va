@@ -35,7 +35,7 @@ export function ChannelConnectionCard({
               </div>
               <h3 className="text-xl font-semibold text-white">اربط قنوات العملاء</h3>
               <p className="mt-1 max-w-2xl text-sm leading-7 text-white/58">
-                واتساب، فيسبوك، وإنستغرام من لوحة واحدة. التجربة الآن Mock، والربط الحقيقي جاهز ليتم توصيله بـ Meta APIs.
+                واتساب، فيسبوك، وإنستغرام من لوحة واحدة. قم بربط قنواتك الرسمية لتفعيل ردود الوكيل الذكي وإدارة محادثات العملاء.
               </p>
             </div>
           </div>

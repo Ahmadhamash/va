@@ -43,25 +43,44 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const { token } = useAuthStore();
   const [channels, setChannels] = useState<any[]>([]);
+  const [knowledgeCount, setKnowledgeCount] = useState(0);
+  const [productsCount, setProductsCount] = useState(0);
 
   useEffect(() => {
     async function load() {
       if (!token) return;
       try {
-        const res = await fetch("/api/conversations", {
-          headers: { Authorization: "Bearer " + token }
-        });
-        const data = await res.json();
-        if (data.ok && data.conversations) {
-          setConversations(data.conversations.slice(0, 5)); // show latest 5
+        const [convRes, chanRes, knowRes, prodRes] = await Promise.all([
+          fetch("/api/conversations", { headers: { Authorization: "Bearer " + token } }),
+          fetch("/api/integrations/connect", { headers: { Authorization: "Bearer " + token } }),
+          fetch("/api/knowledge", { headers: { Authorization: "Bearer " + token } }),
+          fetch("/api/products", { headers: { Authorization: "Bearer " + token } })
+        ]);
+
+        const [convData, chanData, knowData, prodData] = await Promise.all([
+          convRes.json().catch(() => ({})),
+          chanRes.json().catch(() => ({})),
+          knowRes.json().catch(() => ({})),
+          prodRes.json().catch(() => ({}))
+        ]);
+
+        if (convRes.ok && convData.conversations) {
+          const sorted = [...convData.conversations].sort(
+            (a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime()
+          );
+          setConversations(sorted);
         }
         
-        const cRes = await fetch("/api/integrations/connect", {
-          headers: { Authorization: "Bearer " + token }
-        });
-        const cData = await cRes.json();
-        if (cRes.ok && cData.channels) {
-            setChannels(cData.channels);
+        if (chanRes.ok && chanData.channels) {
+          setChannels(chanData.channels);
+        }
+
+        if (knowRes.ok && knowData.knowledge) {
+          setKnowledgeCount(knowData.knowledge.length);
+        }
+
+        if (prodRes.ok && prodData.products) {
+          setProductsCount(prodData.products.length);
         }
       } catch (err) {
         console.error("Failed to load dashboard data", err);
@@ -75,17 +94,30 @@ export default function DashboardPage() {
   async function connect(provider: ChannelProvider) {
     if (!token) return;
     try {
-        const res = await fetch("/api/integrations/connect", {
-            method: "POST",
-            headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
-            body: JSON.stringify({ provider })
-        });
-        const data = await res.json();
-        setNotice(data.message || `تم تجهيز مسار ربط ${channelNames[provider]}.`);
+      const res = await fetch("/api/integrations/connect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
+        body: JSON.stringify({ provider })
+      });
+      const data = await res.json();
+      setNotice(data.message || `تم تجهيز مسار ربط ${channelNames[provider]}.`);
+
+      // Refresh channels
+      const cRes = await fetch("/api/integrations/connect", {
+        headers: { Authorization: "Bearer " + token }
+      });
+      const cData = await cRes.json();
+      if (cRes.ok && cData.channels) {
+        setChannels(cData.channels);
+      }
     } catch (e) {
-        setNotice("حدث خطأ أثناء الربط.");
+      setNotice("حدث خطأ أثناء الربط.");
     }
   }
+
+  const activeChannelsCount = channels.filter((c: any) => c.status === "CONNECTED").length;
+  const pendingHandoffs = conversations.filter((c) => c.status === "NEEDS_HUMAN").length;
+  const activeHandoffs = conversations.filter((c) => c.status === "HUMAN_ACTIVE").length;
 
   return (
     <AppShell title="الرئيسية" subtitle="مركز تحكم بسيط لكل قنوات خدمة العملاء الذكية.">
@@ -97,11 +129,11 @@ export default function DashboardPage() {
         </div>
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-          <MetricCard label="القنوات النشطة" value="3" hint="Meta" icon={MessageCircle} />
+          <MetricCard label="القنوات النشطة" value={String(activeChannelsCount)} hint={channels.length > 0 ? "نشط" : "لا توجد قنوات"} icon={MessageCircle} />
           <MetricCard label="الوكيل الذكي" value={aiPaused ? "متوقف" : "نشط"} hint={aiPaused ? "Paused" : "Live"} icon={Bot} />
-          <MetricCard label="محادثات اليوم" value="184" hint="+24%" icon={Inbox} />
-          <MetricCard label="تحويل بشري" value="16" hint="8.6%" icon={Users} />
-          <MetricCard label="سرعة الرد" value="3.9 ث" hint="سريع" icon={Clock3} />
+          <MetricCard label="إجمالي المحادثات" value={String(conversations.length)} hint="في النظام" icon={Inbox} />
+          <MetricCard label="بانتظار موظف" value={String(pendingHandoffs)} hint="تحويل بشري" icon={Users} />
+          <MetricCard label="قيد المتابعة" value={String(activeHandoffs)} hint="متابعة جارية" icon={Clock3} />
         </div>
 
         <div className="grid gap-6 xl:grid-cols-[1.12fr_0.88fr]">
@@ -123,7 +155,7 @@ export default function DashboardPage() {
               ) : conversations.length === 0 ? (
                 <div className="text-center text-white/45 py-8">لا توجد محادثات حديثة</div>
               ) : (
-                conversations.map((conversation) => (
+                conversations.slice(0, 5).map((conversation) => (
                   <div key={conversation.id} className="flex flex-wrap items-center justify-between gap-3 rounded-3xl border border-white/10 bg-white/[0.045] p-4">
                     <div>
                       <div className="flex items-center gap-2 font-semibold text-white">
@@ -162,9 +194,9 @@ export default function DashboardPage() {
               </div>
               <div className="mt-6 space-y-3">
                 {[
-                  ["تغطية المعرفة", "88%"],
-                  ["قواعد التحويل", "7 نشطة"],
-                  ["جاهزية الديمو", "جاهز"]
+                  ["حقائق وقواعد المعرفة", `${knowledgeCount} عناصر`],
+                  ["المنتجات والخدمات", `${productsCount} متاح`],
+                  ["قواعد التحويل البشري", "3 قواعد نشطة"]
                 ].map(([label, value]) => (
                   <div key={label} className="flex items-center justify-between rounded-2xl bg-white/[0.055] px-4 py-3 text-sm">
                     <span className="text-white/50">{label}</span>

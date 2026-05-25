@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Bell, MessageCircle, Search } from "lucide-react";
+import { Bell, MessageCircle, Search, Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -7,18 +7,30 @@ import { ThemeToggle } from "@/components/theme-toggle";
 export function Topbar({
   title,
   subtitle,
-  actionLabel = "ربط قناة"
+  actionLabel = "ربط قناة",
+  onMenuToggle
 }: {
   title: string;
   subtitle?: string;
   actionLabel?: string;
+  onMenuToggle?: () => void;
 }) {
   return (
     <header className="sticky top-0 z-20 border-b border-white/10 bg-ink-950/70 backdrop-blur-2xl">
       <div className="flex min-h-20 items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-white">{title}</h1>
-          {subtitle ? <p className="mt-1 text-sm text-white/45">{subtitle}</p> : null}
+        <div className="flex items-center gap-3">
+          {/* Hamburger Menu on Mobile */}
+          <button
+            onClick={onMenuToggle}
+            className="rounded-xl border border-white/10 bg-white/5 p-2 text-white/70 hover:bg-white/10 hover:text-white lg:hidden"
+            aria-label="Open menu"
+          >
+            <Menu className="h-5 w-5" />
+          </button>
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight text-white">{title}</h1>
+            {subtitle ? <p className="mt-1 text-sm text-white/45">{subtitle}</p> : null}
+          </div>
         </div>
         <div className="hidden min-w-80 items-center gap-3 md:flex">
           <div className="relative flex-1">

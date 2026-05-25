@@ -25,9 +25,12 @@ export default function InboxPage() {
         });
         const data = await res.json();
         if (data.ok && data.conversations) {
-          setConversations(data.conversations);
-          if (data.conversations.length > 0) {
-            setSelectedId(data.conversations[0].id);
+          const sorted = [...data.conversations].sort(
+            (a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime()
+          );
+          setConversations(sorted);
+          if (sorted.length > 0) {
+            setSelectedId(sorted[0].id);
           }
         }
       } catch (err) {
