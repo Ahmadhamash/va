@@ -10,9 +10,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
 
   try {
-    const listRes = await backendFetch("/handoff", { token });
+    const listRes = await backendFetch("/handoff/", { token });
     if (!listRes.ok) {
-      return NextResponse.json({ ok: false, error: "Failed to fetch handoff list" }, { status: listRes.status });
+      return NextResponse.json({ ok: false, error: `Failed to fetch handoff list: ${listRes.statusText}` }, { status: listRes.status });
     }
     const handoffs = await listRes.json();
     const handoff = handoffs.find((h: any) => h.session_id === id);
@@ -27,7 +27,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     });
 
     if (!res.ok) {
-        return NextResponse.json({ ok: false, error: "Failed to takeover conversation" }, { status: res.status });
+        return NextResponse.json({ ok: false, error: `Failed to takeover conversation: ${res.statusText}` }, { status: res.status });
     }
 
     return NextResponse.json({
@@ -35,8 +35,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         conversationId: id,
         status: "HUMAN_ACTIVE"
     });
-  } catch (err) {
+  } catch (err: any) {
     console.error(err);
-    return NextResponse.json({ ok: false, error: "Internal Error" }, { status: 500 });
+    return NextResponse.json({ ok: false, error: err.message || String(err) }, { status: 500 });
   }
 }
