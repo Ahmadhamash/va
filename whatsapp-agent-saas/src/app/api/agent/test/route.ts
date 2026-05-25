@@ -1,15 +1,12 @@
 import { NextResponse } from "next/server";
-import { backendFetch, getTokenFromRequest } from "@/lib/backend-api";
-import { AgentService } from "@/lib/agent/AgentService";
+import { getTokenFromRequest } from "@/lib/backend-api";
 
 export async function POST(request: Request) {
   const token = getTokenFromRequest(request);
   const body = await request.json();
 
   if (!token) {
-    const service = new AgentService();
-    const result = await service.test(body.message ?? "");
-    return NextResponse.json({ ok: true, result });
+    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
 
   try {
@@ -38,11 +35,9 @@ export async function POST(request: Request) {
         },
       });
     }
-  } catch {
-    // Fall back to demo
+    return NextResponse.json({ ok: false, error: "Failed to process chat" }, { status: res.status });
+  } catch (err) {
+    console.error(err);
+    return NextResponse.json({ ok: false, error: "Internal error" }, { status: 500 });
   }
-
-  const service = new AgentService();
-  const result = await service.test(body.message ?? "");
-  return NextResponse.json({ ok: true, result });
 }

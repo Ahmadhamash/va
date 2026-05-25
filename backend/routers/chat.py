@@ -188,6 +188,34 @@ async def session_messages(
     return list(result.scalars().all())
 
 
+@router.post("/sessions/{session_id}/agent-message", response_model=MessageOut)
+async def agent_send_message(
+    session_id: uuid.UUID,
+    message: str = Form(...),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    # Agents/admins can reply. Also, business owner (client) can reply to their own sessions.
+    session = await db.get(ChatSession, session_id)
+    if session is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Session not found"
+        )
+    if current_user.role == "client" and session.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized"
+        )
+        
+    msg = await save_message(
+        session_id=session.id,
+        role="assistant", # Treat human agent as assistant in the chat history, but maybe we should add "human" role?
+        content=message,
+        media_type="text",
+        media_url=None,
+        db=db,
+    )
+    return msg
+
 @router.delete("/sessions/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_session(
     session_id: uuid.UUID,

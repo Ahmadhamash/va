@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Plus, Upload } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { KnowledgeEditor } from "@/components/knowledge-editor";
@@ -9,8 +9,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { mockKnowledge, mockProducts } from "@/lib/mock-data";
-import type { Product } from "@/lib/types";
+import { useAuthStore } from "@/store/use-auth-store";
+import type { Product, KnowledgeItem } from "@/lib/types";
+import { Loader2 } from "lucide-react";
 
 const tabs = [
   { label: "معلومات النشاط", value: "business-info" },
@@ -21,28 +22,97 @@ const tabs = [
 ];
 
 export default function KnowledgeBasePage() {
-  const [products, setProducts] = useState<Product[]>(mockProducts);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [knowledge, setKnowledge] = useState<KnowledgeItem[]>([]);
+  const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [productName, setProductName] = useState("");
   const [productPrice, setProductPrice] = useState("");
   const [productDescription, setProductDescription] = useState("");
+  const [policyTitle, setPolicyTitle] = useState("");
+  const [policyContent, setPolicyContent] = useState("");
+  const { token } = useAuthStore();
 
-  function addProduct() {
-    if (!productName.trim()) return;
-    setProducts((items) => [
-      ...items,
-      {
-        id: `prod_${Date.now()}`,
-        name: productName,
-        price: productPrice || "حسب الطلب",
-        available: true,
-        description: productDescription || "وصف مختصر للخدمة."
+  useEffect(() => {
+    async function load() {
+      if (!token) return;
+      try {
+        const [prodRes, knowRes] = await Promise.all([
+          fetch("/api/products", { headers: { Authorization: "Bearer " + token } }),
+          fetch("/api/knowledge", { headers: { Authorization: "Bearer " + token } })
+        ]);
+        const prodData = await prodRes.json();
+        const knowData = await knowRes.json();
+        
+        if (prodData.ok && prodData.products) setProducts(prodData.products);
+        if (knowData.ok && knowData.knowledge) setKnowledge(knowData.knowledge);
+      } catch (err) {
+        console.error("Failed to load knowledge data", err);
+      } finally {
+        setLoading(false);
       }
-    ]);
-    setProductName("");
-    setProductPrice("");
-    setProductDescription("");
-    setShowForm(false);
+    }
+    load();
+  }, [token]);
+
+  async function addProduct() {
+    if (!productName.trim() || !token) return;
+    
+    try {
+      const res = await fetch("/api/products", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
+        body: JSON.stringify({
+          name: productName,
+          price: productPrice,
+          description: productDescription
+        })
+      });
+      const data = await res.json();
+      if (data.ok && data.product) {
+        setProducts((items) => [...items, data.product]);
+        setProductName("");
+        setProductPrice("");
+        setProductDescription("");
+        setShowForm(false);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  async function addPolicy(type: string) {
+    if (!policyTitle.trim() || !policyContent.trim() || !token) return;
+
+    try {
+      const res = await fetch("/api/knowledge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
+        body: JSON.stringify({
+          title: policyTitle,
+          body: policyContent,
+          category: type
+        })
+      });
+      const data = await res.json();
+      if (data.ok && data.knowledgeItem) {
+        setKnowledge((items) => [...items, data.knowledgeItem]);
+        setPolicyTitle("");
+        setPolicyContent("");
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  if (loading) {
+    return (
+      <AppShell title="المعرفة" subtitle="علّم الوكيل كأنك تدرّب موظف خدمة عملاء جديد.">
+        <div className="flex h-96 items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-emeraldx-400" />
+        </div>
+      </AppShell>
+    );
   }
 
   return (
@@ -86,11 +156,11 @@ export default function KnowledgeBasePage() {
             <CardContent className="space-y-4">
               <KnowledgeEditor />
               <div className="grid gap-3 md:grid-cols-2">
-                {mockKnowledge.map((item) => (
+                {knowledge.filter(k => k.category === 'business-info' || !['faqs', 'policies'].includes(k.category || '')).map((item) => (
                   <div key={item.id} className="rounded-3xl border border-white/10 bg-white/[0.045] p-4">
-                    <div className="text-xs font-semibold text-emeraldx-400">{item.type}</div>
+                    <div className="text-xs font-semibold text-emeraldx-400">{item.category}</div>
                     <div className="mt-2 font-semibold text-white">{item.title}</div>
-                    <p className="mt-2 text-sm leading-6 text-white/50">{item.content}</p>
+                    <p className="mt-2 text-sm leading-6 text-white/50">{item.body}</p>
                   </div>
                 ))}
               </div>
@@ -146,10 +216,20 @@ export default function KnowledgeBasePage() {
               </CardHeader>
               <CardContent>
                 <div className="rounded-3xl border border-dashed border-white/12 bg-white/[0.04] p-10 text-center">
-                  <Upload className="mx-auto h-10 w-10 text-white/35" />
-                  <p className="mt-4 text-white/55">المساحة جاهزة للإضافة والربط لاحقا.</p>
-                  <Textarea className="mt-5" placeholder="أضف سؤالا أو سياسة مختصرة..." />
-                  <Button className="mt-4" onClick={() => setShowForm(false)}>حفظ</Button>
+                  <div className="mx-auto max-w-md space-y-4">
+                    <Input value={policyTitle} onChange={(e) => setPolicyTitle(e.target.value)} placeholder="العنوان (مثال: سياسة الاسترجاع)" />
+                    <Textarea value={policyContent} onChange={(e) => setPolicyContent(e.target.value)} placeholder="أضف سؤالا أو سياسة مختصرة..." />
+                    <Button onClick={() => addPolicy(item.value)}>حفظ</Button>
+                  </div>
+                  
+                  <div className="mt-10 grid gap-3 text-right">
+                    {knowledge.filter(k => k.category === item.value).map((k) => (
+                      <div key={k.id} className="rounded-2xl bg-white/[0.02] p-4">
+                        <div className="font-semibold text-white">{k.title}</div>
+                        <div className="mt-1 text-sm text-white/60">{k.body}</div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </CardContent>
             </Card>

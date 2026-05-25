@@ -2,7 +2,25 @@ import { BarChart3, Clock3, MessageCircle, TrendingUp, UserCheck } from "lucide-
 import { AppShell } from "@/components/app-shell";
 import { GradientCard } from "@/components/gradient-card";
 import { MetricCard } from "@/components/metric-card";
-import { analyticsData } from "@/lib/mock-data";
+const analyticsData = {
+  conversationsToday: 184,
+  aiResolved: 137,
+  handoffs: 16,
+  avgResponseTime: "3.9 ث",
+  peakHours: [
+    { hour: "10 ص", conversations: 18 },
+    { hour: "12 م", conversations: 31 },
+    { hour: "2 م", conversations: 22 },
+    { hour: "6 م", conversations: 42 },
+    { hour: "9 م", conversations: 35 }
+  ],
+  mostAsked: ["الأسعار", "طريقة الربط", "إنستغرام DM", "التحويل البشري"],
+  channelMix: [
+    { name: "واتساب", value: 68 },
+    { name: "فيسبوك", value: 22 },
+    { name: "إنستغرام", value: 10 }
+  ]
+};
 
 export default function AnalyticsPage() {
   const max = Math.max(...analyticsData.peakHours.map((item) => item.conversations));

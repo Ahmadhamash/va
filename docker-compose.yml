@@ -91,14 +91,15 @@ services:
 
   frontend:
     build:
-      context: ./frontend
-      args:
-        VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
+      context: ./whatsapp-agent-saas
     restart: unless-stopped
     ports:
       - "3000:3000"
     depends_on:
       - backend
+    environment:
+      NODE_ENV: development
+      BACKEND_URL: http://backend:8000
 
 volumes:
   postgres_data:

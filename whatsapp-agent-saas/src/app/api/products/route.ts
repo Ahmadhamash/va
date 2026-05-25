@@ -1,43 +1,39 @@
 import { NextResponse } from "next/server";
 import { backendFetch, getTokenFromRequest } from "@/lib/backend-api";
-import { mockProducts } from "@/lib/mock-data";
 
 export async function GET(request: Request) {
   const token = getTokenFromRequest(request);
   if (!token) {
-    return NextResponse.json({ ok: true, products: mockProducts });
+    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
 
   try {
     const res = await backendFetch("/items", { token });
-    if (res.ok) {
-      const items = await res.json();
-      const products = items.map((item: Record<string, unknown>) => ({
-        id: item.id,
-        name: item.name,
-        price: item.price ? String(item.price) : "0",
-        available: item.is_available !== false,
-        description: item.description || "",
-        category: item.category || "",
-      }));
-      return NextResponse.json({ ok: true, products });
+    if (!res.ok) {
+      return NextResponse.json({ ok: false, error: "Failed to fetch items" }, { status: res.status });
     }
-  } catch {
-    // Fall back to mock
+    const items = await res.json();
+    const products = items.map((item: Record<string, unknown>) => ({
+      id: item.id,
+      name: item.name,
+      price: item.price ? String(item.price) : "0",
+      available: item.is_available !== false,
+      description: item.description || "",
+      category: item.category || "",
+    }));
+    return NextResponse.json({ ok: true, products });
+  } catch (err) {
+    console.error(err);
+    return NextResponse.json({ ok: false, error: "Internal Error" }, { status: 500 });
   }
-  return NextResponse.json({ ok: true, products: mockProducts });
 }
 
 export async function POST(request: Request) {
   const token = getTokenFromRequest(request);
-  const body = await request.json();
-
   if (!token) {
-    return NextResponse.json({
-      ok: true,
-      product: { id: "prod_" + Date.now(), available: true, ...body },
-    });
+    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
+  const body = await request.json();
 
   try {
     const res = await backendFetch("/items", {
@@ -46,19 +42,18 @@ export async function POST(request: Request) {
         name: body.name,
         description: body.description || "",
         price: parseFloat(body.price) || 0,
-        category: body.category || "\u0639\u0627\u0645",
+        category: body.category || "عام",
       },
       token,
     });
-    if (res.ok) {
-      const item = await res.json();
-      return NextResponse.json({ ok: true, product: item });
+    
+    if (!res.ok) {
+        return NextResponse.json({ ok: false, error: "Failed to create item" }, { status: res.status });
     }
-  } catch {
-    // Fall back
+    const item = await res.json();
+    return NextResponse.json({ ok: true, product: item });
+  } catch (err) {
+    console.error(err);
+    return NextResponse.json({ ok: false, error: "Internal Error" }, { status: 500 });
   }
-  return NextResponse.json({
-    ok: true,
-    product: { id: "prod_" + Date.now(), available: true, ...body },
-  });
 }

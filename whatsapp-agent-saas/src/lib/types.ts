@@ -50,7 +50,9 @@ export type Product = {
 
 export type KnowledgeItem = {
   id: string;
-  type: "Business Info" | "FAQ" | "Policy" | "File";
+  type?: "Business Info" | "FAQ" | "Policy" | "File";
   title: string;
-  content: string;
+  content?: string;
+  category?: string;
+  body?: string;
 };

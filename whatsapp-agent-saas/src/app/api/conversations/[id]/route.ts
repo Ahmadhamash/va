@@ -1,11 +1,35 @@
 import { NextResponse } from "next/server";
-import { mockConversations } from "@/lib/mock-data";
+import { backendFetch, getTokenFromRequest } from "@/lib/backend-api";
 
-export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
-  const conversation = mockConversations.find((item) => item.id === id);
-  if (!conversation) {
-    return NextResponse.json({ ok: false, error: "Conversation not found" }, { status: 404 });
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const token = getTokenFromRequest(request);
+  const { id } = await params; // id here is actually the session_id from the conversation object
+  
+  if (!token) {
+    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
-  return NextResponse.json({ ok: true, conversation });
+
+  try {
+    // First try to fetch messages from chat/sessions/{id}/messages
+    const res = await backendFetch(`/chat/sessions/${id}/messages`, { token });
+    if (!res.ok) {
+        return NextResponse.json({ ok: false, error: "Failed to fetch conversation" }, { status: res.status });
+    }
+    const messages = await res.json();
+    return NextResponse.json({ 
+        ok: true, 
+        conversation: {
+            id,
+            messages: messages.map((m: any) => ({
+                id: m.id,
+                sender: m.role === "user" ? "CUSTOMER" : "AI",
+                body: m.content,
+                createdAt: m.created_at
+            }))
+        }
+    });
+  } catch (err) {
+    console.error(err);
+    return NextResponse.json({ ok: false, error: "Internal Error" }, { status: 500 });
+  }
 }

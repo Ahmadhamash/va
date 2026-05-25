@@ -61,18 +61,45 @@ export function ChatWindow({ conversation }: { conversation: Conversation }) {
     return variants[version % variants.length];
   }, [status, version]);
 
-  function addMessage(sender: Message["sender"], body: string) {
+  async function addMessage(sender: Message["sender"], body: string) {
     if (!body.trim()) return;
+    
+    // Optimistic UI update
+    const tempId = `msg_${Date.now()}`;
     setMessages((items) => [
       ...items,
       {
-        id: `msg_${Date.now()}`,
+        id: tempId,
         conversationId: conversation.id,
         sender,
         body,
         createdAt: new Date().toISOString()
       }
     ]);
+
+    if (sender === "HUMAN" || sender === "AI") {
+        try {
+            await fetch(`/api/conversations/${conversation.id}/message`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ message: body })
+            });
+        } catch (e) {
+            console.error(e);
+        }
+    }
+  }
+
+  async function updateStatus(newStatus: ConversationStatus, action: "takeover" | "return-to-ai" | "close") {
+    setStatus(newStatus);
+    try {
+      const endpoint = action === "close" ? "takeover" : action;
+      await fetch(`/api/conversations/${conversation.id}/${endpoint}`, {
+        method: "POST"
+      });
+    } catch (e) {
+      console.error(e);
+    }
   }
 
   return (
@@ -88,12 +115,12 @@ export function ChatWindow({ conversation }: { conversation: Conversation }) {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <StatusBadge status={status} />
-            <Button size="sm" variant="secondary" onClick={() => setStatus("HUMAN_ACTIVE")}>
+            <Button size="sm" variant="secondary" onClick={() => updateStatus("HUMAN_ACTIVE", "takeover")}>
               <UserCheck className="h-4 w-4" />
               استلام
             </Button>
-            <Button size="sm" variant="ghost" onClick={() => setStatus("AI_HANDLING")}>إرجاع للذكاء</Button>
-            <Button size="sm" variant="ghost" onClick={() => setStatus("CLOSED")}>إغلاق</Button>
+            <Button size="sm" variant="ghost" onClick={() => updateStatus("AI_HANDLING", "return-to-ai")}>إرجاع للذكاء</Button>
+            <Button size="sm" variant="ghost" onClick={() => updateStatus("CLOSED", "close")}>إغلاق</Button>
           </div>
         </div>
 
