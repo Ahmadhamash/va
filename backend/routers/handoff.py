@@ -161,7 +161,7 @@ async def list_handoffs(
     ]
 
 
-@router.post("/")
+@router.post("")
 async def create_handoff(
     body: HandoffCreate,
     current_user: User = Depends(get_current_user),

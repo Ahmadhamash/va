@@ -9,7 +9,7 @@ export async function GET(request: Request) {
   }
 
   try {
-    const res = await backendFetch("/handoff/", { token });
+    const res = await backendFetch("/handoff", { token });
     if (!res.ok) {
         return NextResponse.json({ ok: false, error: "Failed to fetch conversations" }, { status: res.status });
     }

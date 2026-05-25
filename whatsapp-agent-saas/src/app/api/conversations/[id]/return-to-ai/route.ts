@@ -10,7 +10,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
 
   try {
-    const listRes = await backendFetch("/handoff/", { token });
+    const listRes = await backendFetch("/handoff", { token });
     if (!listRes.ok) {
       return NextResponse.json({ ok: false, error: `Failed to fetch handoff list: ${listRes.statusText}` }, { status: listRes.status });
     }
