@@ -55,16 +55,8 @@ export default function DashboardPage() {
           headers: { Authorization: "Bearer " + token }
         });
         const cData = await cRes.json();
-        if (cData.ok && cData.channels) {
-            setChannels(cData.channels.map((c: any) => ({
-                id: c.id,
-                provider: c.platform.toUpperCase() as ChannelProvider,
-                name: c.platform,
-                handle: c.public_id,
-                status: c.is_active ? "CONNECTED" : "SETUP_REQUIRED",
-                description: "قناة مسجلة عبر الباك إند",
-                metric: "..."
-            })));
+        if (cRes.ok && cData.channels) {
+            setChannels(cData.channels);
         }
       } catch (err) {
         console.error("Failed to load dashboard data", err);
@@ -78,7 +70,7 @@ export default function DashboardPage() {
   async function connect(provider: ChannelProvider) {
     if (!token) return;
     try {
-        const res = await fetch("/api/channels/connect", {
+        const res = await fetch("/api/integrations/connect", {
             method: "POST",
             headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
             body: JSON.stringify({ provider })

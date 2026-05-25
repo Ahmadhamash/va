@@ -15,7 +15,7 @@ export async function GET(request: Request) {
     }
     const handoffs = await res.json();
     const conversations = handoffs.map((h: Record<string, string>) => ({
-      id: h.id,
+      id: h.session_id,
       customerName: h.customer_name || h.reason || "عميل",
       customerPhone: h.customer_phone || "",
       channel: "WHATSAPP" as const,
