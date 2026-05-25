@@ -6,7 +6,7 @@ import {
   ArrowLeft,
   ArrowRight,
   Bot,
-  CheckCircle2,
+  CircleCheck,
   Clock,
   Facebook,
   Instagram,
@@ -138,7 +138,7 @@ export default function OnboardingPage() {
               <CardHeader>
                 <div className="mb-5 flex items-center justify-between">
                   <div className="grid h-12 w-12 place-items-center rounded-3xl bg-white/8 text-emeraldx-400">
-                    <Icon className="h-6 w-6" />
+                    <CircleCheck className="h-6 w-6 text-emeraldx-400" />
                   </div>
                   <span className="rounded-full bg-white/8 px-3 py-1 text-xs font-semibold text-white/48">{option.status}</span>
                 </div>

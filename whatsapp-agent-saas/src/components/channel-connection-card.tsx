@@ -1,4 +1,4 @@
-import { ArrowLeft, CheckCircle2, Facebook, Instagram, MessageCircle, ShieldCheck } from "lucide-react";
+import { ArrowLeft, CircleCheck, Facebook, Instagram, MessageCircle, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { GradientCard } from "@/components/gradient-card";
 import { StatusBadge } from "@/components/status-badge";
@@ -26,6 +26,10 @@ export function ChannelConnectionCard({
               <MessageCircle className="h-7 w-7" />
             </div>
             <div>
+              <div className="flex items-center gap-1.5 rounded-full bg-emeraldx-500/10 px-2 py-1 text-xs font-semibold text-emeraldx-400">
+                <CircleCheck className="h-3 w-3" />
+                متصل
+              </div>
               <h3 className="text-xl font-semibold text-white">اربط قنوات العملاء</h3>
               <p className="mt-1 max-w-2xl text-sm leading-7 text-white/58">
                 واتساب، فيسبوك، وإنستغرام من لوحة واحدة. التجربة الآن Mock، والربط الحقيقي جاهز ليتم توصيله بـ Meta APIs.
@@ -55,7 +59,7 @@ export function ChannelConnectionCard({
               <p className="mt-3 text-sm leading-6 text-white/55">{channel.description}</p>
               <div className="mt-4 flex items-center justify-between gap-3 text-xs font-semibold">
                 <span className="flex items-center gap-1.5 text-white/55">
-                  <CheckCircle2 className="h-3.5 w-3.5 text-emeraldx-400" />
+                  <CircleCheck className="h-3.5 w-3.5 text-emeraldx-400" />
                   {channel.metric}
                 </span>
                 <button

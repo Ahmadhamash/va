@@ -1,4 +1,4 @@
-import { CheckCircle2 } from "lucide-react";
+import { CircleCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const steps = ["النشاط", "القنوات", "المعرفة", "السلوك", "اختبار", "جاهز"];
@@ -21,7 +21,7 @@ export function OnboardingStepper({ current }: { current: number }) {
           >
             <div className="flex items-center justify-between gap-2">
               <span className="text-xs font-semibold text-white/55">0{index + 1}</span>
-              {done ? <CheckCircle2 className="h-4 w-4 text-emeraldx-400" /> : null}
+              {done ? <CircleCheck className="h-4 w-4 text-emeraldx-400" /> : null}
             </div>
             <div className={cn("mt-2 text-sm font-semibold", active || done ? "text-white" : "text-white/40")}>
               {step}

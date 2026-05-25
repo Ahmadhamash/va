@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2 } from "lucide-react";
+import { CircleCheck } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { GradientCard } from "@/components/gradient-card";
@@ -40,7 +40,7 @@ export function PlanCard({
       <div className="mt-6 space-y-3">
         {features.map((feature) => (
           <div key={feature} className="flex items-center gap-2 text-sm text-white/68">
-            <CheckCircle2 className="h-4 w-4 text-emeraldx-400" />
+            <CircleCheck className="mt-0.5 h-4 w-4 shrink-0 text-emeraldx-400" />
             {feature}
           </div>
         ))}

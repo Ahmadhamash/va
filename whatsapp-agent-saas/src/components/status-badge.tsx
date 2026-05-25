@@ -1,4 +1,4 @@
-import { AlertCircle, Bot, CheckCircle2, Clock3, PauseCircle, UserCheck } from "lucide-react";
+import { AlertCircle, Bot, CircleCheck, Clock3, PauseCircle, UserCheck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import type { ConnectionStatus, ConversationStatus } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -26,7 +26,7 @@ const labels: Record<string, string> = {
 export function StatusBadge({ status }: StatusBadgeProps) {
   const Icon =
     status === "READY" || status === "CONNECTED"
-      ? CheckCircle2
+      ? CircleCheck
       : status === "DEMO_MODE" || status === "AI_HANDLING"
         ? Bot
         : status === "NEEDS_HUMAN" || status === "HUMAN_ACTIVE"
