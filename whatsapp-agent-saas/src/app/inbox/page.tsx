@@ -76,7 +76,11 @@ export default function InboxPage() {
         ) : (
           <>
             <ConversationList conversations={conversations} selectedId={selectedId} onSelect={setSelectedId} />
-            {messagesLoading || !selectedConversation ? (
+            {conversations.length === 0 ? (
+              <div className="flex h-96 flex-col items-center justify-center rounded-3xl border border-white/10 bg-white/[0.02] text-white/45">
+                <p>لا توجد محادثات نشطة حالياً.</p>
+              </div>
+            ) : messagesLoading || !selectedConversation ? (
               <div className="flex h-96 items-center justify-center">
                 <Loader2 className="h-8 w-8 animate-spin text-emeraldx-400" />
               </div>
