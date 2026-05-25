@@ -5,7 +5,7 @@ import { motion } from "framer-motion";
 import {
   ArrowLeft,
   Bot,
-  CheckCircle2,
+  CircleCheck,
   Facebook,
   Instagram,
   MessageCircle,
@@ -175,7 +175,7 @@ export default function LandingPage() {
               ["تسليم بشري", "للحالات الحساسة والمشتكية"]
             ].map(([title, text]) => (
               <div key={title} className="rounded-3xl border border-white/10 bg-white/[0.055] p-4">
-                <CheckCircle2 className="h-5 w-5 text-emeraldx-400" />
+                <CircleCheck className="h-5 w-5 text-emeraldx-400" />
                 <div className="mt-3 text-sm font-semibold text-white">{title}</div>
                 <div className="mt-1 text-xs leading-5 text-white/45">{text}</div>
               </div>
