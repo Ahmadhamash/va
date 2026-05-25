@@ -38,6 +38,7 @@ export type Conversation = {
   lastMessage: string;
   lastMessageAt: string;
   messages: Message[];
+  aiSuggestedReply?: string | null;
 };
 
 export type Product = {

@@ -22,7 +22,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
             id,
             messages: messages.map((m: any) => ({
                 id: m.id,
-                sender: m.role === "user" ? "CUSTOMER" : "AI",
+                sender: m.role === "user" ? "CUSTOMER" : m.role === "agent" ? "HUMAN" : "AI",
                 body: m.content,
                 createdAt: m.created_at
             }))

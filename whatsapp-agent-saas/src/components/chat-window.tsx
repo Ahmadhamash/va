@@ -58,7 +58,15 @@ function MessageBubble({ message }: { message: Message }) {
   );
 }
 
-export function ChatWindow({ conversation }: { conversation: Conversation }) {
+export function ChatWindow({
+  conversation,
+  onStatusChange,
+  onNewMessage
+}: {
+  conversation: Conversation;
+  onStatusChange?: (id: string, status: ConversationStatus) => void;
+  onNewMessage?: (id: string, message: Message) => void;
+}) {
   const { token } = useAuthStore();
   const [draft, setDraft] = useState("");
   const [status, setStatus] = useState<ConversationStatus>(conversation.status);
@@ -66,9 +74,9 @@ export function ChatWindow({ conversation }: { conversation: Conversation }) {
   const [version, setVersion] = useState(0);
   const [note, setNote] = useState(() => {
     if (typeof window !== "undefined") {
-      return localStorage.getItem(`masarjo_note_${conversation.id}`) || "العميل يفضل الردود المختصرة ويهتم بسرعة الربط.";
+      return localStorage.getItem(`masarjo_note_${conversation.id}`) || "";
     }
-    return "العميل يفضل الردود المختصرة ويهتم بسرعة الربط.";
+    return "";
   });
   const [isEditingNote, setIsEditingNote] = useState(false);
   const [noteDraft, setNoteDraft] = useState(note);
@@ -83,13 +91,16 @@ export function ChatWindow({ conversation }: { conversation: Conversation }) {
   }, [conversation.status]);
 
   useEffect(() => {
-    const savedNote = localStorage.getItem(`masarjo_note_${conversation.id}`) || "العميل يفضل الردود المختصرة ويهتم بسرعة الربط.";
+    const savedNote = localStorage.getItem(`masarjo_note_${conversation.id}`) || "";
     setNote(savedNote);
     setNoteDraft(savedNote);
     setIsEditingNote(false);
   }, [conversation.id]);
 
   const suggestedReply = useMemo(() => {
+    if (conversation.aiSuggestedReply) {
+      return conversation.aiSuggestedReply;
+    }
     if (status === "NEEDS_HUMAN") {
       return "أكيد، رح أحولك لموظف يساعدك بأسرع وقت.";
     }
@@ -99,42 +110,43 @@ export function ChatWindow({ conversation }: { conversation: Conversation }) {
       "منصة مسار تجمع رسائل العملاء وتخلي الذكاء يرد بالعربي بدون تعقيد. احكيلي شو نوع نشاطك؟"
     ];
     return variants[version % variants.length];
-  }, [status, version]);
+  }, [conversation.aiSuggestedReply, status, version]);
 
   async function addMessage(sender: Message["sender"], body: string) {
     if (!body.trim()) return;
     
-    // Optimistic UI update
+    // Construct new message
     const tempId = `msg_${Date.now()}`;
-    setMessages((items) => [
-      ...items,
-      {
-        id: tempId,
-        conversationId: conversation.id,
-        sender,
-        body,
-        createdAt: new Date().toISOString()
-      }
-    ]);
+    const newMessage = {
+      id: tempId,
+      conversationId: conversation.id,
+      sender,
+      body,
+      createdAt: new Date().toISOString()
+    };
+
+    setMessages((items) => [...items, newMessage]);
+    onNewMessage?.(conversation.id, newMessage);
 
     if (sender === "HUMAN" || sender === "AI") {
-        try {
-            await fetch(`/api/conversations/${conversation.id}/message`, {
-                method: "POST",
-                headers: { 
-                  "Content-Type": "application/json",
-                  ...(token ? { Authorization: "Bearer " + token } : {})
-                },
-                body: JSON.stringify({ message: body })
-            });
-        } catch (e) {
-            console.error(e);
-        }
+      try {
+        await fetch(`/api/conversations/${conversation.id}/message`, {
+          method: "POST",
+          headers: { 
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: "Bearer " + token } : {})
+          },
+          body: JSON.stringify({ message: body })
+        });
+      } catch (e) {
+        console.error(e);
+      }
     }
   }
 
   async function updateStatus(newStatus: ConversationStatus, action: "takeover" | "return-to-ai" | "close") {
     setStatus(newStatus);
+    onStatusChange?.(conversation.id, newStatus);
     try {
       const endpoint = action === "close" ? "takeover" : action;
       await fetch(`/api/conversations/${conversation.id}/${endpoint}`, {
@@ -189,9 +201,11 @@ export function ChatWindow({ conversation }: { conversation: Conversation }) {
                   <Pencil className="h-3.5 w-3.5" />
                   تعديل
                 </Button>
-                <Button size="sm" variant="ghost" aria-label="توليد رد جديد" onClick={() => setVersion((value) => value + 1)}>
-                  <RefreshCw className="h-3.5 w-3.5" />
-                </Button>
+                {!conversation.aiSuggestedReply && (
+                  <Button size="sm" variant="ghost" aria-label="توليد رد جديد" onClick={() => setVersion((value) => value + 1)}>
+                    <RefreshCw className="h-3.5 w-3.5" />
+                  </Button>
+                )}
               </div>
             </div>
             <p className="text-sm leading-6 text-white/68">{suggestedReply}</p>
@@ -225,8 +239,8 @@ export function ChatWindow({ conversation }: { conversation: Conversation }) {
               <span className="text-white">{(channelLabels[conversation.channel] || conversation.channel)}</span>
             </div>
             <div className="flex justify-between gap-3">
-              <span>عدد المحادثات</span>
-              <span className="text-white">3</span>
+              <span>عدد الرسائل</span>
+              <span className="text-white">{messages.length}</span>
             </div>
           </div>
         </div>

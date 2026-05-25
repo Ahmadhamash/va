@@ -5,7 +5,7 @@ import { AppShell } from "@/components/app-shell";
 import { ChatWindow } from "@/components/chat-window";
 import { ConversationList } from "@/components/conversation-list";
 import { useAuthStore } from "@/store/use-auth-store";
-import type { Conversation, Message } from "@/lib/types";
+import type { Conversation, Message, ConversationStatus } from "@/lib/types";
 import { Loader2 } from "lucide-react";
 
 export default function InboxPage() {
@@ -67,7 +67,43 @@ export default function InboxPage() {
       }
     }
     loadMessages();
-  }, [selectedId, token, conversations]);
+  }, [selectedId, token]); // Only trigger when selecting a different conversation
+
+  function handleStatusChange(id: string, newStatus: ConversationStatus) {
+    setConversations(prev =>
+      prev.map(c => (c.id === id ? { ...c, status: newStatus } : c))
+    );
+    setSelectedConversation(prev =>
+      prev && prev.id === id ? { ...prev, status: newStatus } : prev
+    );
+  }
+
+  function handleNewMessage(id: string, message: Message) {
+    setConversations(prev => {
+      const updated = prev.map(c =>
+        c.id === id
+          ? {
+              ...c,
+              lastMessage: message.body,
+              lastMessageAt: message.createdAt
+            }
+          : c
+      );
+      return [...updated].sort(
+        (a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime()
+      );
+    });
+    setSelectedConversation(prev =>
+      prev && prev.id === id
+        ? {
+            ...prev,
+            lastMessage: message.body,
+            lastMessageAt: message.createdAt,
+            messages: [...(prev.messages || []), message]
+          }
+        : prev
+    );
+  }
 
   return (
     <AppShell title="المحادثات" subtitle="صندوق موحد لرسائل واتساب وفيسبوك وإنستغرام مع الذكاء والتحويل البشري." actionLabel="اختبار الديمو">
@@ -88,7 +124,12 @@ export default function InboxPage() {
                 <Loader2 className="h-8 w-8 animate-spin text-emeraldx-400" />
               </div>
             ) : (
-              <ChatWindow key={selectedConversation.id} conversation={selectedConversation} />
+              <ChatWindow
+                key={selectedConversation.id}
+                conversation={selectedConversation}
+                onStatusChange={handleStatusChange}
+                onNewMessage={handleNewMessage}
+              />
             )}
           </>
         )}

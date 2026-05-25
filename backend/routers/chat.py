@@ -208,7 +208,7 @@ async def agent_send_message(
         
     msg = await save_message(
         session_id=session.id,
-        role="assistant", # Treat human agent as assistant in the chat history, but maybe we should add "human" role?
+        role="agent",
         content=message,
         media_type="text",
         media_url=None,

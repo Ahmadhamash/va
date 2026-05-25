@@ -44,7 +44,7 @@ async def get_session_history(
         select(Message)
         .where(
             Message.session_id == session_id,
-            Message.role.in_(("user", "assistant")),
+            Message.role.in_(("user", "assistant", "agent")),
             Message.content.isnot(None),
             Message.processed.is_(True),
         )
@@ -53,7 +53,7 @@ async def get_session_history(
     )
     rows = list((await db.execute(stmt)).scalars().all())
     rows.reverse()
-    return [{"role": m.role, "content": m.content or ""} for m in rows]
+    return [{"role": "assistant" if m.role == "agent" else m.role, "content": m.content or ""} for m in rows]
 
 
 async def save_message(

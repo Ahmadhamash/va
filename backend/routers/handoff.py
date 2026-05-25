@@ -151,6 +151,7 @@ async def list_handoffs(
             "reason_details": h.reason_details,
             "priority": h.priority,
             "status": _api_status(h.status),
+            "raw_status": h.status,
             "ai_summary": h.ai_summary,
             "ai_suggested_reply": h.ai_suggested_reply,
             "sla_deadline": h.sla_deadline.isoformat() if h.sla_deadline else None,
