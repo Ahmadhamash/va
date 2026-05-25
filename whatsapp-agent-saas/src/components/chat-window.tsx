@@ -1,12 +1,14 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Bot, Facebook, Instagram, MessageCircle, Pencil, RefreshCw, Send, StickyNote, UserCheck, XCircle, Webhook, Code } from "lucide-react";
+import { useMemo, useState, useEffect } from "react";
+import { Bot, Facebook, Instagram, MessageCircle, Pencil, RefreshCw, Send, StickyNote, UserCheck, XCircle, Webhook, Code, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { StatusBadge } from "@/components/status-badge";
 import type { ChannelProvider, Conversation, ConversationStatus, Message } from "@/lib/types";
 import { cn, formatTime } from "@/lib/utils";
+import { useAuthStore } from "@/store/use-auth-store";
+import { Textarea } from "@/components/ui/textarea";
 
 const channelLabels: Record<string, string> = {
   WHATSAPP: "واتساب",
@@ -37,18 +39,18 @@ function MessageBubble({ message }: { message: Message }) {
   const fromCustomer = message.sender === "CUSTOMER";
   const fromSystem = message.sender === "SYSTEM";
   return (
-    <div className={cn("flex", fromCustomer ? "justify-end" : "justify-start")}>
+    <div className={cn("flex w-full mb-3 transition-all duration-300 hover:translate-y-[-1px]", fromCustomer ? "justify-end" : "justify-start")}>
       <div
         className={cn(
-          "max-w-[78%] rounded-3xl px-4 py-3 text-sm leading-6",
-          fromCustomer && "rounded-br-md bg-white/9 text-white/78",
-          message.sender === "AI" && "rounded-bl-md bg-emeraldx-500 text-ink-950",
-          message.sender === "HUMAN" && "rounded-bl-md bg-violetrx-500/80 text-white",
+          "max-w-[78%] rounded-[20px] px-4 py-3 text-sm leading-6 shadow-sm backdrop-blur-md",
+          fromCustomer && "rounded-br-none bg-white/[0.07] border border-white/5 text-white/90",
+          message.sender === "AI" && "rounded-bl-none bg-gradient-to-br from-emeraldx-500 to-teal-400 text-ink-950 font-medium shadow-emeraldx-500/10",
+          message.sender === "HUMAN" && "rounded-bl-none bg-gradient-to-br from-violetrx-600 to-indigo-500 text-white shadow-violetrx-600/15",
           fromSystem && "mx-auto max-w-[86%] rounded-2xl border border-white/10 bg-white/[0.04] text-center text-white/45"
         )}
       >
-        <div>{message.body}</div>
-        <div className={cn("mt-1 text-[11px]", message.sender === "AI" ? "text-ink-950/55" : "text-white/35")}>
+        <div className="break-words whitespace-pre-wrap">{message.body}</div>
+        <div className={cn("mt-1.5 text-[10px] text-right font-medium tracking-tight", message.sender === "AI" ? "text-ink-950/50" : "text-white/30")}>
           {formatTime(message.createdAt)}
         </div>
       </div>
@@ -57,11 +59,35 @@ function MessageBubble({ message }: { message: Message }) {
 }
 
 export function ChatWindow({ conversation }: { conversation: Conversation }) {
+  const { token } = useAuthStore();
   const [draft, setDraft] = useState("");
   const [status, setStatus] = useState<ConversationStatus>(conversation.status);
   const [messages, setMessages] = useState<Message[]>(conversation.messages);
   const [version, setVersion] = useState(0);
-  const [note, setNote] = useState("العميل يفضل الردود المختصرة ويهتم بسرعة الربط.");
+  const [note, setNote] = useState(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem(`masarjo_note_${conversation.id}`) || "العميل يفضل الردود المختصرة ويهتم بسرعة الربط.";
+    }
+    return "العميل يفضل الردود المختصرة ويهتم بسرعة الربط.";
+  });
+  const [isEditingNote, setIsEditingNote] = useState(false);
+  const [noteDraft, setNoteDraft] = useState(note);
+
+  // Sync props to state
+  useEffect(() => {
+    setMessages(conversation.messages);
+  }, [conversation.messages]);
+
+  useEffect(() => {
+    setStatus(conversation.status);
+  }, [conversation.status]);
+
+  useEffect(() => {
+    const savedNote = localStorage.getItem(`masarjo_note_${conversation.id}`) || "العميل يفضل الردود المختصرة ويهتم بسرعة الربط.";
+    setNote(savedNote);
+    setNoteDraft(savedNote);
+    setIsEditingNote(false);
+  }, [conversation.id]);
 
   const suggestedReply = useMemo(() => {
     if (status === "NEEDS_HUMAN") {
@@ -95,7 +121,10 @@ export function ChatWindow({ conversation }: { conversation: Conversation }) {
         try {
             await fetch(`/api/conversations/${conversation.id}/message`, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: { 
+                  "Content-Type": "application/json",
+                  ...(token ? { Authorization: "Bearer " + token } : {})
+                },
                 body: JSON.stringify({ message: body })
             });
         } catch (e) {
@@ -109,7 +138,10 @@ export function ChatWindow({ conversation }: { conversation: Conversation }) {
     try {
       const endpoint = action === "close" ? "takeover" : action;
       await fetch(`/api/conversations/${conversation.id}/${endpoint}`, {
-        method: "POST"
+        method: "POST",
+        headers: {
+          ...(token ? { Authorization: "Bearer " + token } : {})
+        }
       });
     } catch (e) {
       console.error(e);
@@ -198,15 +230,60 @@ export function ChatWindow({ conversation }: { conversation: Conversation }) {
             </div>
           </div>
         </div>
-        <div className="rounded-3xl border border-white/10 bg-white/[0.045] p-4">
-          <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-white">
-            <StickyNote className="h-4 w-4 text-cyanx-400" />
-            ملاحظات
+        <div className="rounded-3xl border border-white/10 bg-white/[0.045] p-4 transition-all duration-300">
+          <div className="mb-3 flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm font-semibold text-white">
+              <StickyNote className="h-4 w-4 text-cyanx-400" />
+              ملاحظات
+            </div>
+            {!isEditingNote && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs text-cyanx-400 hover:bg-white/5"
+                onClick={() => {
+                  setNoteDraft(note);
+                  setIsEditingNote(true);
+                }}
+              >
+                تعديل
+              </Button>
+            )}
           </div>
-          <p className="text-sm leading-6 text-white/50">{note}</p>
-          <Button className="mt-4 w-full" variant="secondary" size="sm" onClick={() => setNote("تمت إضافة ملاحظة: راجع الربط الرسمي مع العميل.")}>
-            إضافة ملاحظة
-          </Button>
+          {isEditingNote ? (
+            <div className="space-y-2">
+              <Textarea
+                value={noteDraft}
+                onChange={(e) => setNoteDraft(e.target.value)}
+                placeholder="اكتب ملاحظة عن هذا العميل..."
+                className="min-h-[100px] text-xs"
+              />
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  className="flex-1 bg-emeraldx-500 text-ink-950 hover:bg-emeraldx-400 text-xs"
+                  onClick={() => {
+                    localStorage.setItem(`masarjo_note_${conversation.id}`, noteDraft);
+                    setNote(noteDraft);
+                    setIsEditingNote(false);
+                  }}
+                >
+                  <Check className="ml-1 h-3 w-3" />
+                  حفظ
+                </Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  className="flex-1 text-xs"
+                  onClick={() => setIsEditingNote(false)}
+                >
+                  إلغاء
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm leading-6 text-white/50 whitespace-pre-wrap">{note || "لا توجد ملاحظات مضافة للعميل."}</p>
+          )}
         </div>
         <div className="rounded-3xl border border-red-400/20 bg-red-500/10 p-4">
           <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-red-100">
