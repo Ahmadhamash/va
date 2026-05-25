@@ -9,7 +9,7 @@ export type ConnectionStatus =
 
 export type ConversationStatus = "AI_HANDLING" | "NEEDS_HUMAN" | "HUMAN_ACTIVE" | "CLOSED";
 export type MessageSender = "CUSTOMER" | "AI" | "HUMAN" | "SYSTEM";
-export type ChannelProvider = "WHATSAPP" | "FACEBOOK" | "INSTAGRAM";
+export type ChannelProvider = "WHATSAPP" | "FACEBOOK" | "INSTAGRAM" | "MESSENGER" | "WEBHOOK" | "WIDGET";
 
 export type ChannelConnection = {
   id: string;

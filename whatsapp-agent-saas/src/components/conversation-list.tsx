@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Facebook, Instagram, MessageCircle, Search } from "lucide-react";
+import { Facebook, Instagram, MessageCircle, Search, Webhook, Code } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { StatusBadge } from "@/components/status-badge";
 import type { ChannelProvider, Conversation, ConversationStatus } from "@/lib/types";
@@ -15,7 +15,18 @@ const filters: Array<{ label: string; value: "ALL" | ConversationStatus }> = [
 ];
 
 function ChannelIcon({ channel }: { channel: ChannelProvider }) {
-  const Icon = channel === "WHATSAPP" ? MessageCircle : channel === "FACEBOOK" ? Facebook : Instagram;
+  const Icon =
+    channel === "WHATSAPP"
+      ? MessageCircle
+      : channel === "FACEBOOK" || channel === "MESSENGER"
+        ? Facebook
+        : channel === "INSTAGRAM"
+          ? Instagram
+          : channel === "WEBHOOK"
+            ? Webhook
+            : channel === "WIDGET"
+              ? Code
+              : MessageCircle;
   return <Icon className="h-4 w-4 text-emeraldx-400" />;
 }
 

@@ -11,7 +11,9 @@ import {
   PenLine,
   TestTube2,
   UserPlus,
-  Users
+  Users,
+  Webhook,
+  Code
 } from "lucide-react";
 import Link from "next/link";
 import { useState, useEffect } from "react";
@@ -25,10 +27,13 @@ import type { ChannelProvider, Conversation } from "@/lib/types";
 import { useAuthStore } from "@/store/use-auth-store";
 import { Loader2 } from "lucide-react";
 
-const channelNames: Record<ChannelProvider, string> = {
+const channelNames: Record<string, string> = {
   WHATSAPP: "واتساب",
   FACEBOOK: "فيسبوك",
-  INSTAGRAM: "إنستغرام"
+  MESSENGER: "فيسبوك ماسنجر",
+  INSTAGRAM: "إنستغرام",
+  WEBHOOK: "ويب هوك",
+  WIDGET: "ويدجت"
 };
 
 export default function DashboardPage() {
@@ -122,7 +127,19 @@ export default function DashboardPage() {
                   <div key={conversation.id} className="flex flex-wrap items-center justify-between gap-3 rounded-3xl border border-white/10 bg-white/[0.045] p-4">
                     <div>
                       <div className="flex items-center gap-2 font-semibold text-white">
-                        {conversation.channel === "WHATSAPP" ? <MessageCircle className="h-4 w-4 text-emeraldx-400" /> : conversation.channel === "FACEBOOK" ? <Facebook className="h-4 w-4 text-cyanx-400" /> : <Instagram className="h-4 w-4 text-violet-200" />}
+                        {conversation.channel === "WHATSAPP" ? (
+                          <MessageCircle className="h-4 w-4 text-emeraldx-400" />
+                        ) : conversation.channel === "FACEBOOK" || conversation.channel === "MESSENGER" ? (
+                          <Facebook className="h-4 w-4 text-cyanx-400" />
+                        ) : conversation.channel === "INSTAGRAM" ? (
+                          <Instagram className="h-4 w-4 text-violet-200" />
+                        ) : conversation.channel === "WEBHOOK" ? (
+                          <Webhook className="h-4 w-4 text-amber-200" />
+                        ) : conversation.channel === "WIDGET" ? (
+                          <Code className="h-4 w-4 text-teal-200" />
+                        ) : (
+                          <MessageCircle className="h-4 w-4 text-emeraldx-400" />
+                        )}
                         {conversation.customerName}
                       </div>
                       <div className="mt-1 text-sm text-white/45">{conversation.lastMessage}</div>

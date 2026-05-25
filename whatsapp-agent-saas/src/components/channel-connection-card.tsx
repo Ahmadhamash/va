@@ -1,14 +1,17 @@
-import { ArrowLeft, CircleCheck, Facebook, Instagram, MessageCircle, ShieldCheck } from "lucide-react";
+import { ArrowLeft, CircleCheck, Facebook, Instagram, MessageCircle, ShieldCheck, Webhook, Code } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { GradientCard } from "@/components/gradient-card";
 import { StatusBadge } from "@/components/status-badge";
 import type { ChannelConnection, ChannelProvider } from "@/lib/types";
 
-const channelIcons = {
+const channelIcons: Record<string, typeof MessageCircle> = {
   WHATSAPP: MessageCircle,
   FACEBOOK: Facebook,
-  INSTAGRAM: Instagram
-} satisfies Record<ChannelProvider, typeof MessageCircle>;
+  MESSENGER: Facebook,
+  INSTAGRAM: Instagram,
+  WEBHOOK: Webhook,
+  WIDGET: Code
+};
 
 export function ChannelConnectionCard({
   channels,
@@ -45,7 +48,7 @@ export function ChannelConnectionCard({
 
       <div className="mt-6 grid gap-3 lg:grid-cols-3">
         {channels.map((channel) => {
-          const Icon = channelIcons[channel.provider];
+          const Icon = channelIcons[channel.provider] || MessageCircle;
           return (
             <div key={channel.id} className="rounded-3xl border border-white/10 bg-white/[0.055] p-4">
               <div className="flex items-start justify-between gap-3">

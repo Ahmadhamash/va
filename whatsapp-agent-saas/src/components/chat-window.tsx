@@ -1,21 +1,35 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Bot, Facebook, Instagram, MessageCircle, Pencil, RefreshCw, Send, StickyNote, UserCheck, XCircle } from "lucide-react";
+import { Bot, Facebook, Instagram, MessageCircle, Pencil, RefreshCw, Send, StickyNote, UserCheck, XCircle, Webhook, Code } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { StatusBadge } from "@/components/status-badge";
 import type { ChannelProvider, Conversation, ConversationStatus, Message } from "@/lib/types";
 import { cn, formatTime } from "@/lib/utils";
 
-const channelLabels: Record<ChannelProvider, string> = {
+const channelLabels: Record<string, string> = {
   WHATSAPP: "واتساب",
   FACEBOOK: "فيسبوك",
-  INSTAGRAM: "إنستغرام"
+  MESSENGER: "فيسبوك ماسنجر",
+  INSTAGRAM: "إنستغرام",
+  WEBHOOK: "ويب هوك",
+  WIDGET: "ويدجت"
 };
 
 function ChannelIcon({ channel }: { channel: ChannelProvider }) {
-  const Icon = channel === "WHATSAPP" ? MessageCircle : channel === "FACEBOOK" ? Facebook : Instagram;
+  const Icon =
+    channel === "WHATSAPP"
+      ? MessageCircle
+      : channel === "FACEBOOK" || channel === "MESSENGER"
+        ? Facebook
+        : channel === "INSTAGRAM"
+          ? Instagram
+          : channel === "WEBHOOK"
+            ? Webhook
+            : channel === "WIDGET"
+              ? Code
+              : MessageCircle;
   return <Icon className="h-4 w-4 text-emeraldx-400" />;
 }
 
@@ -111,7 +125,7 @@ export function ChatWindow({ conversation }: { conversation: Conversation }) {
               <ChannelIcon channel={conversation.channel} />
               {conversation.customerName}
             </div>
-            <div className="mt-1 text-sm text-white/42">{channelLabels[conversation.channel]} · {conversation.customerPhone}</div>
+            <div className="mt-1 text-sm text-white/42">{(channelLabels[conversation.channel] || conversation.channel)} · {conversation.customerPhone}</div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <StatusBadge status={status} />
@@ -176,7 +190,7 @@ export function ChatWindow({ conversation }: { conversation: Conversation }) {
             </div>
             <div className="flex justify-between gap-3">
               <span>القناة</span>
-              <span className="text-white">{channelLabels[conversation.channel]}</span>
+              <span className="text-white">{(channelLabels[conversation.channel] || conversation.channel)}</span>
             </div>
             <div className="flex justify-between gap-3">
               <span>عدد المحادثات</span>
