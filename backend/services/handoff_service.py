@@ -275,8 +275,9 @@ async def resolve_handoff(
         Escalation.session_id == handoff.session_id,
         Escalation.status == "pending",
     )
-    esc = (await db.execute(esc_stmt)).scalar_one_or_none()
-    if esc:
+    esc_result = await db.execute(esc_stmt)
+    escalations = list(esc_result.scalars().all())
+    for esc in escalations:
         esc.status = "handled"
         esc.handled_at = now
 

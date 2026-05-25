@@ -113,7 +113,7 @@ async def _current_agent_id(
 
 
 # ── Endpoints ────────────────────────────────────────────────────────────
-@router.get("/")
+@router.get("")
 async def list_handoffs(
     status: str | None = None,
     current_user: User = Depends(get_current_user),
