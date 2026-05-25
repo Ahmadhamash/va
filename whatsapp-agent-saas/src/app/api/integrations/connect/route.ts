@@ -20,11 +20,20 @@ export async function POST(request: Request) {
     if (!res.ok) {
         return NextResponse.json({ ok: false, error: "Failed to connect channel" }, { status: res.status });
     }
-    const channel = await res.json();
+    const backendChannel = await res.json();
+    const channel = {
+        ...backendChannel,
+        provider: String(backendChannel.platform || "WHATSAPP").toUpperCase(),
+        status: backendChannel.is_active ? "CONNECTED" : "SETUP_REQUIRED",
+        name: backendChannel.platform === "whatsapp" ? "واتساب بزنس" : backendChannel.platform === "facebook" ? "فيسبوك ماسنجر" : "قناة",
+        handle: "رقم/حساب",
+        description: "قناة تم جلبها من الخادم",
+        metric: "جديد",
+    };
     return NextResponse.json({
         ok: true,
         channel,
-        message: `تم إنشاء قناة ${channel.platform} بنجاح.`
+        message: `تم إنشاء قناة ${backendChannel.platform} بنجاح.`
     });
   } catch (err) {
     console.error(err);
@@ -42,7 +51,15 @@ export async function GET(request: Request) {
         if (!res.ok) {
             return NextResponse.json({ ok: false, error: "Failed to fetch channels" }, { status: res.status });
         }
-        const channels = await res.json();
+        const channels = (await res.json()).map((c: any) => ({
+          ...c,
+          provider: String(c.platform || "WHATSAPP").toUpperCase(),
+          status: c.is_active ? "CONNECTED" : "SETUP_REQUIRED",
+          name: c.platform === "whatsapp" ? "واتساب بزنس" : c.platform === "facebook" ? "فيسبوك ماسنجر" : "قناة",
+          handle: "رقم/حساب",
+          description: "قناة تم جلبها من الخادم",
+          metric: "جديد",
+        }));
         return NextResponse.json({ ok: true, channels });
     } catch (err) {
         console.error(err);
