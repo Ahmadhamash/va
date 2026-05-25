@@ -17,8 +17,8 @@
         reverse_proxy backend:8000
     }
 
-    # Next.js BFF API routes (conversations, products, knowledge, agent, whatsapp, onboarding)
-    @nextApi path /api/conversations* /api/products* /api/knowledge* /api/agent/* /api/whatsapp/* /api/onboarding/*
+    # Next.js BFF API routes (conversations, products, knowledge, agent, whatsapp, onboarding, integrations)
+    @nextApi path /api/conversations* /api/products* /api/knowledge* /api/agent/* /api/whatsapp/* /api/onboarding/* /api/integrations/*
     handle @nextApi {
         reverse_proxy frontend:3000
     }

@@ -51,7 +51,7 @@ export default function DashboardPage() {
           setConversations(data.conversations.slice(0, 5)); // show latest 5
         }
         
-        const cRes = await fetch("/api/channels/connect", {
+        const cRes = await fetch("/api/integrations/connect", {
           headers: { Authorization: "Bearer " + token }
         });
         const cData = await cRes.json();
