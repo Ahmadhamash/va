@@ -87,10 +87,7 @@ export default function KnowledgeBasePage() {
     if (savedFiles) {
       setFiles(JSON.parse(savedFiles));
     } else {
-      const initialFiles: MockFile[] = [
-        { id: "f1", name: "دليل_المبيعات_والأسعار.pdf", size: "1.8 MB", uploadedAt: "2026-05-25", status: "INDEXED" },
-        { id: "f2", name: "شروط_وسياسات_الاستخدام.docx", size: "940 KB", uploadedAt: "2026-05-24", status: "INDEXED" }
-      ];
+      const initialFiles: MockFile[] = [];
       setFiles(initialFiles);
       localStorage.setItem("mock_knowledge_files", JSON.stringify(initialFiles));
     }
