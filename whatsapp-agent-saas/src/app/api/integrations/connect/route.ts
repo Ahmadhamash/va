@@ -9,11 +9,12 @@ export async function POST(request: Request) {
 
   const body = await request.json().catch(() => ({}));
   const provider = String(body.provider ?? "whatsapp").toLowerCase();
+  const credentials = body.credentials || {};
 
   try {
     const res = await backendFetch("/channels", {
       method: "POST",
-      body: { platform: provider, credentials: {} },
+      body: { platform: provider, credentials },
       token
     });
     

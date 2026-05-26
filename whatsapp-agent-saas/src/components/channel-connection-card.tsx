@@ -1,9 +1,24 @@
-import { ArrowLeft, CircleCheck, Facebook, Instagram, MessageCircle, ShieldCheck, Webhook, Code, Trash2, Plus } from "lucide-react";
+import { useState } from "react";
+import { 
+  ArrowLeft, 
+  CircleCheck, 
+  Facebook, 
+  Instagram, 
+  MessageCircle, 
+  ShieldCheck, 
+  Webhook, 
+  Code, 
+  Trash2, 
+  Plus, 
+  Copy, 
+  ChevronDown, 
+  ChevronUp 
+} from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { GradientCard } from "@/components/gradient-card";
 import { StatusBadge } from "@/components/status-badge";
-import type { ChannelConnection, ChannelProvider } from "@/lib/types";
+import type { ChannelConnection } from "@/lib/types";
 
 const channelIcons: Record<string, typeof MessageCircle> = {
   WHATSAPP: MessageCircle,
@@ -32,6 +47,22 @@ export function ChannelConnectionCard({
 }) {
   const connectedCount = channels.filter(c => c.status === "CONNECTED").length;
   const hasChannels = channels.length > 0;
+
+  const [expandedChannelId, setExpandedChannelId] = useState<string | null>(null);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+  const handleCopy = (text: string, key: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedKey(key);
+    setTimeout(() => setCopiedKey(null), 2000);
+  };
+
+  const getAbsoluteWebhookUrl = (channel: any) => {
+    if (typeof window === "undefined") return "";
+    const base = window.location.origin;
+    const path = channel.endpoints?.callback_url || `/api/webhooks/meta/${channel.public_id}`;
+    return `${base}${path}`;
+  };
 
   return (
     <GradientCard className="border-emeraldx-400/20">
@@ -62,41 +93,95 @@ export function ChannelConnectionCard({
       </div>
 
       {hasChannels ? (
-        <div className="mt-6 grid gap-3 lg:grid-cols-3">
-          {channels.map((channel) => {
-            const Icon = channelIcons[channel.provider] || MessageCircle;
-            const isConfigured = channel.status === "CONNECTED";
-            return (
-              <div key={channel.id} className={`rounded-3xl border p-4 ${isConfigured ? "border-emeraldx-400/20 bg-emeraldx-500/5" : "border-white/10 bg-white/[0.055]"}`}>
-                <div className="flex items-start justify-between gap-3">
-                  <div className="grid h-11 w-11 place-items-center rounded-2xl bg-white/8 text-emeraldx-400">
-                    <Icon className="h-5 w-5" />
+        <div className="mt-6 space-y-4">
+          <div className="grid gap-3 lg:grid-cols-3">
+            {channels.map((channel) => {
+              const anyChannel = channel as any;
+              const Icon = channelIcons[channel.provider] || MessageCircle;
+              const isConfigured = channel.status === "CONNECTED";
+              const isExpanded = expandedChannelId === channel.id;
+
+              return (
+                <div key={channel.id} className="space-y-3">
+                  <div className={`rounded-3xl border p-4 transition ${isConfigured ? "border-emeraldx-400/20 bg-emeraldx-500/5" : "border-white/10 bg-white/[0.055]"}`}>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="grid h-11 w-11 place-items-center rounded-2xl bg-white/8 text-emeraldx-400">
+                        <Icon className="h-5 w-5" />
+                      </div>
+                      <StatusBadge status={channel.status} />
+                    </div>
+                    <div className="mt-4 text-base font-semibold text-white text-right">
+                      {platformNames[channel.provider] || channel.provider}
+                    </div>
+                    <div className="mt-1 text-xs text-white/40 text-right">
+                      {anyChannel.credentials?.phone_number_id ? `معرف الرقم: ${anyChannel.credentials.phone_number_id}` : "تم التهيئة ببيانات معتمدة"}
+                    </div>
+                    <div className="mt-4 flex items-center justify-between gap-3 text-xs font-semibold">
+                      <span className={`flex items-center gap-1.5 ${isConfigured ? "text-emeraldx-400" : "text-amber-400"}`}>
+                        <CircleCheck className="h-3.5 w-3.5" />
+                        {isConfigured ? "مفعّل" : "بحاجة إعداد"}
+                      </span>
+                      
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setExpandedChannelId(isExpanded ? null : channel.id)}
+                          className="rounded-full bg-white/8 px-3 py-1.5 text-white/70 transition hover:bg-white/12 flex items-center gap-1"
+                          title="تفاصيل الويب هوك"
+                        >
+                          {isExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                          <span>إعدادات الويب هوك</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onDelete?.(channel.id)}
+                          className="rounded-full bg-red-500/10 px-3 py-1.5 text-red-400 transition hover:bg-red-500 hover:text-white"
+                          title="حذف القناة"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                  <StatusBadge status={channel.status} />
+
+                  {/* Webhook Settings Expanded view */}
+                  {isExpanded && (
+                    <div className="rounded-3xl border border-white/10 bg-white/[0.02] p-4 text-right space-y-3 animate-in fade-in duration-200">
+                      <div className="text-xs font-bold text-white/80">تفاصيل الويب هوك لـ Meta Developers:</div>
+                      
+                      <div className="space-y-1">
+                        <span className="text-[10px] text-white/40 block">Callback URL (رابط الاستقبال)</span>
+                        <div className="flex items-center justify-between rounded-xl bg-black/20 border border-white/5 px-2.5 py-1.5 text-[11px] font-mono">
+                          <button
+                            type="button"
+                            onClick={() => handleCopy(getAbsoluteWebhookUrl(anyChannel), channel.id + "_url")}
+                            className="text-cyanx-400 hover:text-cyanx-300 text-[9px] font-bold"
+                          >
+                            {copiedKey === channel.id + "_url" ? "✓ تم النسخ" : "نسخ"}
+                          </button>
+                          <span className="text-white/70 select-all overflow-x-auto whitespace-nowrap scrollbar-none">{getAbsoluteWebhookUrl(anyChannel)}</span>
+                        </div>
+                      </div>
+
+                      <div className="space-y-1">
+                        <span className="text-[10px] text-white/40 block">Verify Token (رمز التحقق)</span>
+                        <div className="flex items-center justify-between rounded-xl bg-black/20 border border-white/5 px-2.5 py-1.5 text-[11px] font-mono">
+                          <button
+                            type="button"
+                            onClick={() => handleCopy(anyChannel.credentials?.verify_token || "verify_token", channel.id + "_token")}
+                            className="text-cyanx-400 hover:text-cyanx-300 text-[9px] font-bold"
+                          >
+                            {copiedKey === channel.id + "_token" ? "✓ تم النسخ" : "نسخ"}
+                          </button>
+                          <span className="text-white/70 select-all">{anyChannel.credentials?.verify_token || "verify_token"}</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
-                <div className="mt-4 text-base font-semibold text-white">
-                  {platformNames[channel.provider] || channel.provider}
-                </div>
-                <div className="mt-1 text-xs text-white/40">
-                  {channel.handle}
-                </div>
-                <div className="mt-4 flex items-center justify-between gap-3 text-xs font-semibold">
-                  <span className={`flex items-center gap-1.5 ${isConfigured ? "text-emeraldx-400" : "text-amber-400"}`}>
-                    <CircleCheck className="h-3.5 w-3.5" />
-                    {isConfigured ? "مفعّل" : "بحاجة إعداد"}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => onDelete?.(channel.id)}
-                    className="rounded-full bg-red-500/10 px-3 py-1.5 text-red-400 transition hover:bg-red-500 hover:text-white"
-                    title="حذف القناة"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
       ) : (
         <div className="mt-6 flex flex-col items-center justify-center rounded-3xl border border-dashed border-white/15 bg-white/[0.025] py-10 text-center">

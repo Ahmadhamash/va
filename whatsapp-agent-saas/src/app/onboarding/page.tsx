@@ -14,7 +14,9 @@ import {
   PartyPopper,
   Upload,
   WalletCards,
-  Loader2
+  Loader2,
+  Copy,
+  ExternalLink
 } from "lucide-react";
 import Link from "next/link";
 import { AgentPreview } from "@/components/agent-preview";
@@ -79,7 +81,12 @@ export default function OnboardingPage() {
 
   // Integrations/Channels connection state
   const [connectedChannels, setConnectedChannels] = useState<any[]>([]);
+  const [configuringChannel, setConfiguringChannel] = useState<any | null>(null);
+  const [credValues, setCredValues] = useState<Record<string, string>>({});
   const [connectingChannel, setConnectingChannel] = useState<string | null>(null);
+
+  // Copy details helper
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
   // Stepper saving transitions
   const [savingStep, setSavingStep] = useState(false);
@@ -121,11 +128,26 @@ export default function OnboardingPage() {
     loadChannels();
   }, [token]);
 
+  const handleCopy = (text: string, key: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedKey(key);
+    setTimeout(() => setCopiedKey(null), 2000);
+  };
+
+  const getAbsoluteWebhookUrl = (channel: any) => {
+    if (typeof window === "undefined") return "";
+    const base = window.location.origin;
+    const path = channel.endpoints?.callback_url || `/api/webhooks/meta/${channel.public_id}`;
+    return `${base}${path}`;
+  };
+
   // Connect Channel Action
-  async function handleConnectChannel(provider: string, optionTitle: string) {
-    if (!token) return;
+  async function submitChannelConfig(e: React.FormEvent) {
+    e.preventDefault();
+    if (!token || !configuringChannel) return;
+    const provider = configuringChannel.provider;
     setConnectingChannel(provider);
-    setNotice(`جاري ربط قناة ${optionTitle}...`);
+    setNotice(`جاري ربط قناة ${configuringChannel.title}...`);
     try {
       const res = await fetch("/api/integrations/connect", {
         method: "POST",
@@ -133,13 +155,21 @@ export default function OnboardingPage() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`
         },
-        body: JSON.stringify({ provider })
+        body: JSON.stringify({ 
+          provider,
+          credentials: credValues 
+        })
       });
       const data = await res.json();
       if (res.ok && data.ok) {
-        setConnectedChannels((prev) => [...prev, data.channel]);
-        setNotice(`✨ تم ربط قناة ${optionTitle} بنجاح!`);
+        // Replace or add channel connection in UI
+        setConnectedChannels((prev) => {
+          const filtered = prev.filter(c => c.provider !== data.channel.provider);
+          return [...filtered, data.channel];
+        });
+        setNotice(`✨ تم ربط قناة ${configuringChannel.title} بنجاح! انسخ رابط الاستقبال الموضح بالأسفل وضعه في Meta console.`);
         setDemoEnabled(true);
+        setConfiguringChannel(null);
       } else {
         setNotice(`❌ فشل ربط القناة: ${data.error || "خطأ غير معروف"}`);
       }
@@ -344,56 +374,202 @@ export default function OnboardingPage() {
     </div>,
 
     <div key="connect" className="space-y-4">
-      <div className="grid gap-4 lg:grid-cols-3">
-        {onboardingChannels.map((option) => {
-          const Icon = option.icon;
-          const isConnected = connectedChannels.some(
-            (c) => c.provider === option.provider.toUpperCase() && c.status === "CONNECTED"
-          );
-          const isConnecting = connectingChannel === option.provider;
+      {configuringChannel ? (
+        <form onSubmit={submitChannelConfig} className="space-y-4 rounded-3xl border border-white/10 bg-white/[0.03] p-6 text-right animate-in fade-in duration-200">
+          <div className="flex items-center justify-between border-b border-white/5 pb-3">
+            <Button variant="ghost" size="sm" onClick={() => setConfiguringChannel(null)} type="button">
+              إلغاء
+            </Button>
+            <div className="text-right">
+              <h4 className="text-base font-bold text-white">إعداد ربط {configuringChannel.title}</h4>
+              <p className="text-xs text-white/40 mt-1">أدخل مفاتيح الوصول الرسمية لتطبيقك على Meta Developers.</p>
+            </div>
+          </div>
 
-          return (
-            <Card key={option.title} className="premium-ring">
-              <CardHeader>
-                <div className="mb-5 flex items-center justify-between">
-                  <div className="grid h-12 w-12 place-items-center rounded-3xl bg-white/8 text-emeraldx-400">
-                    <CircleCheck className={isConnected ? "h-6 w-6 text-emeraldx-400 fill-emeraldx-500/20" : "h-6 w-6 text-white/20"} />
-                  </div>
-                  <span className={`rounded-full px-3 py-1 text-xs font-semibold ${isConnected ? "bg-emeraldx-500/10 text-emeraldx-400" : "bg-white/8 text-white/48"}`}>
-                    {isConnected ? "متصل" : "يتطلب ربط"}
-                  </span>
+          <div className="space-y-4 py-2">
+            {configuringChannel.provider === "whatsapp" ? (
+              <>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-white/70 block">معرف رقم الهاتف (Phone Number ID)</label>
+                  <Input 
+                    value={credValues.phone_number_id || ""} 
+                    onChange={(e) => setCredValues(prev => ({ ...prev, phone_number_id: e.target.value }))}
+                    placeholder="مثال: 104729104847294"
+                    required 
+                    className="font-mono text-left"
+                  />
                 </div>
-                <CardTitle>{option.title}</CardTitle>
-                <CardDescription>{option.description}</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Button
-                  className="w-full flex items-center justify-center gap-2"
-                  variant={isConnected ? "secondary" : "primary"}
-                  disabled={isConnecting || isConnected}
-                  onClick={() => handleConnectChannel(option.provider, option.title)}
-                >
-                  {isConnecting ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      <span>جاري الاتصال...</span>
-                    </>
-                  ) : isConnected ? (
-                    <span>✓ متصل بالكامل</span>
-                  ) : (
-                    <span>ربط وتفعيل القناة</span>
-                  )}
-                </Button>
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
-      <div className="rounded-3xl border border-cyanx-400/20 bg-cyanx-500/10 p-4 text-sm font-semibold text-cyanx-400">{notice}</div>
-      <Button variant="secondary" onClick={next} disabled={savingStep}>
-        <Clock className="h-4 w-4" />
-        الربط لاحقا، كمل الإعداد
-      </Button>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-white/70 block">توكن الوصول الدائم (Access Token)</label>
+                  <Textarea 
+                    value={credValues.access_token || ""} 
+                    onChange={(e) => setCredValues(prev => ({ ...prev, access_token: e.target.value }))}
+                    placeholder="EAAZB..."
+                    required 
+                    className="font-mono text-left h-20"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-white/70 block">رمز التحقق للويب هوك (Verify Token)</label>
+                  <Input 
+                    value={credValues.verify_token || ""} 
+                    onChange={(e) => setCredValues(prev => ({ ...prev, verify_token: e.target.value }))}
+                    placeholder="أدخل رمز تحقق مخصص (مثال: masarjo_verify_123)"
+                    required 
+                    className="font-mono text-left"
+                  />
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-white/70 block">رمز وصول الصفحة (Page Access Token)</label>
+                  <Textarea 
+                    value={credValues.page_access_token || ""} 
+                    onChange={(e) => setCredValues(prev => ({ ...prev, page_access_token: e.target.value }))}
+                    placeholder="EAAZB..."
+                    required 
+                    className="font-mono text-left h-20"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-white/70 block">رمز التحقق للويب هوك (Verify Token)</label>
+                  <Input 
+                    value={credValues.verify_token || ""} 
+                    onChange={(e) => setCredValues(prev => ({ ...prev, verify_token: e.target.value }))}
+                    placeholder="أدخل رمز تحقق مخصص (مثال: masarjo_verify_123)"
+                    required 
+                    className="font-mono text-left"
+                  />
+                </div>
+              </>
+            )}
+          </div>
+
+          <div className="rounded-2xl bg-white/[0.02] border border-white/5 p-4 text-xs text-white/50 leading-5 space-y-1">
+            <div className="font-bold text-white/80 mb-1">💡 إرشادات الإعداد السريع:</div>
+            <div>1. توجه إلى حساب المطورين <a href="https://developers.facebook.com" target="_blank" rel="noreferrer" className="text-cyanx-400 underline inline-flex items-center gap-0.5">developers.facebook.com <ExternalLink className="h-3 w-3" /></a></div>
+            <div>2. أنشئ تطبيقاً وأضف منتج {configuringChannel.title}.</div>
+            <div>3. قم بتهيئة الويب هوك باستخدام رابط الاستقبال ومفتاح التحقق اللذين سيظهران لك بعد الحفظ مباشرة.</div>
+          </div>
+
+          <div className="flex gap-2 justify-end">
+            <Button variant="secondary" onClick={() => setConfiguringChannel(null)} type="button">
+              إلغاء
+            </Button>
+            <Button type="submit" disabled={connectingChannel !== null}>
+              {connectingChannel ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span>جاري الربط والتحقق...</span>
+                </>
+              ) : (
+                <span>تأكيد وحفظ الاتصال</span>
+              )}
+            </Button>
+          </div>
+        </form>
+      ) : (
+        <>
+          <div className="grid gap-4 lg:grid-cols-3">
+            {onboardingChannels.map((option) => {
+              const Icon = option.icon;
+              const isConnected = connectedChannels.some(
+                (c) => c.provider === option.provider.toUpperCase() && c.is_active
+              );
+              const isConnecting = connectingChannel === option.provider;
+
+              return (
+                <Card key={option.title} className="premium-ring">
+                  <CardHeader>
+                    <div className="mb-5 flex items-center justify-between">
+                      <div className="grid h-12 w-12 place-items-center rounded-3xl bg-white/8 text-emeraldx-400">
+                        <CircleCheck className={isConnected ? "h-6 w-6 text-emeraldx-400 fill-emeraldx-500/20" : "h-6 w-6 text-white/20"} />
+                      </div>
+                      <span className={`rounded-full px-3 py-1 text-xs font-semibold ${isConnected ? "bg-emeraldx-500/10 text-emeraldx-400" : "bg-white/8 text-white/48"}`}>
+                        {isConnected ? "متصل" : "يتطلب ربط"}
+                      </span>
+                    </div>
+                    <CardTitle>{option.title}</CardTitle>
+                    <CardDescription>{option.description}</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <Button
+                      className="w-full flex items-center justify-center gap-2"
+                      variant={isConnected ? "secondary" : "primary"}
+                      onClick={() => setConfiguringChannel(option)}
+                    >
+                      {isConnected ? (
+                        <span>تعديل الاتصال</span>
+                      ) : (
+                        <span>ربط القناة الرسمية</span>
+                      )}
+                    </Button>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+
+          <div className="rounded-3xl border border-cyanx-400/20 bg-cyanx-500/10 p-4 text-sm font-semibold text-cyanx-400">{notice}</div>
+
+          {/* Webhook URLs summary section */}
+          {connectedChannels.length > 0 && (
+            <div className="rounded-3xl border border-white/10 bg-white/[0.02] p-5 space-y-4 text-right">
+              <h4 className="text-sm font-bold text-white">🔗 روابط استقبال الرسائل (Webhook Settings) لربط Meta Console:</h4>
+              <div className="space-y-3">
+                {connectedChannels.map((channel) => {
+                  const label = channel.platform === "whatsapp" ? "واتساب بزنس" : channel.platform === "facebook" ? "فيسبوك ماسنجر" : "إنستغرام DM";
+                  const webhookUrl = getAbsoluteWebhookUrl(channel);
+                  const vToken = channel.credentials?.verify_token || "رمز التحقق المدخل من قبلك";
+                  
+                  return (
+                    <div key={channel.id} className="rounded-2xl border border-white/5 bg-white/[0.03] p-4 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-white/40 font-mono">ID: {channel.public_id}</span>
+                        <span className="text-xs font-bold text-emeraldx-400">{label}</span>
+                      </div>
+                      <div className="grid gap-3 md:grid-cols-2">
+                        <div className="space-y-1 text-right">
+                          <span className="text-[10px] text-white/40 block">Callback URL (رابط الاستقبال)</span>
+                          <div className="flex items-center justify-between rounded-xl bg-black/20 border border-white/5 px-3 py-2 text-xs font-mono">
+                            <button
+                              type="button"
+                              onClick={() => handleCopy(webhookUrl, channel.id + "_url")}
+                              className="text-cyanx-400 hover:text-cyanx-300 text-[10px] font-bold"
+                            >
+                              {copiedKey === channel.id + "_url" ? "✓ تم النسخ" : "نسخ الرابط"}
+                            </button>
+                            <span className="text-white/70 select-all overflow-x-auto whitespace-nowrap scrollbar-none">{webhookUrl}</span>
+                          </div>
+                        </div>
+                        <div className="space-y-1 text-right">
+                          <span className="text-[10px] text-white/40 block">Verify Token (رمز التحقق)</span>
+                          <div className="flex items-center justify-between rounded-xl bg-black/20 border border-white/5 px-3 py-2 text-xs font-mono">
+                            <button
+                              type="button"
+                              onClick={() => handleCopy(vToken, channel.id + "_token")}
+                              className="text-cyanx-400 hover:text-cyanx-300 text-[10px] font-bold"
+                            >
+                              {copiedKey === channel.id + "_token" ? "✓ تم النسخ" : "نسخ الرمز"}
+                            </button>
+                            <span className="text-white/70 select-all">{vToken}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          <Button variant="secondary" onClick={next}>
+            <Clock className="h-4 w-4" />
+            الذهاب للخطوة التالية
+          </Button>
+        </>
+      )}
     </div>,
 
     <div key="teach" className="grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
@@ -549,23 +725,25 @@ export default function OnboardingPage() {
 
         {step < 5 ? (
           <div className="mt-6 flex justify-between">
-            <Button variant="secondary" onClick={prev} disabled={step === 0 || savingStep}>
+            <Button variant="secondary" onClick={prev} disabled={step === 0 || savingStep || configuringChannel !== null}>
               <ArrowRight className="h-4 w-4" />
               السابق
             </Button>
-            <Button onClick={next} disabled={savingStep}>
-              {savingStep ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  <span>جاري الحفظ...</span>
-                </>
-              ) : (
-                <>
-                  <span>التالي</span>
-                  <ArrowLeft className="h-4 w-4" />
-                </>
-              )}
-            </Button>
+            {configuringChannel === null && (
+              <Button onClick={next} disabled={savingStep}>
+                {savingStep ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span>جاري الحفظ...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>التالي</span>
+                    <ArrowLeft className="h-4 w-4" />
+                  </>
+                )}
+              </Button>
+            )}
           </div>
         ) : null}
 
