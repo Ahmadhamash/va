@@ -148,8 +148,7 @@ export function ChatWindow({
     setStatus(newStatus);
     onStatusChange?.(conversation.id, newStatus);
     try {
-      const endpoint = action === "close" ? "takeover" : action;
-      await fetch(`/api/conversations/${conversation.id}/${endpoint}`, {
+      await fetch(`/api/conversations/${conversation.id}/${action}`, {
         method: "POST",
         headers: {
           ...(token ? { Authorization: "Bearer " + token } : {})
@@ -173,12 +172,28 @@ export function ChatWindow({
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <StatusBadge status={status} />
-            <Button size="sm" variant="secondary" onClick={() => updateStatus("HUMAN_ACTIVE", "takeover")}>
+            <Button
+              size="sm"
+              variant={status === "HUMAN_ACTIVE" ? "secondary" : "ghost"}
+              onClick={() => updateStatus("HUMAN_ACTIVE", "takeover")}
+            >
               <UserCheck className="h-4 w-4" />
               استلام
             </Button>
-            <Button size="sm" variant="ghost" onClick={() => updateStatus("AI_HANDLING", "return-to-ai")}>إرجاع للذكاء</Button>
-            <Button size="sm" variant="ghost" onClick={() => updateStatus("CLOSED", "close")}>إغلاق</Button>
+            <Button
+              size="sm"
+              variant={status === "AI_HANDLING" ? "secondary" : "ghost"}
+              onClick={() => updateStatus("AI_HANDLING", "return-to-ai")}
+            >
+              إرجاع للذكاء
+            </Button>
+            <Button
+              size="sm"
+              variant={status === "CLOSED" ? "secondary" : "ghost"}
+              onClick={() => updateStatus("CLOSED", "close")}
+            >
+              إغلاق
+            </Button>
           </div>
         </div>
 
