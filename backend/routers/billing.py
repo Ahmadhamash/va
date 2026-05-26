@@ -14,11 +14,48 @@ router = APIRouter(prefix="/billing", tags=["billing"])
 
 @router.get("/tiers", response_model=List[SubscriptionTierOut])
 async def list_tiers(db: AsyncSession = Depends(get_db)):
-    """List all available subscription tiers."""
+    """List all available subscription tiers. Auto-seeds if empty."""
     result = await db.execute(
         select(SubscriptionTier).where(SubscriptionTier.is_active)
     )
-    return list(result.scalars().all())
+    tiers = list(result.scalars().all())
+    
+    if not tiers:
+        # Auto-seed default tiers if the database has none
+        default_tiers = [
+            SubscriptionTier(
+                name="Starter",
+                description="للمتاجر الصغيرة التي تريد تجربة الردود الذكية.",
+                price_monthly=29.00,
+                features=["وضع تجريبي", "قناة واحدة", "500 رد ذكي", "صندوق محادثات بسيط"],
+                is_active=True
+            ),
+            SubscriptionTier(
+                name="Growth",
+                description="للأعمال التي تريد تشغيل خدمة العملاء يوميا.",
+                price_monthly=79.00,
+                features=["واتساب + فيسبوك + إنستغرام", "3 أعضاء فريق", "5,000 رد ذكي", "تحويل بشري", "تحليلات"],
+                is_active=True
+            ),
+            SubscriptionTier(
+                name="Pro",
+                description="للفرق ذات الحجم العالي والفروع المتعددة.",
+                price_monthly=199.00,
+                features=["فروع متعددة", "قواعد تحويل متقدمة", "دعم أولوية", "تهيئة مخصصة"],
+                is_active=True
+            )
+        ]
+        for t in default_tiers:
+            db.add(t)
+        await db.commit()
+        
+        # Query again after seeding
+        result = await db.execute(
+            select(SubscriptionTier).where(SubscriptionTier.is_active)
+        )
+        tiers = list(result.scalars().all())
+        
+    return tiers
 
 @router.get("/subscription", response_model=UserSubscriptionWithTierOut)
 async def get_subscription(
