@@ -41,17 +41,34 @@ export default function BillingPage() {
     async function loadBilling() {
       if (!token) return;
       try {
-        const res = await fetch("/api/billing", {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-        const data = await res.json();
-        if (data.ok) {
-          setTiers(data.tiers || []);
-          setActiveSub(data.subscription || null);
+        const [tiersRes, subRes] = await Promise.all([
+          fetch("/api/billing/tiers", {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }),
+          fetch("/api/billing/subscription", {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }),
+        ]);
+
+        if (tiersRes.ok) {
+          const tiersData = await tiersRes.json();
+          setTiers(tiersData || []);
         } else {
-          console.error("Failed to load billing data:", data.error);
+          console.error("Failed to load tiers:", tiersRes.status);
+        }
+
+        if (subRes.ok) {
+          const subData = await subRes.json();
+          setActiveSub(subData || null);
+        } else if (subRes.status === 404) {
+          // 404 is a valid state indicating no active subscription exists
+          setActiveSub(null);
+        } else {
+          console.error("Failed to load subscription:", subRes.status);
         }
       } catch (err) {
         console.error("Error loading billing page:", err);
@@ -67,20 +84,19 @@ export default function BillingPage() {
     if (!token) return;
     setUpgradingId(tier.id);
     try {
-      const res = await fetch("/api/billing/upgrade", {
+      const res = await fetch(`/api/billing/upgrade?tier_id=${tier.id}`, {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ tierId: tier.id }),
       });
       const data = await res.json();
-      if (data.ok && data.subscription) {
-        setActiveSub(data.subscription);
+      if (res.ok) {
+        // Since backend upgrade endpoint returns UserSubscriptionWithTierOut directly
+        setActiveSub(data);
         showNotice(`✨ تم ترقية اشتراكك بنجاح إلى باقة ${tier.name}!`);
       } else {
-        showNotice(`❌ فشلت عملية الترقية: ${data.error || "خطأ غير معروف"}`);
+        showNotice(`❌ فشلت عملية الترقية: ${data.detail || "خطأ غير معروف"}`);
       }
     } catch (err) {
       console.error("Error upgrading subscription:", err);
@@ -114,7 +130,7 @@ export default function BillingPage() {
                 <div className="text-right">
                   <span className="text-[10px] text-white/40 font-semibold block mb-0.5">الاشتراك الفعال حالياً</span>
                   <div className="flex items-center justify-end gap-2">
-                    <span className="text-lg font-bold text-white">باقة {activeSub.tier.name}</span>
+                    <span className="text-lg font-bold text-white">باقة {activeSub.tier?.name}</span>
                     <span className="rounded-full bg-emeraldx-500/10 border border-emeraldx-500/20 px-2.5 py-0.5 text-[10px] font-bold text-emeraldx-400 flex items-center gap-1">
                       <ShieldCheck className="h-3 w-3" />
                       نشط
@@ -161,7 +177,6 @@ export default function BillingPage() {
           <div className="grid gap-5 md:grid-cols-3 items-stretch">
             {tiers.map((tier) => {
               const isActive = activeSub?.tier_id === tier.id;
-              // Highlight the Growth plan or whatever is currently active/highlighted
               const highlighted = tier.name === "Growth";
               
               return (
