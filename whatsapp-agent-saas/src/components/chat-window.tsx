@@ -161,8 +161,8 @@ export function ChatWindow({
   }
 
   return (
-    <div className="grid min-h-[680px] gap-4 lg:grid-cols-[1fr_280px]">
-      <div className="flex min-h-[680px] flex-col rounded-3xl border border-white/10 bg-white/[0.045]">
+    <div className="grid h-full min-h-[680px] xl:min-h-0 gap-4 lg:grid-cols-[1fr_280px]">
+      <div className="flex h-full min-h-[680px] xl:min-h-0 flex-col rounded-3xl border border-white/10 bg-white/[0.045]">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 p-4">
           <div>
             <div className="flex items-center gap-2 text-lg font-semibold text-white">
@@ -182,7 +182,7 @@ export function ChatWindow({
           </div>
         </div>
 
-        <div className="flex-1 space-y-4 overflow-y-auto p-5">
+        <div className="flex-1 space-y-4 overflow-y-auto p-5 custom-scrollbar">
           {messages.map((message) => (
             <MessageBubble key={message.id} message={message} />
           ))}
@@ -226,7 +226,7 @@ export function ChatWindow({
         </div>
       </div>
 
-      <aside className="space-y-4">
+      <aside className="space-y-4 xl:h-full xl:overflow-y-auto custom-scrollbar">
         <div className="rounded-3xl border border-white/10 bg-white/[0.045] p-4">
           <div className="text-sm font-semibold text-white">ملف العميل</div>
           <div className="mt-4 space-y-3 text-sm text-white/58">

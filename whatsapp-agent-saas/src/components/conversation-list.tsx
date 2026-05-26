@@ -81,7 +81,7 @@ export function ConversationList({
   }, [conversations, filter, query]);
 
   return (
-    <div className="flex h-full min-h-[680px] flex-col rounded-3xl border border-white/10 bg-white/[0.045]">
+    <div className="flex h-full min-h-[680px] xl:min-h-0 flex-col rounded-3xl border border-white/10 bg-white/[0.045]">
       <div className="border-b border-white/10 p-4">
         <div className="relative">
           <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/30" />
