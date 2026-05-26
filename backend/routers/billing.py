@@ -2,7 +2,7 @@ import uuid
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 
 from database import get_db
@@ -58,21 +58,28 @@ async def upgrade_subscription(
             detail="Subscription tier not found",
         )
 
-    # Deactivate existing subscriptions
+    # Check if user already has a subscription record
     existing_result = await db.execute(
-        select(UserSubscription).where(UserSubscription.user_id == current_user.id, UserSubscription.status == "active")
+        select(UserSubscription).where(UserSubscription.user_id == current_user.id)
     )
-    existing_subs = existing_result.scalars().all()
-    for sub in existing_subs:
-        sub.status = "cancelled"
+    existing_sub = existing_result.scalar_one_or_none()
     
-    # Create new subscription
-    new_sub = UserSubscription(
-        user_id=current_user.id,
-        tier_id=tier_id,
-        status="active"
-    )
-    db.add(new_sub)
+    if existing_sub:
+        # Update existing record to avoid UniqueConstraint violation
+        existing_sub.tier_id = tier_id
+        existing_sub.status = "active"
+        existing_sub.start_date = func.now()
+        existing_sub.end_date = None
+        new_sub = existing_sub
+    else:
+        # Create new subscription
+        new_sub = UserSubscription(
+            user_id=current_user.id,
+            tier_id=tier_id,
+            status="active"
+        )
+        db.add(new_sub)
+    
     await db.commit()
     await db.refresh(new_sub)
     
@@ -84,3 +91,4 @@ async def upgrade_subscription(
     )
     
     return result_with_tier.scalar_one()
+

@@ -11,7 +11,7 @@ from decimal import Decimal
 from sqlalchemy import func, or_, select
 
 from database import AsyncSessionLocal
-from models import ChannelIntegration, Item, StyleSample, User
+from models import ChannelIntegration, Item, StyleSample, User, SubscriptionTier, UserSubscription
 from services.auth_service import hash_password
 
 ADMIN = {"username": "admin", "email": "admin@demo.com", "password": "admin123"}
@@ -159,6 +159,65 @@ async def run() -> None:
 
         widget = await _ensure_channel(db, client, "widget")
         webhook = await _ensure_channel(db, client, "webhook")
+
+        # Seed Subscription Tiers
+        tiers_data = [
+            {
+                "name": "Starter",
+                "description": "للمتاجر الصغيرة التي تريد تجربة الردود الذكية.",
+                "price_monthly": 29.00,
+                "features": ["وضع تجريبي", "قناة واحدة", "500 رد ذكي", "صندوق محادثات بسيط"],
+                "is_active": True
+            },
+            {
+                "name": "Growth",
+                "description": "للأعمال التي تريد تشغيل خدمة العملاء يوميا.",
+                "price_monthly": 79.00,
+                "features": ["واتساب + فيسبوك + إنستغرام", "3 أعضاء فريق", "5,000 رد ذكي", "تحويل بشري", "تحليلات"],
+                "is_active": True
+            },
+            {
+                "name": "Pro",
+                "description": "للفرق ذات الحجم العالي والفروع المتعددة.",
+                "price_monthly": 199.00,
+                "features": ["فروع متعددة", "قواعد تحويل متقدمة", "دعم أولوية", "تهيئة مخصصة"],
+                "is_active": True
+            }
+        ]
+        
+        tiers_db = {}
+        for td in tiers_data:
+            tier_res = await db.execute(
+                select(SubscriptionTier).where(SubscriptionTier.name == td["name"])
+            )
+            tier = tier_res.scalar_one_or_none()
+            if not tier:
+                tier = SubscriptionTier(**td)
+                db.add(tier)
+                await db.commit()
+                await db.refresh(tier)
+            else:
+                tier.description = td["description"]
+                tier.price_monthly = td["price_monthly"]
+                tier.features = td["features"]
+                tier.is_active = td["is_active"]
+                await db.commit()
+                await db.refresh(tier)
+            tiers_db[td["name"]] = tier
+
+        # Assign CLIENT to Growth tier by default
+        sub_res = await db.execute(
+            select(UserSubscription).where(UserSubscription.user_id == client.id)
+        )
+        sub = sub_res.scalar_one_or_none()
+        if not sub:
+            sub = UserSubscription(
+                user_id=client.id,
+                tier_id=tiers_db["Growth"].id,
+                status="active"
+            )
+            db.add(sub)
+            await db.commit()
 
         print("\n" + "=" * 60)
         print("  DEMO DATA READY")
