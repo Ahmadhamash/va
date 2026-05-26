@@ -21,7 +21,7 @@ import {
 import { useAuthStore } from "@/store/use-auth-store";
 import { cn } from "@/lib/utils";
 
-const navItems = [
+const clientNavItems = [
   { href: "/dashboard", label: "الرئيسية", icon: Home },
   { href: "/inbox", label: "المحادثات", icon: Inbox },
   { href: "/agent", label: "الوكيل الذكي", icon: Bot },
@@ -29,6 +29,11 @@ const navItems = [
   { href: "/analytics", label: "التحليلات", icon: BarChart3 },
   { href: "/team", label: "الفريق", icon: Users },
   { href: "/billing", label: "الباقات", icon: CreditCard },
+  { href: "/settings", label: "الإعدادات", icon: Settings }
+];
+
+const adminNavItems = [
+  { href: "/admin", label: "لوحة الإشراف", icon: Home },
   { href: "/settings", label: "الإعدادات", icon: Settings }
 ];
 
@@ -41,6 +46,8 @@ export function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose?: () =>
     logout();
     router.push("/login");
   }
+
+  const navItems = user?.role === "admin" ? adminNavItems : clientNavItems;
 
   return (
     <>
@@ -79,26 +86,38 @@ export function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose?: () =>
           </span>
         </Link>
 
-        <div className="mt-8 rounded-3xl border border-emeraldx-400/20 bg-emeraldx-500/10 p-4">
-          <div className="flex items-center gap-2 text-sm font-semibold text-emeraldx-400">
-            <Sparkles className="h-4 w-4" />
-            {user ? user.business_name || user.username : "جاهزية الربط"}
+        {user?.role === "admin" ? (
+          <div className="mt-8 rounded-3xl border border-cyanx-400/20 bg-cyanx-500/10 p-4">
+            <div className="flex items-center gap-2 text-sm font-semibold text-cyanx-400">
+              <Sparkles className="h-4 w-4 animate-pulse" />
+              <span>مدير المنصة</span>
+            </div>
+            <p className="mt-3 text-xs leading-5 text-white/50 text-right">
+              لديك صلاحيات كاملة لإدارة حسابات العملاء، مراجعة إحصائيات الاستخدام وتهيئة إعدادات الذكاء الاصطناعي للمنصة.
+            </p>
           </div>
-          <div className="mt-4 h-2 rounded-full bg-white/10">
-            <div className="h-full w-4/5 rounded-full bg-emeraldx-500" />
+        ) : (
+          <div className="mt-8 rounded-3xl border border-emeraldx-400/20 bg-emeraldx-500/10 p-4">
+            <div className="flex items-center gap-2 text-sm font-semibold text-emeraldx-400">
+              <Sparkles className="h-4 w-4" />
+              {user ? user.business_name || user.username : "جاهزية الربط"}
+            </div>
+            <div className="mt-4 h-2 rounded-full bg-white/10">
+              <div className="h-full w-4/5 rounded-full bg-emeraldx-500" />
+            </div>
+            <div className="mt-4 flex gap-2 text-white/58">
+              <MessageCircle className="h-4 w-4 text-emeraldx-400" />
+              <Facebook className="h-4 w-4 text-cyanx-400" />
+              <Instagram className="h-4 w-4 text-violet-200" />
+            </div>
+            <p className="mt-3 text-xs leading-5 text-white/50 text-right">الوكيل جاهز للتجربة. اربط قنوات Meta الرسمية عند تفعيل الحسابات.</p>
           </div>
-          <div className="mt-4 flex gap-2 text-white/58">
-            <MessageCircle className="h-4 w-4 text-emeraldx-400" />
-            <Facebook className="h-4 w-4 text-cyanx-400" />
-            <Instagram className="h-4 w-4 text-violet-200" />
-          </div>
-          <p className="mt-3 text-xs leading-5 text-white/50">الوكيل جاهز للتجربة. اربط قنوات Meta الرسمية عند تفعيل الحسابات.</p>
-        </div>
+        )}
 
         <nav className="mt-8 space-y-1.5">
           {navItems.map((item) => {
             const Icon = item.icon;
-            const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname?.startsWith(item.href));
+            const isActive = pathname === item.href || (item.href !== "/dashboard" && item.href !== "/admin" && pathname?.startsWith(item.href));
             return (
               <Link
                 href={item.href}
@@ -138,4 +157,3 @@ export function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose?: () =>
     </>
   );
 }
-

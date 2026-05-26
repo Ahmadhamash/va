@@ -48,7 +48,11 @@ export default function LoginPage() {
       const user = await meRes.json();
 
       setAuth(token, user);
-      router.push("/dashboard");
+      if (user.role === "admin") {
+        router.push("/admin");
+      } else {
+        router.push("/dashboard");
+      }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "\u062D\u062F\u062B \u062E\u0637\u0623");
     } finally {
