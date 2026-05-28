@@ -35,6 +35,22 @@ async def provision_chatwoot_account(business_name: str, client_email: str) -> s
             account_id = str(account_data.get("id"))
             logger.info("Successfully created Chatwoot account ID: %s", account_id)
             
+            # 1.5. Add the Client as an Administrator Agent in Chatwoot
+            agent_url = f"{base}/api/v1/accounts/{account_id}/agents"
+            agent_payload = {
+                "name": business_name or "Client Admin",
+                "email": client_email,
+                "role": "administrator"
+            }
+            try:
+                agent_res = await client.post(agent_url, headers=headers, json=agent_payload)
+                if agent_res.is_success:
+                    logger.info("Successfully added client agent %s to Chatwoot account: %s", client_email, account_id)
+                else:
+                    logger.warning("Could not add client agent to Chatwoot: %s %s", agent_res.status_code, agent_res.text)
+            except Exception:
+                logger.exception("Error adding agent to Chatwoot account")
+            
             # 2. Register Webhook for this account
             # Webhook URL pointing to our backend API /api/webhooks/chatwoot
             webhook_url = f"{base}/api/v1/accounts/{account_id}/webhooks"
