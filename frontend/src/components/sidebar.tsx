@@ -25,24 +25,49 @@ import {
 import { useAuthStore } from "@/store/use-auth-store";
 import { cn } from "@/lib/utils";
 
-const clientNavItems = [
-  { href: "/dashboard", label: "الرئيسية", icon: Home },
-  { href: "/inbox", label: "المحادثات", icon: Inbox },
-  { href: "/agent", label: "الوكيل الذكي", icon: Bot },
-  { href: "/knowledge", label: "المعرفة", icon: WalletCards },
-  { href: "/bookings", label: "الحجوزات", icon: Calendar },
-  { href: "/workflows", label: "الأتمتة", icon: Zap },
-  { href: "/policies", label: "السياسات", icon: Scale },
-  { href: "/analytics", label: "التحليلات", icon: BarChart3 },
-  { href: "/team", label: "الفريق", icon: Users },
-  { href: "/billing", label: "الباقات", icon: CreditCard },
-  { href: "/settings/voice", label: "إعدادات الصوت", icon: Mic },
-  { href: "/settings", label: "الإعدادات العامة", icon: Settings }
+const clientNavGroups = [
+  {
+    title: "الأساسية",
+    items: [
+      { href: "/dashboard", label: "الرئيسية", icon: Home },
+      { href: "/inbox", label: "المحادثات", icon: Inbox },
+      { href: "/analytics", label: "التحليلات", icon: BarChart3 },
+    ]
+  },
+  {
+    title: "الذكاء الاصطناعي",
+    items: [
+      { href: "/agent", label: "الوكيل الذكي", icon: Bot },
+      { href: "/knowledge", label: "قاعدة المعرفة", icon: WalletCards },
+      { href: "/workflows", label: "الأتمتة والردود", icon: Zap },
+    ]
+  },
+  {
+    title: "خدمة العملاء",
+    items: [
+      { href: "/bookings", label: "الحجوزات", icon: Calendar },
+      { href: "/policies", label: "سياسات العمل", icon: Scale },
+    ]
+  },
+  {
+    title: "الإدارة",
+    items: [
+      { href: "/team", label: "فريق العمل", icon: Users },
+      { href: "/billing", label: "الاشتراك والباقات", icon: CreditCard },
+      { href: "/settings/voice", label: "إعدادات الصوت", icon: Mic },
+      { href: "/settings", label: "الإعدادات العامة", icon: Settings }
+    ]
+  }
 ];
 
-const adminNavItems = [
-  { href: "/admin", label: "لوحة الإشراف", icon: Home },
-  { href: "/settings", label: "الإعدادات", icon: Settings }
+const adminNavGroups = [
+  {
+    title: "إدارة المنصة",
+    items: [
+      { href: "/admin", label: "لوحة الإشراف", icon: Home },
+      { href: "/settings", label: "الإعدادات", icon: Settings }
+    ]
+  }
 ];
 
 export function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose?: () => void }) {
@@ -55,7 +80,7 @@ export function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose?: () =>
     router.push("/login");
   }
 
-  const navItems = user?.role === "admin" ? adminNavItems : clientNavItems;
+  const navGroups = user?.role === "admin" ? adminNavGroups : clientNavGroups;
 
   return (
     <>
@@ -122,32 +147,47 @@ export function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose?: () =>
           </div>
         )}
 
-        <nav className="mt-8 space-y-1.5">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = pathname === item.href || (item.href !== "/dashboard" && item.href !== "/admin" && pathname?.startsWith(item.href));
-            return (
-              <Link
-                href={item.href}
-                key={item.href}
-                onClick={onClose}
-                className={cn(
-                  "group flex items-center gap-3 rounded-2xl px-3 py-3 text-sm font-medium transition",
-                  isActive
-                    ? "bg-emeraldx-500/10 text-white border-r-2 border-emeraldx-500"
-                    : "text-white/58 hover:bg-white/8 hover:text-white"
-                )}
-              >
-                <Icon
-                  className={cn(
-                    "h-5 w-5 transition",
-                    isActive ? "text-emeraldx-400" : "text-white/38 group-hover:text-emeraldx-400"
-                  )}
-                />
-                {item.label}
-              </Link>
-            );
-          })}
+        <nav className="mt-6 space-y-6 overflow-y-auto max-h-[calc(100vh-320px)] scrollbar-none pb-10 pr-2">
+          {navGroups.map((group, i) => (
+            <div key={i} className="space-y-2">
+              {group.title && (
+                <div className="px-3 text-[11px] font-bold text-white/30">
+                  {group.title}
+                </div>
+              )}
+              <div className="space-y-1">
+                {group.items.map((item) => {
+                  const Icon = item.icon;
+                  // Exact match for /settings so it doesn't highlight when on /settings/voice
+                  const isActive = 
+                    pathname === item.href || 
+                    (item.href !== "/dashboard" && item.href !== "/admin" && item.href !== "/settings" && pathname?.startsWith(item.href));
+                  
+                  return (
+                    <Link
+                      href={item.href}
+                      key={item.href}
+                      onClick={onClose}
+                      className={cn(
+                        "group flex items-center gap-3 rounded-2xl px-3 py-2.5 text-sm font-medium transition",
+                        isActive
+                          ? "bg-emeraldx-500/10 text-white border-r-2 border-emeraldx-500"
+                          : "text-white/58 hover:bg-white/8 hover:text-white"
+                      )}
+                    >
+                      <Icon
+                        className={cn(
+                          "h-4 w-4 transition",
+                          isActive ? "text-emeraldx-400" : "text-white/38 group-hover:text-emeraldx-400"
+                        )}
+                      />
+                      {item.label}
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </nav>
 
         {user && (
