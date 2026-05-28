@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
+import { useRef, useEffect } from "react";
 import {
   BarChart3,
   Bot,
@@ -81,6 +82,18 @@ export function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose?: () =>
   }
 
   const navGroups = user?.role === "admin" ? adminNavGroups : clientNavGroups;
+  const navRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    const savedScroll = sessionStorage.getItem("sidebarScroll");
+    if (navRef.current && savedScroll) {
+      navRef.current.scrollTop = parseInt(savedScroll, 10);
+    }
+  }, []);
+
+  const handleScroll = (e: React.UIEvent<HTMLElement>) => {
+    sessionStorage.setItem("sidebarScroll", e.currentTarget.scrollTop.toString());
+  };
 
   return (
     <>
@@ -147,7 +160,11 @@ export function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose?: () =>
           </div>
         )}
 
-        <nav className="mt-6 space-y-6 overflow-y-auto max-h-[calc(100vh-320px)] scrollbar-none pb-10 pr-2">
+        <nav 
+          ref={navRef}
+          onScroll={handleScroll}
+          className="mt-6 space-y-6 overflow-y-auto max-h-[calc(100vh-320px)] scrollbar-none pb-10 pr-2"
+        >
           {navGroups.map((group, i) => (
             <div key={i} className="space-y-2">
               {group.title && (
