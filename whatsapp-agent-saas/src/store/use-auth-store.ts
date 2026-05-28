@@ -9,6 +9,8 @@ interface User {
   business_name: string | null;
   business_type: string | null;
   role: string;
+  chatwoot_account_id: string | null;
+  chatwoot_user_token: string | null;
 }
 
 interface AuthState {

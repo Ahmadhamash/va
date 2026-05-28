@@ -12,13 +12,15 @@ import {
   Plus, 
   Copy, 
   ChevronDown, 
-  ChevronUp 
+  ChevronUp,
+  ExternalLink
 } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { GradientCard } from "@/components/gradient-card";
 import { StatusBadge } from "@/components/status-badge";
 import type { ChannelConnection } from "@/lib/types";
+import { useAuthStore } from "@/store/use-auth-store";
 
 const channelIcons: Record<string, typeof MessageCircle> = {
   WHATSAPP: MessageCircle,
@@ -45,6 +47,8 @@ export function ChannelConnectionCard({
   channels: ChannelConnection[];
   onDelete?: (channelId: string) => void;
 }) {
+  const { user } = useAuthStore();
+  const isChatwootActive = !!user?.chatwoot_account_id;
   const connectedCount = channels.filter(c => c.status === "CONNECTED").length;
   const hasChannels = channels.length > 0;
 
@@ -73,27 +77,82 @@ export function ChannelConnectionCard({
               <MessageCircle className="h-7 w-7" />
             </div>
             <div>
-              <div className={`flex items-center gap-1.5 rounded-full px-2 py-1 text-xs font-semibold ${connectedCount > 0 ? "bg-emeraldx-500/10 text-emeraldx-400" : "bg-amber-500/10 text-amber-400"}`}>
-                <CircleCheck className="h-3 w-3" />
-                {connectedCount > 0 ? `${connectedCount} قناة متصلة` : "لا توجد قنوات متصلة"}
-              </div>
-              <h3 className="text-xl font-semibold text-white">اربط قنوات العملاء</h3>
-              <p className="mt-1 max-w-2xl text-sm leading-7 text-white/58">
-                واتساب، فيسبوك، وإنستغرام من لوحة واحدة. قم بربط قنواتك الرسمية لتفعيل ردود الوكيل الذكي وإدارة محادثات العملاء.
+              {isChatwootActive ? (
+                <div className="flex items-center gap-1.5 rounded-full px-2 py-1 text-xs font-semibold bg-emeraldx-500/10 text-emeraldx-400">
+                  <CircleCheck className="h-3 w-3" />
+                  ربط Chatwoot مفعّل تلقائياً
+                </div>
+              ) : (
+                <div className={`flex items-center gap-1.5 rounded-full px-2 py-1 text-xs font-semibold ${connectedCount > 0 ? "bg-emeraldx-500/10 text-emeraldx-400" : "bg-amber-500/10 text-amber-400"}`}>
+                  <CircleCheck className="h-3 w-3" />
+                  {connectedCount > 0 ? `${connectedCount} قناة متصلة` : "لا توجد قنوات متصلة"}
+                </div>
+              )}
+              <h3 className="text-xl font-semibold text-white">
+                {isChatwootActive ? "قنوات الاتصال الموحدة" : "اربط قنوات العملاء"}
+              </h3>
+              <p className="mt-1 max-w-2xl text-sm leading-7 text-white/58 text-right">
+                {isChatwootActive 
+                  ? "تتم إدارة قنواتك (واتساب، فيسبوك، إنستجرام) عبر لوحة تحكم Chatwoot ومزامنتها تلقائياً مع وكيل الذكاء الاصطناعي الخاص بنا."
+                  : "واتساب، فيسبوك، وإنستغرام من لوحة واحدة. قم بربط قنواتك الرسمية لتفعيل ردود الوكيل الذكي وإدارة محادثات العملاء."
+                }
               </p>
             </div>
           </div>
         </div>
-        <Link href="/onboarding">
-          <Button>
-            <Plus className="h-4 w-4" />
-            ابدأ الربط الرسمي
-          </Button>
-        </Link>
+        {isChatwootActive ? (
+          <a
+            href={`${process.env.NEXT_PUBLIC_CHATWOOT_URL || "https://chat.masarjo.com"}/app/accounts/${user.chatwoot_account_id}/dashboard`}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-2 rounded-2xl bg-emeraldx-500 px-5 py-3 text-sm font-bold text-ink-950 transition hover:scale-[1.02] active:scale-[0.98] shadow-glow"
+          >
+            <span>لوحة تحكم Chatwoot</span>
+            <ExternalLink className="h-4 w-4" />
+          </a>
+        ) : (
+          <Link href="/onboarding">
+            <Button>
+              <Plus className="h-4 w-4" />
+              ابدأ الربط الرسمي
+            </Button>
+          </Link>
+        )}
       </div>
 
-      {hasChannels ? (
+      {isChatwootActive && (
+        <div className="mt-6 rounded-3xl border border-emeraldx-400/20 bg-emeraldx-500/5 p-6 text-right space-y-4">
+          <div className="flex flex-row-reverse items-center justify-between gap-4">
+            <div className="grid h-12 w-12 place-items-center rounded-2xl bg-white/8 text-emeraldx-400">
+              <MessageCircle className="h-6 w-6" />
+            </div>
+            <div className="flex-1 pr-4">
+              <h4 className="text-base font-bold text-white">حالة الاتصال الموحد (Omnichannel Link)</h4>
+              <p className="text-xs text-white/40 mt-1">حساب Chatwoot رقم: {user?.chatwoot_account_id}</p>
+            </div>
+          </div>
+          <div className="text-sm leading-6 text-white/70 font-medium">
+            مساحة عملك على Chatwoot متصلة بنجاح مع وكيل الذكاء الاصطناعي. أي رسائل واردة إلى قنواتك هناك سيتم معالجتها والرد عليها تلقائياً.
+          </div>
+          <div className="flex gap-2 justify-end">
+            <a
+              href={`${process.env.NEXT_PUBLIC_CHATWOOT_URL || "https://chat.masarjo.com"}/app/accounts/${user?.chatwoot_account_id}/dashboard`}
+              target="_blank"
+              rel="noreferrer"
+              className="text-xs font-semibold text-cyanx-400 hover:text-cyanx-300 underline inline-flex items-center gap-1"
+            >
+              <span>إدارة صناديق الوارد والقنوات في Chatwoot</span>
+              <ExternalLink className="h-3.5 w-3.5" />
+            </a>
+          </div>
+        </div>
+      )}
+
+      {hasChannels && (
         <div className="mt-6 space-y-4">
+          {isChatwootActive && (
+            <h4 className="text-sm font-bold text-white/60 mb-2">القنوات التقليدية المربوطة يدوياً:</h4>
+          )}
           <div className="grid gap-3 lg:grid-cols-3">
             {channels.map((channel) => {
               const anyChannel = channel as any;
@@ -183,7 +242,9 @@ export function ChannelConnectionCard({
             })}
           </div>
         </div>
-      ) : (
+      )}
+
+      {!isChatwootActive && !hasChannels && (
         <div className="mt-6 flex flex-col items-center justify-center rounded-3xl border border-dashed border-white/15 bg-white/[0.025] py-10 text-center">
           <MessageCircle className="h-10 w-10 text-white/20 mb-3" />
           <p className="text-sm text-white/45">لا توجد قنوات مرتبطة حتى الآن</p>

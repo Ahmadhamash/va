@@ -50,6 +50,10 @@ class User(Base):
     # Phase 1 Remediation: Password Reset token invalidation
     token_version: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
 
+    # Chatwoot multi-tenant properties
+    chatwoot_account_id: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    chatwoot_user_token: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
     items: Mapped[list["Item"]] = relationship(  # noqa: F821
         back_populates="user", cascade="all, delete-orphan"
     )

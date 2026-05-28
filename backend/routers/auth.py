@@ -90,6 +90,13 @@ async def register(
                     )
                 )
 
+    chatwoot_account_id = None
+    if role == "client":
+        from services.chatwoot_service import provision_chatwoot_account
+        chatwoot_account_id = await provision_chatwoot_account(
+            payload.business_name, payload.email
+        )
+
     user = User(
         username=payload.username,
         email=payload.email,
@@ -98,6 +105,7 @@ async def register(
         business_type=payload.business_type,
         ai_persona=persona,
         role=role,
+        chatwoot_account_id=chatwoot_account_id,
     )
     db.add(user)
     await db.flush()  # To get user.id for policies

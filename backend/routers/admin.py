@@ -294,6 +294,11 @@ async def create_client(
                     )
                 )
 
+    from services.chatwoot_service import provision_chatwoot_account
+    chatwoot_account_id = await provision_chatwoot_account(
+        payload.business_name, payload.email
+    )
+
     client = User(
         username=payload.username,
         email=payload.email,
@@ -302,6 +307,7 @@ async def create_client(
         business_type=payload.business_type,
         ai_persona=persona,
         role="client",
+        chatwoot_account_id=chatwoot_account_id,
     )
     db.add(client)
     await db.flush()

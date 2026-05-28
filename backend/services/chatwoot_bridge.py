@@ -96,7 +96,13 @@ def is_valid_customer_message(payload: dict[str, Any]) -> tuple[bool, str]:
     return True, "ok"
 
 
-async def resolve_chatwoot_user(db: AsyncSession) -> User | None:
+async def resolve_chatwoot_user(account_id: str, db: AsyncSession) -> User | None:
+    if account_id:
+        stmt = select(User).where(User.chatwoot_account_id == account_id, User.is_active.is_(True))
+        user = (await db.execute(stmt)).scalar_one_or_none()
+        if user:
+            return user
+
     if settings.CHATWOOT_USER_ID:
         try:
             user = await db.get(User, uuid.UUID(settings.CHATWOOT_USER_ID))
@@ -154,26 +160,27 @@ def chatwoot_headers() -> dict[str, str]:
     }
 
 
-def chatwoot_ready() -> bool:
+def chatwoot_ready(account_id: str) -> bool:
     return bool(
         settings.CHATWOOT_BASE_URL
-        and settings.CHATWOOT_ACCOUNT_ID
+        and account_id
         and settings.CHATWOOT_API_ACCESS_TOKEN
     )
 
 
 async def send_chatwoot_message(
+    account_id: str,
     conversation_id: str,
     message: str,
     *,
     private: bool = False,
 ) -> None:
-    if not chatwoot_ready():
+    if not chatwoot_ready(account_id):
         logger.warning("Chatwoot API is not configured; skipping outgoing message")
         return
     base = settings.CHATWOOT_BASE_URL.rstrip("/")
     url = (
-        f"{base}/api/v1/accounts/{settings.CHATWOOT_ACCOUNT_ID}"
+        f"{base}/api/v1/accounts/{account_id}"
         f"/conversations/{conversation_id}/messages"
     )
     payload = {
@@ -186,12 +193,12 @@ async def send_chatwoot_message(
         response.raise_for_status()
 
 
-async def add_chatwoot_labels(conversation_id: str, labels: list[str]) -> None:
-    if not chatwoot_ready() or not labels:
+async def add_chatwoot_labels(account_id: str, conversation_id: str, labels: list[str]) -> None:
+    if not chatwoot_ready(account_id) or not labels:
         return
     base = settings.CHATWOOT_BASE_URL.rstrip("/")
     url = (
-        f"{base}/api/v1/accounts/{settings.CHATWOOT_ACCOUNT_ID}"
+        f"{base}/api/v1/accounts/{account_id}"
         f"/conversations/{conversation_id}/labels"
     )
     async with httpx.AsyncClient(timeout=20) as client:
@@ -218,7 +225,7 @@ async def handle_chatwoot_payload(payload: dict[str, Any], db: AsyncSession) -> 
     if not conversation_id:
         return {"status": "ignored", "reason": "missing_conversation"}
 
-    user = await resolve_chatwoot_user(db)
+    user = await resolve_chatwoot_user(account_id, db)
     if not user:
         return {"status": "ignored", "reason": "no_active_client_user"}
 
@@ -232,13 +239,14 @@ async def handle_chatwoot_payload(payload: dict[str, Any], db: AsyncSession) -> 
         await db.commit()
         label = settings.AI_HUMAN_HANDOFF_LABEL or "human_handoff"
         try:
-            await add_chatwoot_labels(conversation_id, [label])
+            await add_chatwoot_labels(account_id, conversation_id, [label])
             await send_chatwoot_message(
+                account_id,
                 conversation_id,
                 f"Private note: AI paused because the customer requested human help. Message ID: {message_id}",
                 private=True,
             )
-            await send_chatwoot_message(conversation_id, HANDOFF_REPLY)
+            await send_chatwoot_message(account_id, conversation_id, HANDOFF_REPLY)
         except Exception:
             logger.exception("Failed to complete Chatwoot handoff")
         return {"status": "handoff", "conversation_id": conversation_id}
@@ -254,10 +262,12 @@ async def handle_chatwoot_payload(payload: dict[str, Any], db: AsyncSession) -> 
         await db.commit()
         try:
             await add_chatwoot_labels(
+                account_id,
                 conversation_id,
                 [settings.AI_HUMAN_HANDOFF_LABEL or "human_handoff"],
             )
             await send_chatwoot_message(
+                account_id,
                 conversation_id,
                 "Private note: AI verifier requested human handoff.",
                 private=True,
@@ -265,5 +275,5 @@ async def handle_chatwoot_payload(payload: dict[str, Any], db: AsyncSession) -> 
         except Exception:
             logger.exception("Failed to label verifier handoff in Chatwoot")
     if reply:
-        await send_chatwoot_message(conversation_id, reply)
+        await send_chatwoot_message(account_id, conversation_id, reply)
     return {"status": "replied", "conversation_id": conversation_id, "action": action}

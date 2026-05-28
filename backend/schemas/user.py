@@ -40,6 +40,8 @@ class UserOut(BaseModel):
     created_at: datetime
     email_verified: bool
     ai_credit_balance: int
+    chatwoot_account_id: str | None = None
+    chatwoot_user_token: str | None = None
 
 
 class Token(BaseModel):

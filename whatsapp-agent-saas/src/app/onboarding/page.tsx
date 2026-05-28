@@ -374,7 +374,71 @@ export default function OnboardingPage() {
     </div>,
 
     <div key="connect" className="space-y-4">
-      {configuringChannel ? (
+      {user?.chatwoot_account_id ? (
+        <div className="space-y-6 text-right">
+          <div className="rounded-3xl border border-emeraldx-400/20 bg-emeraldx-500/5 p-6">
+            <div className="flex flex-row-reverse items-center justify-between gap-4 mb-4">
+              <div className="grid h-12 w-12 place-items-center rounded-2xl bg-emeraldx-500 text-ink-950 shadow-glow">
+                <MessageCircle className="h-6 w-6" />
+              </div>
+              <div className="flex-1 pr-4">
+                <h3 className="text-lg font-bold text-white">منصة Chatwoot جاهزة ومربوطة بحسابك</h3>
+                <p className="text-xs text-white/40 mt-1">معرف الحساب في Chatwoot: {user?.chatwoot_account_id}</p>
+              </div>
+            </div>
+            <p className="text-sm leading-7 text-white/70">
+              تم إنشاء مساحة عمل خاصة بنشاطك على منصة Chatwoot بنجاح. يمكنك الآن الانتقال إليها وربط قنوات الاتصال المفضلة لديك (واتساب، فيسبوك، إنستجرام) بضغطة زر واحدة ودون أي إعدادات معقدة.
+            </p>
+            <div className="mt-5 flex justify-end">
+              <a
+                href={`${process.env.NEXT_PUBLIC_CHATWOOT_URL || "https://chat.masarjo.com"}/app/accounts/${user?.chatwoot_account_id}/dashboard`}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-2 rounded-2xl bg-emeraldx-500 px-5 py-3 text-sm font-bold text-ink-950 transition hover:scale-[1.02] active:scale-[0.98] shadow-glow"
+              >
+                <span>الانتقال إلى لوحة Chatwoot</span>
+                <ExternalLink className="h-4 w-4" />
+              </a>
+            </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-3">
+            <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-5 space-y-2">
+              <div className="text-emeraldx-400 font-bold text-sm">1. إنشاء صندوق وارد (Inbox)</div>
+              <p className="text-xs leading-5 text-white/50">
+                من القائمة الجانبية في Chatwoot، توجه إلى **الإعدادات (Settings)** &gt; **صناديق الوارد (Inboxes)** ثم اضغط **إضافة صندوق وارد (Add Inbox)**.
+              </p>
+            </div>
+            <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-5 space-y-2">
+              <div className="text-emeraldx-400 font-bold text-sm">2. اختيار القناة والربط</div>
+              <p className="text-xs leading-5 text-white/50">
+                اختر **WhatsApp** أو **Messenger** أو **Instagram**.
+                <br />
+                - للواتساب: امسح رمز الـ QR أو اربط عبر السحابة.
+                <br />
+                - للفيسبوك والإنستجرام: سجل الدخول بفيسبوك.
+              </p>
+            </div>
+            <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-5 space-y-2">
+              <div className="text-emeraldx-400 font-bold text-sm">3. استمتع بالرد الآلي الذكي!</div>
+              <p className="text-xs leading-5 text-white/50">
+                بمجرد الربط بنجاح، سيقوم وكيل الذكاء الاصطناعي لدينا باستقبال أي رسائل جديدة والرد عليها فوراً بناءً على إعداداتك هنا.
+              </p>
+            </div>
+          </div>
+
+          <div className="rounded-3xl border border-cyanx-400/20 bg-cyanx-500/10 p-5 text-sm font-semibold text-cyanx-400 leading-6">
+            💡 جميع قنواتك المربوطة في Chatwoot ستعمل تلقائياً. عند الانتقال للخطوة التالية، يمكنك الاستمرار في إعداد وتدريب وكيل الذكاء الاصطناعي.
+          </div>
+
+          <div className="flex justify-end">
+            <Button variant="secondary" onClick={next}>
+              <Clock className="h-4 w-4" />
+              الذهاب للخطوة التالية
+            </Button>
+          </div>
+        </div>
+      ) : configuringChannel ? (
         <form onSubmit={submitChannelConfig} className="space-y-4 rounded-3xl border border-white/10 bg-white/[0.03] p-6 text-right animate-in fade-in duration-200">
           <div className="flex items-center justify-between border-b border-white/5 pb-3">
             <Button variant="ghost" size="sm" onClick={() => setConfiguringChannel(null)} type="button">
