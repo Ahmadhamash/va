@@ -81,7 +81,8 @@ services:
 
   frontend:
     build:
-      context: ./whatsapp-agent-saas
+      context: ./frontend
+      dockerfile: Dockerfile
     restart: always
     depends_on:
       - backend

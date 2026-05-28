@@ -91,7 +91,7 @@ services:
 
   frontend:
     build:
-      context: ./whatsapp-agent-saas
+      context: ./frontend
     restart: unless-stopped
     ports:
       - "3000:3000"
