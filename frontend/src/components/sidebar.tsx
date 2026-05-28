@@ -107,56 +107,56 @@ export function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose?: () =>
 
       <aside
         className={cn(
-          "fixed inset-y-0 right-0 z-50 w-72 border-l border-white/10 bg-ink-950/90 p-5 backdrop-blur-2xl transition-transform duration-300 lg:translate-x-0 lg:block",
+          "fixed inset-y-0 right-0 z-50 w-72 border-l border-border bg-glass p-5 backdrop-blur-2xl transition-transform duration-300 lg:translate-x-0 lg:block",
           isOpen ? "translate-x-0" : "translate-x-full lg:translate-x-0"
         )}
       >
         {/* Mobile Header with Close Button */}
         <div className="flex items-center justify-between lg:hidden mb-5">
-          <span className="text-sm font-semibold text-white/50">القائمة</span>
+          <span className="text-sm font-semibold text-secondary">القائمة</span>
           <button
             onClick={onClose}
-            className="rounded-xl border border-white/10 bg-white/5 p-2 text-white/70 hover:bg-white/10 hover:text-white"
+            className="rounded-xl border border-border bg-surface-hover p-2 text-secondary hover:text-primary"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
 
         <Link href="/" className="flex items-center gap-3">
-          <span className="grid h-12 w-12 place-items-center rounded-3xl bg-emeraldx-500 text-ink-950 shadow-glow">
+          <span className="grid h-12 w-12 place-items-center rounded-3xl bg-brand text-white shadow-glow">
             <MessageCircle className="h-6 w-6" />
           </span>
           <span>
-            <span className="block text-lg font-semibold text-white">مسار</span>
-            <span className="block text-xs text-white/42">كل قنوات العملاء بمكان واحد</span>
+            <span className="block text-lg font-semibold text-primary">مسار</span>
+            <span className="block text-xs text-muted">كل قنوات العملاء بمكان واحد</span>
           </span>
         </Link>
 
         {user?.role === "admin" ? (
-          <div className="mt-8 rounded-3xl border border-cyanx-400/20 bg-cyanx-500/10 p-4">
-            <div className="flex items-center gap-2 text-sm font-semibold text-cyanx-400">
+          <div className="mt-8 rounded-3xl border border-brand-accent/20 bg-brand-accent/5 p-4">
+            <div className="flex items-center gap-2 text-sm font-semibold text-brand-accent">
               <Sparkles className="h-4 w-4 animate-pulse" />
               <span>مدير المنصة</span>
             </div>
-            <p className="mt-3 text-xs leading-5 text-white/50 text-right">
+            <p className="mt-3 text-xs leading-5 text-secondary text-right">
               لديك صلاحيات كاملة لإدارة حسابات العملاء، مراجعة إحصائيات الاستخدام وتهيئة إعدادات الذكاء الاصطناعي للمنصة.
             </p>
           </div>
         ) : (
-          <div className="mt-8 rounded-3xl border border-emeraldx-400/20 bg-emeraldx-500/10 p-4">
-            <div className="flex items-center gap-2 text-sm font-semibold text-emeraldx-400">
+          <div className="mt-8 rounded-3xl border border-brand/20 bg-brand/5 p-4">
+            <div className="flex items-center gap-2 text-sm font-semibold text-brand">
               <Sparkles className="h-4 w-4" />
               {user ? user.business_name || user.username : "جاهزية الربط"}
             </div>
-            <div className="mt-4 h-2 rounded-full bg-white/10">
-              <div className="h-full w-4/5 rounded-full bg-emeraldx-500" />
+            <div className="mt-4 h-2 rounded-full bg-surface-hover">
+              <div className="h-full w-4/5 rounded-full bg-brand" />
             </div>
-            <div className="mt-4 flex gap-2 text-white/58">
-              <MessageCircle className="h-4 w-4 text-emeraldx-400" />
-              <Facebook className="h-4 w-4 text-cyanx-400" />
-              <Instagram className="h-4 w-4 text-violet-200" />
+            <div className="mt-4 flex gap-2 text-secondary">
+              <MessageCircle className="h-4 w-4 text-brand" />
+              <Facebook className="h-4 w-4 text-brand-accent" />
+              <Instagram className="h-4 w-4 text-violet-400" />
             </div>
-            <p className="mt-3 text-xs leading-5 text-white/50 text-right">الوكيل جاهز للتجربة. اربط قنوات Meta الرسمية عند تفعيل الحسابات.</p>
+            <p className="mt-3 text-xs leading-5 text-secondary text-right">الوكيل جاهز للتجربة. اربط قنوات Meta الرسمية عند تفعيل الحسابات.</p>
           </div>
         )}
 
@@ -168,7 +168,7 @@ export function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose?: () =>
           {navGroups.map((group, i) => (
             <div key={i} className="space-y-2">
               {group.title && (
-                <div className="px-3 text-[11px] font-bold text-white/30">
+                <div className="px-3 text-[11px] font-bold text-muted">
                   {group.title}
                 </div>
               )}
@@ -188,14 +188,14 @@ export function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose?: () =>
                       className={cn(
                         "group flex items-center gap-3 rounded-2xl px-3 py-2.5 text-sm font-medium transition",
                         isActive
-                          ? "bg-emeraldx-500/10 text-white border-r-2 border-emeraldx-500"
-                          : "text-white/58 hover:bg-white/8 hover:text-white"
+                          ? "bg-brand/10 text-primary border-r-2 border-brand"
+                          : "text-secondary hover:bg-surface-hover hover:text-primary"
                       )}
                     >
                       <Icon
                         className={cn(
                           "h-4 w-4 transition",
-                          isActive ? "text-emeraldx-400" : "text-white/38 group-hover:text-emeraldx-400"
+                          isActive ? "text-brand" : "text-muted group-hover:text-brand"
                         )}
                       />
                       {item.label}
@@ -211,7 +211,7 @@ export function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose?: () =>
           <div className="absolute bottom-5 left-5 right-5">
             <button
               onClick={handleLogout}
-              className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-sm font-medium text-red-400/70 transition hover:bg-red-500/10 hover:text-red-400"
+              className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-sm font-medium text-red-500/80 transition hover:bg-red-500/10 hover:text-red-500"
             >
               <LogOut className="h-5 w-5" />
               تسجيل الخروج

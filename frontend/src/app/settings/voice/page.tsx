@@ -55,22 +55,22 @@ export default function VoiceSettingsPage() {
         <div className="space-y-6">
           <GradientCard>
             <div className="flex items-center gap-3 mb-6">
-              <div className="grid h-12 w-12 place-items-center rounded-2xl bg-violet-500/20 text-violet-400">
+              <div className="grid h-12 w-12 place-items-center rounded-2xl bg-brand-accent/20 text-brand-accent">
                 <Mic className="h-6 w-6" />
               </div>
               <div>
-                <h3 className="text-xl font-semibold text-white">إعدادات الصوت الأساسية</h3>
-                <p className="text-sm text-white/50">اختر الصوت المناسب لهوية نشاطك التجاري.</p>
+                <h3 className="text-xl font-semibold text-primary">إعدادات الصوت الأساسية</h3>
+                <p className="text-sm text-secondary">اختر الصوت المناسب لهوية نشاطك التجاري.</p>
               </div>
             </div>
 
             <div className="space-y-4">
               <div className="space-y-1.5">
-                <label className="text-sm font-semibold text-white/70 block">الصوت المفضل</label>
+                <label className="text-sm font-semibold text-secondary block">الصوت المفضل</label>
                 <select
                   value={voiceSettings.voice_id}
                   onChange={(e) => setVoiceSettings({ ...voiceSettings, voice_id: e.target.value })}
-                  className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white focus:border-emeraldx-500 focus:outline-none"
+                  className="w-full rounded-2xl border border-border bg-surface-hover px-4 py-3 text-sm text-primary focus:border-brand focus:outline-none"
                 >
                   <option value="alloy">Alloy (محايد)</option>
                   <option value="echo">Echo (رجل - هادئ)</option>
@@ -82,18 +82,18 @@ export default function VoiceSettingsPage() {
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-sm font-semibold text-white/70 block">رسالة الترحيب</label>
+                <label className="text-sm font-semibold text-secondary block">رسالة الترحيب</label>
                 <textarea
                   value={voiceSettings.greeting_message}
                   onChange={(e) => setVoiceSettings({ ...voiceSettings, greeting_message: e.target.value })}
-                  className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white focus:border-emeraldx-500 focus:outline-none h-24"
+                  className="w-full rounded-2xl border border-border bg-surface-hover px-4 py-3 text-sm text-primary focus:border-brand focus:outline-none h-24"
                   placeholder="الرسالة التي سيقولها الوكيل عند بدء المكالمة..."
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <label className="text-sm font-semibold text-white/70 block">سرعة التحدث ({voiceSettings.speed}x)</label>
+                  <label className="text-sm font-semibold text-secondary block">سرعة التحدث ({voiceSettings.speed}x)</label>
                   <input
                     type="range"
                     min="0.5"
@@ -101,11 +101,11 @@ export default function VoiceSettingsPage() {
                     step="0.1"
                     value={voiceSettings.speed}
                     onChange={(e) => setVoiceSettings({ ...voiceSettings, speed: parseFloat(e.target.value) })}
-                    className="w-full accent-emeraldx-500"
+                    className="w-full accent-brand"
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-sm font-semibold text-white/70 block">نبرة الصوت ({voiceSettings.pitch})</label>
+                  <label className="text-sm font-semibold text-secondary block">نبرة الصوت ({voiceSettings.pitch})</label>
                   <input
                     type="range"
                     min="0.5"
@@ -113,7 +113,7 @@ export default function VoiceSettingsPage() {
                     step="0.1"
                     value={voiceSettings.pitch}
                     onChange={(e) => setVoiceSettings({ ...voiceSettings, pitch: parseFloat(e.target.value) })}
-                    className="w-full accent-emeraldx-500"
+                    className="w-full accent-brand"
                   />
                 </div>
               </div>
@@ -129,15 +129,15 @@ export default function VoiceSettingsPage() {
         </div>
 
         <div className="space-y-6">
-          <GradientCard className="border-white/10 bg-white/5">
-            <h3 className="text-lg font-semibold text-white mb-4">تجربة الصوت</h3>
-            <p className="text-sm text-white/50 mb-6">استمع لعينة من الصوت المختار לפני الحفظ النهائي.</p>
+          <GradientCard className="border-border bg-surface-hover">
+            <h3 className="text-lg font-semibold text-primary mb-4">تجربة الصوت</h3>
+            <p className="text-sm text-secondary mb-6">استمع لعينة من الصوت المختار לפני الحفظ النهائي.</p>
             
-            <div className="rounded-3xl bg-black/20 p-6 flex flex-col items-center justify-center border border-white/5">
-              <div className="h-16 w-16 rounded-full bg-emeraldx-500/20 text-emeraldx-400 flex items-center justify-center cursor-pointer hover:bg-emeraldx-500/30 transition shadow-glow">
+            <div className="rounded-3xl bg-surface p-6 flex flex-col items-center justify-center border border-border">
+              <div className="h-16 w-16 rounded-full bg-brand/20 text-brand flex items-center justify-center cursor-pointer hover:bg-brand/30 transition shadow-glow">
                 <PlayCircle className="h-8 w-8" />
               </div>
-              <p className="mt-4 text-xs font-semibold text-white/70 text-center">
+              <p className="mt-4 text-xs font-semibold text-secondary text-center">
                 &quot;{voiceSettings.greeting_message}&quot;
               </p>
             </div>

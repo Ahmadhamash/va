@@ -99,18 +99,18 @@ export default function InboxPage() {
       <div className="grid gap-5 xl:grid-cols-[390px_1fr] xl:h-[calc(100vh-170px)] xl:min-h-[620px]">
         {loading ? (
           <div className="flex h-96 items-center justify-center col-span-2">
-            <Loader2 className="h-8 w-8 animate-spin text-emeraldx-400" />
+            <Loader2 className="h-8 w-8 animate-spin text-brand" />
           </div>
         ) : (
           <>
             <ConversationList conversations={conversations} selectedId={selectedId} onSelect={setSelectedId} />
             {conversations.length === 0 ? (
-              <div className="flex h-96 flex-col items-center justify-center rounded-3xl border border-white/10 bg-white/[0.02] text-white/45">
+              <div className="flex h-96 flex-col items-center justify-center rounded-3xl border border-border bg-surface-hover text-muted">
                 <p>لا توجد محادثات نشطة حالياً.</p>
               </div>
             ) : messagesLoading || !selectedConversation ? (
               <div className="flex h-96 items-center justify-center">
-                <Loader2 className="h-8 w-8 animate-spin text-emeraldx-400" />
+                <Loader2 className="h-8 w-8 animate-spin text-brand" />
               </div>
             ) : (
               <ChatWindow

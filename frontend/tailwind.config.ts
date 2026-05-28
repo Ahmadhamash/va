@@ -11,6 +11,26 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
+        // Semantic Colors mapped to CSS Variables
+        base: "var(--bg-base)",
+        surface: "var(--bg-surface)",
+        "surface-hover": "var(--bg-surface-hover)",
+        glass: "var(--glass-bg)",
+        
+        primary: "var(--text-primary)",
+        secondary: "var(--text-secondary)",
+        muted: "var(--text-muted)",
+        
+        border: "var(--border-default)",
+        "border-focus": "var(--border-focus)",
+        
+        brand: {
+          DEFAULT: "var(--brand-primary)",
+          hover: "var(--brand-primary-hover)",
+          accent: "var(--brand-accent)",
+        },
+        
+        // Legacy Hardcoded Colors (kept for safe fallback during transition)
         ink: {
           950: "#050711",
           900: "#080b18",

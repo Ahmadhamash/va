@@ -32,7 +32,7 @@ function ChannelIcon({ channel }: { channel: ChannelProvider }) {
             : channel === "WIDGET"
               ? Code
               : MessageCircle;
-  return <Icon className="h-4 w-4 text-emeraldx-400" />;
+  return <Icon className="h-4 w-4 text-brand" />;
 }
 
 function MessageBubble({ message }: { message: Message }) {
@@ -43,14 +43,14 @@ function MessageBubble({ message }: { message: Message }) {
       <div
         className={cn(
           "max-w-[78%] rounded-[20px] px-4 py-3 text-sm leading-6 shadow-sm backdrop-blur-md",
-          fromCustomer && "rounded-br-none bg-white/[0.07] border border-white/5 text-white/90",
-          message.sender === "AI" && "rounded-bl-none bg-gradient-to-br from-emeraldx-500 to-teal-400 text-ink-950 font-medium shadow-emeraldx-500/10",
-          message.sender === "HUMAN" && "rounded-bl-none bg-gradient-to-br from-violetrx-600 to-indigo-500 text-white shadow-violetrx-600/15",
-          fromSystem && "mx-auto max-w-[86%] rounded-2xl border border-white/10 bg-white/[0.04] text-center text-white/45"
+          fromCustomer && "rounded-br-none bg-surface-hover border border-border text-primary",
+          message.sender === "AI" && "rounded-bl-none bg-gradient-to-br from-brand to-brand-accent text-white font-medium shadow-brand/10",
+          message.sender === "HUMAN" && "rounded-bl-none bg-gradient-to-br from-violetrx-400 to-violetrx-500 text-white shadow-violetrx-500/15",
+          fromSystem && "mx-auto max-w-[86%] rounded-2xl border border-border bg-surface text-center text-muted"
         )}
       >
         <div className="break-words whitespace-pre-wrap">{message.body}</div>
-        <div className={cn("mt-1.5 text-[10px] text-right font-medium tracking-tight", message.sender === "AI" ? "text-ink-950/50" : "text-white/30")}>
+        <div className={cn("mt-1.5 text-[10px] text-right font-medium tracking-tight", message.sender === "AI" ? "text-white/70" : "text-muted")}>
           {formatTime(message.createdAt)}
         </div>
       </div>
@@ -161,14 +161,14 @@ export function ChatWindow({
 
   return (
     <div className="grid h-full min-h-[680px] xl:min-h-0 gap-4 lg:grid-cols-[1fr_280px]">
-      <div className="flex h-full min-h-[680px] xl:min-h-0 flex-col rounded-3xl border border-white/10 bg-white/[0.045]">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 p-4">
+      <div className="flex h-full min-h-[680px] xl:min-h-0 flex-col rounded-3xl border border-border bg-surface">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border p-4">
           <div>
-            <div className="flex items-center gap-2 text-lg font-semibold text-white">
+            <div className="flex items-center gap-2 text-lg font-semibold text-primary">
               <ChannelIcon channel={conversation.channel} />
               {conversation.customerName}
             </div>
-            <div className="mt-1 text-sm text-white/42">{(channelLabels[conversation.channel] || conversation.channel)} · {conversation.customerPhone}</div>
+            <div className="mt-1 text-sm text-secondary">{(channelLabels[conversation.channel] || conversation.channel)} · {conversation.customerPhone}</div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <StatusBadge status={status} />
@@ -203,10 +203,10 @@ export function ChatWindow({
           ))}
         </div>
 
-        <div className="border-t border-white/10 p-4">
-          <div className="mb-3 rounded-3xl border border-emeraldx-400/20 bg-emeraldx-500/10 p-4">
+        <div className="border-t border-border p-4">
+          <div className="mb-3 rounded-3xl border border-brand/20 bg-brand/10 p-4">
             <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-2 text-sm font-semibold text-emeraldx-400">
+              <div className="flex items-center gap-2 text-sm font-semibold text-brand">
                 <Bot className="h-4 w-4" />
                 رد مقترح
               </div>
@@ -223,7 +223,7 @@ export function ChatWindow({
                 )}
               </div>
             </div>
-            <p className="text-sm leading-6 text-white/68">{suggestedReply}</p>
+            <p className="text-sm leading-6 text-secondary">{suggestedReply}</p>
           </div>
           <div className="flex gap-2">
             <Input value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="اكتب رد الموظف..." />
@@ -242,34 +242,34 @@ export function ChatWindow({
       </div>
 
       <aside className="space-y-4 xl:h-full xl:overflow-y-auto custom-scrollbar">
-        <div className="rounded-3xl border border-white/10 bg-white/[0.045] p-4">
-          <div className="text-sm font-semibold text-white">ملف العميل</div>
-          <div className="mt-4 space-y-3 text-sm text-white/58">
+        <div className="rounded-3xl border border-border bg-surface p-4">
+          <div className="text-sm font-semibold text-primary">ملف العميل</div>
+          <div className="mt-4 space-y-3 text-sm text-secondary">
             <div className="flex justify-between gap-3">
               <span>الاسم</span>
-              <span className="text-white">{conversation.customerName}</span>
+              <span className="text-primary">{conversation.customerName}</span>
             </div>
             <div className="flex justify-between gap-3">
               <span>القناة</span>
-              <span className="text-white">{(channelLabels[conversation.channel] || conversation.channel)}</span>
+              <span className="text-primary">{(channelLabels[conversation.channel] || conversation.channel)}</span>
             </div>
             <div className="flex justify-between gap-3">
               <span>عدد الرسائل</span>
-              <span className="text-white">{messages.length}</span>
+              <span className="text-primary">{messages.length}</span>
             </div>
           </div>
         </div>
-        <div className="rounded-3xl border border-white/10 bg-white/[0.045] p-4 transition-all duration-300">
+        <div className="rounded-3xl border border-border bg-surface p-4 transition-all duration-300">
           <div className="mb-3 flex items-center justify-between">
-            <div className="flex items-center gap-2 text-sm font-semibold text-white">
-              <StickyNote className="h-4 w-4 text-cyanx-400" />
+            <div className="flex items-center gap-2 text-sm font-semibold text-primary">
+              <StickyNote className="h-4 w-4 text-brand-accent" />
               ملاحظات
             </div>
             {!isEditingNote && (
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-7 px-2 text-xs text-cyanx-400 hover:bg-white/5"
+                className="h-7 px-2 text-xs text-brand-accent hover:bg-surface-hover"
                 onClick={() => {
                   setNoteDraft(note);
                   setIsEditingNote(true);
@@ -290,7 +290,7 @@ export function ChatWindow({
               <div className="flex gap-2">
                 <Button
                   size="sm"
-                  className="flex-1 bg-emeraldx-500 text-ink-950 hover:bg-emeraldx-400 text-xs"
+                  className="flex-1 bg-brand text-white hover:bg-brand-hover text-xs"
                   onClick={() => {
                     localStorage.setItem(`masarjo_note_${conversation.id}`, noteDraft);
                     setNote(noteDraft);
@@ -311,7 +311,7 @@ export function ChatWindow({
               </div>
             </div>
           ) : (
-            <p className="text-sm leading-6 text-white/50 whitespace-pre-wrap">{note || "لا توجد ملاحظات مضافة للعميل."}</p>
+            <p className="text-sm leading-6 text-muted whitespace-pre-wrap">{note || "لا توجد ملاحظات مضافة للعميل."}</p>
           )}
         </div>
         <div className="rounded-3xl border border-red-400/20 bg-red-500/10 p-4">

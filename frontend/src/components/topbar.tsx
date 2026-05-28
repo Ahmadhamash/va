@@ -16,25 +16,25 @@ export function Topbar({
   onMenuToggle?: () => void;
 }) {
   return (
-    <header className="sticky top-0 z-20 border-b border-white/10 bg-ink-950/70 backdrop-blur-2xl">
+    <header className="sticky top-0 z-20 border-b border-border bg-background/70 backdrop-blur-2xl">
       <div className="flex min-h-20 items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
         <div className="flex items-center gap-3">
           {/* Hamburger Menu on Mobile */}
           <button
             onClick={onMenuToggle}
-            className="rounded-xl border border-white/10 bg-white/5 p-2 text-white/70 hover:bg-white/10 hover:text-white lg:hidden"
+            className="rounded-xl border border-border bg-surface-hover p-2 text-secondary hover:bg-surface hover:text-primary lg:hidden"
             aria-label="Open menu"
           >
             <Menu className="h-5 w-5" />
           </button>
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight text-white">{title}</h1>
-            {subtitle ? <p className="mt-1 text-sm text-white/45">{subtitle}</p> : null}
+            <h1 className="text-2xl font-semibold tracking-tight text-primary">{title}</h1>
+            {subtitle ? <p className="mt-1 text-sm text-muted">{subtitle}</p> : null}
           </div>
         </div>
         <div className="hidden min-w-80 items-center gap-3 md:flex">
           <div className="relative flex-1">
-            <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/30" />
+            <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
             <Input className="pr-9" placeholder="ابحث عن عميل أو منتج..." />
           </div>
           <ThemeToggle />

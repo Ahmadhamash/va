@@ -16,17 +16,17 @@ export function Button({
     <button
       className={cn(
         "inline-flex items-center justify-center gap-2 rounded-2xl font-semibold outline-none transition duration-200 disabled:cursor-not-allowed disabled:opacity-50",
-        "focus-visible:ring-2 focus-visible:ring-emeraldx-400/70",
+        "focus-visible:ring-2 focus-visible:ring-brand/70",
         size === "sm" && "h-9 px-3 text-sm",
         size === "md" && "h-11 px-4 text-sm",
         size === "lg" && "h-13 px-6 py-4 text-base",
         variant === "primary" &&
-          "bg-emeraldx-500 text-ink-950 shadow-glow hover:-translate-y-0.5 hover:bg-emeraldx-400",
+          "bg-brand text-white hover:bg-brand-hover shadow-glow hover:shadow-glow-lg",
         variant === "secondary" &&
-          "border border-white/12 bg-white/8 text-white hover:-translate-y-0.5 hover:bg-white/12",
-        variant === "ghost" && "text-white/70 hover:bg-white/8 hover:text-white",
+          "border border-border bg-surface-hover text-primary hover:-translate-y-0.5 hover:bg-surface",
+        variant === "ghost" && "text-secondary hover:bg-surface hover:text-primary",
         variant === "danger" &&
-          "border border-red-400/30 bg-red-500/12 text-red-100 hover:bg-red-500/20",
+          "border border-red-500/20 bg-red-500/10 text-red-500 hover:-translate-y-0.5 hover:bg-red-500/20",
         className
       )}
       {...props}

@@ -109,29 +109,29 @@ export function ChannelConnectionCard({
   const showChatwootView = isChatwootActive && connectionMode === "chatwoot";
 
   return (
-    <GradientCard className="border-emeraldx-400/20">
+    <GradientCard className="border-border">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <div className="flex items-center gap-3">
-            <div className="grid h-14 w-14 place-items-center rounded-3xl bg-emeraldx-500 text-ink-950 shadow-glow">
+            <div className="grid h-14 w-14 place-items-center rounded-3xl bg-brand text-white shadow-glow">
               <MessageCircle className="h-7 w-7" />
             </div>
             <div>
               {showChatwootView ? (
-                <div className="flex items-center gap-1.5 rounded-full px-2 py-1 text-xs font-semibold bg-emeraldx-500/10 text-emeraldx-400">
+                <div className="flex items-center gap-1.5 rounded-full px-2 py-1 text-xs font-semibold bg-brand/10 text-brand">
                   <CircleCheck className="h-3 w-3" />
                   ربط Chatwoot مفعّل تلقائياً
                 </div>
               ) : (
-                <div className={`flex items-center gap-1.5 rounded-full px-2 py-1 text-xs font-semibold ${connectedCount > 0 ? "bg-emeraldx-500/10 text-emeraldx-400" : "bg-amber-500/10 text-amber-400"}`}>
+                <div className={`flex items-center gap-1.5 rounded-full px-2 py-1 text-xs font-semibold ${connectedCount > 0 ? "bg-brand/10 text-brand" : "bg-amber-500/10 text-amber-500"}`}>
                   <CircleCheck className="h-3 w-3" />
                   {connectedCount > 0 ? `${connectedCount} قناة متصلة` : "لا توجد قنوات متصلة"}
                 </div>
               )}
-              <h3 className="text-xl font-semibold text-white">
+              <h3 className="text-xl font-semibold text-primary">
                 {showChatwootView ? "قنوات الاتصال الموحدة" : "اربط قنوات العملاء"}
               </h3>
-              <p className="mt-1 max-w-2xl text-sm leading-7 text-white/58 text-right">
+              <p className="mt-1 max-w-2xl text-sm leading-7 text-secondary text-right">
                 {showChatwootView 
                   ? "تتم إدارة قنواتك (واتساب، فيسبوك، إنستجرام) عبر لوحة تحكم Chatwoot ومزامنتها تلقائياً مع وكيل الذكاء الاصطناعي الخاص بنا."
                   : "واتساب، فيسبوك، وإنستغرام من لوحة واحدة. قم بربط قنواتك الرسمية لتفعيل ردود الوكيل الذكي وإدارة محادثات العملاء."
@@ -145,7 +145,7 @@ export function ChannelConnectionCard({
             href={`${process.env.NEXT_PUBLIC_CHATWOOT_URL || "https://chat.masarjo.com"}/app/accounts/${user.chatwoot_account_id}/dashboard`}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex items-center gap-2 rounded-2xl bg-emeraldx-500 px-5 py-3 text-sm font-bold text-ink-950 transition hover:scale-[1.02] active:scale-[0.98] shadow-glow"
+            className="inline-flex items-center gap-2 rounded-2xl bg-brand px-5 py-3 text-sm font-bold text-white transition hover:scale-[1.02] active:scale-[0.98] shadow-glow"
           >
             <span>لوحة تحكم Chatwoot</span>
             <ExternalLink className="h-4 w-4" />
@@ -162,14 +162,14 @@ export function ChannelConnectionCard({
 
       {isChatwootActive && (
         <div className="flex justify-end mt-4 mb-2">
-          <div className="inline-flex rounded-2xl bg-white/[0.04] p-1 border border-white/5">
+          <div className="inline-flex rounded-2xl bg-surface-hover p-1 border border-border">
             <button
               type="button"
               onClick={() => setConnectionMode("manual")}
               className={`rounded-xl px-3 py-1.5 text-[10px] font-bold transition ${
                 connectionMode === "manual"
-                  ? "bg-emeraldx-500 text-ink-950 shadow-glow"
-                  : "text-white/60 hover:text-white"
+                  ? "bg-brand text-white shadow-glow"
+                  : "text-muted hover:text-primary"
               }`}
             >
               الربط اليدوي المباشر (Meta)
@@ -179,8 +179,8 @@ export function ChannelConnectionCard({
               onClick={() => setConnectionMode("chatwoot")}
               className={`rounded-xl px-3 py-1.5 text-[10px] font-bold transition ${
                 connectionMode === "chatwoot"
-                  ? "bg-emeraldx-500 text-ink-950 shadow-glow"
-                  : "text-white/60 hover:text-white"
+                  ? "bg-brand text-white shadow-glow"
+                  : "text-muted hover:text-primary"
               }`}
             >
               الربط التلقائي (Chatwoot)
@@ -190,17 +190,17 @@ export function ChannelConnectionCard({
       )}
 
       {!isChatwootActive && (
-        <div className="mt-6 rounded-3xl border border-emeraldx-400/20 bg-emeraldx-500/[0.02] p-5 text-right space-y-4 animate-in fade-in">
+        <div className="mt-6 rounded-3xl border border-brand/20 bg-brand/5 p-5 text-right space-y-4 animate-in fade-in">
           <div className="flex flex-row-reverse items-center justify-between gap-4">
-            <div className="grid h-10 w-10 place-items-center rounded-2xl bg-emeraldx-500 text-ink-950 shadow-glow">
+            <div className="grid h-10 w-10 place-items-center rounded-2xl bg-brand text-white shadow-glow">
               <MessageCircle className="h-5 w-5" />
             </div>
             <div className="flex-1 pr-3">
-              <h4 className="text-sm font-bold text-white">تفعيل لوحة Chatwoot الموحدة (موصى به)</h4>
-              <p className="text-xs text-white/40 mt-1">احصل على صندوق وارد موحد لإدارة جميع محادثات عملائك من مكان واحد.</p>
+              <h4 className="text-sm font-bold text-primary">تفعيل لوحة Chatwoot الموحدة (موصى به)</h4>
+              <p className="text-xs text-muted mt-1">احصل على صندوق وارد موحد لإدارة جميع محادثات عملائك من مكان واحد.</p>
             </div>
           </div>
-          <div className="text-xs leading-6 text-white/70">
+          <div className="text-xs leading-6 text-secondary">
             من خلال تفعيل Chatwoot، يمكنك قراءة والرد على رسائل واتساب وفيسبوك وإنستجرام، وتعيين المحادثات لموظفي خدمة العملاء، مع بقاء الرد الآلي الذكي فعالاً.
           </div>
           {errorMsg && (
@@ -232,17 +232,17 @@ export function ChannelConnectionCard({
       )}
 
       {showChatwootView && (
-        <div className="mt-6 rounded-3xl border border-emeraldx-400/20 bg-emeraldx-500/5 p-6 text-right space-y-4">
+        <div className="mt-6 rounded-3xl border border-brand/20 bg-brand/5 p-6 text-right space-y-4">
           <div className="flex flex-row-reverse items-center justify-between gap-4">
-            <div className="grid h-12 w-12 place-items-center rounded-2xl bg-white/8 text-emeraldx-400">
+            <div className="grid h-12 w-12 place-items-center rounded-2xl bg-brand/10 text-brand">
               <MessageCircle className="h-6 w-6" />
             </div>
             <div className="flex-1 pr-4">
-              <h4 className="text-base font-bold text-white">حالة الاتصال الموحد (Omnichannel Link)</h4>
-              <p className="text-xs text-white/40 mt-1">حساب Chatwoot رقم: {user?.chatwoot_account_id}</p>
+              <h4 className="text-base font-bold text-primary">حالة الاتصال الموحد (Omnichannel Link)</h4>
+              <p className="text-xs text-muted mt-1">حساب Chatwoot رقم: {user?.chatwoot_account_id}</p>
             </div>
           </div>
-          <div className="text-sm leading-6 text-white/70 font-medium">
+          <div className="text-sm leading-6 text-secondary font-medium">
             مساحة عملك على Chatwoot متصلة بنجاح مع وكيل الذكاء الاصطناعي. أي رسائل واردة إلى قنواتك هناك سيتم معالجتها والرد عليها تلقائياً.
           </div>
           <div className="flex gap-2 justify-end">
@@ -262,7 +262,7 @@ export function ChannelConnectionCard({
       {hasChannels && (!isChatwootActive || connectionMode === "manual") && (
         <div className="mt-6 space-y-4">
           {isChatwootActive && (
-            <h4 className="text-sm font-bold text-white/60 mb-2">القنوات التقليدية المربوطة يدوياً:</h4>
+            <h4 className="text-sm font-bold text-secondary mb-2">القنوات التقليدية المربوطة يدوياً:</h4>
           )}
           <div className="grid gap-3 lg:grid-cols-3">
             {channels.map((channel) => {
@@ -273,21 +273,21 @@ export function ChannelConnectionCard({
 
               return (
                 <div key={channel.id} className="space-y-3">
-                  <div className={`rounded-3xl border p-4 transition ${isConfigured ? "border-emeraldx-400/20 bg-emeraldx-500/5" : "border-white/10 bg-white/[0.055]"}`}>
+                  <div className={`rounded-3xl border p-4 transition ${isConfigured ? "border-brand/20 bg-brand/5" : "border-border bg-surface-hover"}`}>
                     <div className="flex items-start justify-between gap-3">
-                      <div className="grid h-11 w-11 place-items-center rounded-2xl bg-white/8 text-emeraldx-400">
+                      <div className="grid h-11 w-11 place-items-center rounded-2xl bg-brand/10 text-brand">
                         <Icon className="h-5 w-5" />
                       </div>
                       <StatusBadge status={channel.status} />
                     </div>
-                    <div className="mt-4 text-base font-semibold text-white text-right">
+                    <div className="mt-4 text-base font-semibold text-primary text-right">
                       {platformNames[channel.provider] || channel.provider}
                     </div>
-                    <div className="mt-1 text-xs text-white/40 text-right">
+                    <div className="mt-1 text-xs text-muted text-right">
                       {anyChannel.credentials?.phone_number_id ? `معرف الرقم: ${anyChannel.credentials.phone_number_id}` : "تم التهيئة ببيانات معتمدة"}
                     </div>
                     <div className="mt-4 flex items-center justify-between gap-3 text-xs font-semibold">
-                      <span className={`flex items-center gap-1.5 ${isConfigured ? "text-emeraldx-400" : "text-amber-400"}`}>
+                      <span className={`flex items-center gap-1.5 ${isConfigured ? "text-brand" : "text-amber-500"}`}>
                         <CircleCheck className="h-3.5 w-3.5" />
                         {isConfigured ? "مفعّل" : "بحاجة إعداد"}
                       </span>
@@ -296,7 +296,7 @@ export function ChannelConnectionCard({
                         <button
                           type="button"
                           onClick={() => setExpandedChannelId(isExpanded ? null : channel.id)}
-                          className="rounded-full bg-white/8 px-3 py-1.5 text-white/70 transition hover:bg-white/12 flex items-center gap-1"
+                          className="rounded-full bg-surface-hover px-3 py-1.5 text-secondary transition hover:bg-surface border border-border flex items-center gap-1"
                           title="تفاصيل الويب هوك"
                         >
                           {isExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
@@ -316,34 +316,34 @@ export function ChannelConnectionCard({
 
                   {/* Webhook Settings Expanded view */}
                   {isExpanded && (
-                    <div className="rounded-3xl border border-white/10 bg-white/[0.02] p-4 text-right space-y-3 animate-in fade-in duration-200">
-                      <div className="text-xs font-bold text-white/80">تفاصيل الويب هوك لـ Meta Developers:</div>
+                    <div className="rounded-3xl border border-border bg-surface-hover p-4 text-right space-y-3 animate-in fade-in duration-200">
+                      <div className="text-xs font-bold text-primary">تفاصيل الويب هوك لـ Meta Developers:</div>
                       
                       <div className="space-y-1">
-                        <span className="text-[10px] text-white/40 block">Callback URL (رابط الاستقبال)</span>
-                        <div className="flex items-center justify-between rounded-xl bg-black/20 border border-white/5 px-2.5 py-1.5 text-[11px] font-mono">
+                        <span className="text-[10px] text-muted block">Callback URL (رابط الاستقبال)</span>
+                        <div className="flex items-center justify-between rounded-xl bg-surface border border-border px-2.5 py-1.5 text-[11px] font-mono">
                           <button
                             type="button"
                             onClick={() => handleCopy(getAbsoluteWebhookUrl(anyChannel), channel.id + "_url")}
-                            className="text-cyanx-400 hover:text-cyanx-300 text-[9px] font-bold"
+                            className="text-brand-accent hover:text-brand text-[9px] font-bold"
                           >
                             {copiedKey === channel.id + "_url" ? "✓ تم النسخ" : "نسخ"}
                           </button>
-                          <span className="text-white/70 select-all overflow-x-auto whitespace-nowrap scrollbar-none">{getAbsoluteWebhookUrl(anyChannel)}</span>
+                          <span className="text-secondary select-all overflow-x-auto whitespace-nowrap scrollbar-none">{getAbsoluteWebhookUrl(anyChannel)}</span>
                         </div>
                       </div>
 
                       <div className="space-y-1">
-                        <span className="text-[10px] text-white/40 block">Verify Token (رمز التحقق)</span>
-                        <div className="flex items-center justify-between rounded-xl bg-black/20 border border-white/5 px-2.5 py-1.5 text-[11px] font-mono">
+                        <span className="text-[10px] text-muted block">Verify Token (رمز التحقق)</span>
+                        <div className="flex items-center justify-between rounded-xl bg-surface border border-border px-2.5 py-1.5 text-[11px] font-mono">
                           <button
                             type="button"
                             onClick={() => handleCopy(anyChannel.credentials?.verify_token || "verify_token", channel.id + "_token")}
-                            className="text-cyanx-400 hover:text-cyanx-300 text-[9px] font-bold"
+                            className="text-brand-accent hover:text-brand text-[9px] font-bold"
                           >
                             {copiedKey === channel.id + "_token" ? "✓ تم النسخ" : "نسخ"}
                           </button>
-                          <span className="text-white/70 select-all">{anyChannel.credentials?.verify_token || "verify_token"}</span>
+                          <span className="text-secondary select-all">{anyChannel.credentials?.verify_token || "verify_token"}</span>
                         </div>
                       </div>
                     </div>
@@ -356,17 +356,17 @@ export function ChannelConnectionCard({
       )}
 
       {(!isChatwootActive || connectionMode === "manual") && !hasChannels && (
-        <div className="mt-6 flex flex-col items-center justify-center rounded-3xl border border-dashed border-white/15 bg-white/[0.025] py-10 text-center">
-          <MessageCircle className="h-10 w-10 text-white/20 mb-3" />
-          <p className="text-sm text-white/45">لا توجد قنوات مرتبطة حتى الآن</p>
-          <p className="mt-1 text-xs text-white/30">اضغط &quot;ابدأ الربط الرسمي&quot; لإضافة أول قناة</p>
+        <div className="mt-6 flex flex-col items-center justify-center rounded-3xl border border-dashed border-border bg-surface-hover py-10 text-center">
+          <MessageCircle className="h-10 w-10 text-muted mb-3" />
+          <p className="text-sm text-secondary">لا توجد قنوات مرتبطة حتى الآن</p>
+          <p className="mt-1 text-xs text-muted">اضغط &quot;ابدأ الربط الرسمي&quot; لإضافة أول قناة</p>
         </div>
       )}
 
       <div className="mt-5 flex flex-wrap gap-3">
         {["رسائل العملاء فقط", "تكامل رسمي قابل للتوصيل", "تحويل بشري عند الحساسية"].map((item) => (
-          <div key={item} className="flex items-center gap-2 rounded-2xl bg-white/7 px-3 py-2 text-sm text-white/68">
-            <ShieldCheck className="h-4 w-4 text-cyanx-400" />
+          <div key={item} className="flex items-center gap-2 rounded-2xl bg-surface-hover px-3 py-2 text-sm text-secondary border border-border">
+            <ShieldCheck className="h-4 w-4 text-brand-accent" />
             {item}
           </div>
         ))}

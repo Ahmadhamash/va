@@ -187,8 +187,8 @@ export default function SettingsPage() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center justify-end gap-2 text-right">
-                <span className="text-white">ملف النشاط التجاري</span>
-                <Building2 className="h-5 w-5 text-emeraldx-400" />
+                <span className="text-primary">ملف النشاط التجاري</span>
+                <Building2 className="h-5 w-5 text-brand" />
               </CardTitle>
               <CardDescription className="text-right">
                 بيانات نشاطك التجاري تساعد الذكاء الاصطناعي على تقديم ردود بالغة الدقة.
@@ -198,23 +198,23 @@ export default function SettingsPage() {
               <form onSubmit={handleSaveProfile} className="space-y-4">
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="space-y-1.5 text-right">
-                    <label className="text-xs font-semibold text-white/50 block">اسم المستخدم (غير قابل للتعديل)</label>
-                    <div className="flex h-11 items-center justify-between rounded-2xl border border-white/5 bg-white/[0.03] px-4 text-sm text-white/40">
-                      <User className="h-4 w-4 text-white/30" />
+                    <label className="text-xs font-semibold text-muted block">اسم المستخدم (غير قابل للتعديل)</label>
+                    <div className="flex h-11 items-center justify-between rounded-2xl border border-border bg-surface px-4 text-sm text-secondary">
+                      <User className="h-4 w-4 text-muted" />
                       <span>{user?.username}</span>
                     </div>
                   </div>
 
                   <div className="space-y-1.5 text-right">
-                    <label className="text-xs font-semibold text-white/50 block">البريد الإلكتروني (غير قابل للتعديل)</label>
-                    <div className="flex h-11 items-center justify-between rounded-2xl border border-white/5 bg-white/[0.03] px-4 text-sm text-white/40">
-                      <Mail className="h-4 w-4 text-white/30 text-left" />
+                    <label className="text-xs font-semibold text-muted block">البريد الإلكتروني (غير قابل للتعديل)</label>
+                    <div className="flex h-11 items-center justify-between rounded-2xl border border-border bg-surface px-4 text-sm text-secondary">
+                      <Mail className="h-4 w-4 text-muted text-left" />
                       <span className="text-left font-mono">{user?.email}</span>
                     </div>
                   </div>
 
                   <div className="space-y-1.5 text-right">
-                    <label className="text-xs font-semibold text-white/70 block">اسم النشاط التجاري</label>
+                    <label className="text-xs font-semibold text-secondary block">اسم النشاط التجاري</label>
                     <Input 
                       value={businessName} 
                       onChange={(e) => setBusinessName(e.target.value)}
@@ -224,12 +224,12 @@ export default function SettingsPage() {
                   </div>
 
                   <div className="space-y-1.5 text-right">
-                    <label className="text-xs font-semibold text-white/70 block">نوع النشاط التجاري</label>
+                    <label className="text-xs font-semibold text-secondary block">نوع النشاط التجاري</label>
                     <div className="relative">
                       <select
                         value={businessType}
                         onChange={(e) => setBusinessType(e.target.value)}
-                        className="h-11 w-full rounded-2xl border border-white/10 bg-[#16161a] px-4 pr-10 text-right text-sm text-white outline-none transition focus:border-emeraldx-400/60 focus:ring-2 focus:ring-emeraldx-400/15 cursor-pointer appearance-none"
+                        className="h-11 w-full rounded-2xl border border-border bg-surface-hover px-4 pr-10 text-right text-sm text-primary outline-none transition focus:border-brand/60 focus:ring-2 focus:ring-brand/15 cursor-pointer appearance-none"
                       >
                         <option value="retail">🛍️ متجر تجزئة / تجارة إلكترونية</option>
                         <option value="restaurant">🍽️ مطعم / كافيه</option>
@@ -243,7 +243,7 @@ export default function SettingsPage() {
                         <option value="digital">💻 منتجات رقمية واشتراكات</option>
                         <option value="consulting">💼 مكتب استشارات وأعمال</option>
                       </select>
-                      <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none text-white/40">
+                      <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none text-muted">
                         <ChevronLeft className="h-4 w-4 transform -rotate-90" />
                       </div>
                     </div>
@@ -270,17 +270,17 @@ export default function SettingsPage() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center justify-end gap-2 text-right">
-                <span className="text-white">أمان الحساب وكلمة المرور</span>
+                <span className="text-primary">أمان الحساب وكلمة المرور</span>
                 <Key className="h-5 w-5 text-amber-400" />
               </CardTitle>
               <CardDescription className="text-right">
                 يمكنك إعادة تعيين كلمة المرور الخاصة بك بشكل آمن وسريع عبر البريد الإلكتروني.
               </CardDescription>
             </CardHeader>
-            <CardContent className="flex flex-col md:flex-row-reverse items-center justify-between gap-4 bg-white/[0.02] border border-white/5 rounded-3xl p-5">
+            <CardContent className="flex flex-col md:flex-row-reverse items-center justify-between gap-4 bg-surface border border-border rounded-3xl p-5">
               <div className="text-right md:max-w-[70%]">
-                <h4 className="text-sm font-semibold text-white mb-1">هل ترغب في تغيير كلمة المرور؟</h4>
-                <p className="text-xs text-white/48 leading-6">
+                <h4 className="text-sm font-semibold text-primary mb-1">هل ترغب في تغيير كلمة المرور؟</h4>
+                <p className="text-xs text-muted leading-6">
                   سنرسل لك رابطاً مشفراً لتعيين كلمة مرور جديدة على بريدك المسجل ({user?.email}) للحفاظ على سلامة حسابك.
                 </p>
               </div>
@@ -306,8 +306,8 @@ export default function SettingsPage() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center justify-end gap-2 text-right">
-                <span className="text-white">إعدادات الإشعارات والتنبيهات</span>
-                <Bell className="h-5 w-5 text-cyanx-400" />
+                <span className="text-primary">إعدادات الإشعارات والتنبيهات</span>
+                <Bell className="h-5 w-5 text-brand-accent" />
               </CardTitle>
               <CardDescription className="text-right">
                 حدد متى ترغب في تلقي إشعارات عاجلة لفريق الدعم الخاص بك.
@@ -348,42 +348,42 @@ export default function SettingsPage() {
           {loadingSub ? (
             <Card className="h-48 flex items-center justify-center">
               <div className="text-center">
-                <Loader2 className="h-6 w-6 animate-spin text-emeraldx-400 mx-auto mb-2" />
-                <span className="text-xs text-white/50">جاري تحميل بيانات الاشتراك...</span>
+                <Loader2 className="h-6 w-6 animate-spin text-brand mx-auto mb-2" />
+                <span className="text-xs text-muted">جاري تحميل بيانات الاشتراك...</span>
               </div>
             </Card>
           ) : (
             <GradientCard className="text-right">
-              <div className="flex items-center justify-between border-b border-white/10 pb-4 mb-4">
-                <span className="rounded-full bg-emeraldx-500/10 border border-emeraldx-500/20 px-2.5 py-0.5 text-[10px] font-bold text-emeraldx-400 flex items-center gap-1">
+              <div className="flex items-center justify-between border-b border-border pb-4 mb-4">
+                <span className="rounded-full bg-brand/10 border border-brand/20 px-2.5 py-0.5 text-[10px] font-bold text-brand flex items-center gap-1">
                   <ShieldCheck className="h-3 w-3" />
                   {activeSub ? "نشط" : "غير مفعل"}
                 </span>
                 <div className="flex items-center gap-2">
-                  <span className="font-bold text-white text-sm">الاشتراك الحالي</span>
-                  <CreditCard className="h-4 w-4 text-emeraldx-400" />
+                  <span className="font-bold text-primary text-sm">الاشتراك الحالي</span>
+                  <CreditCard className="h-4 w-4 text-brand" />
                 </div>
               </div>
 
               {activeSub ? (
                 <div className="space-y-4">
                   <div>
-                    <span className="text-[10px] text-white/40 block mb-0.5">الباقة الحالية</span>
-                    <span className="text-xl font-extrabold text-white">باقة {activeSub.tier?.name}</span>
+                    <span className="text-[10px] text-muted block mb-0.5">الباقة الحالية</span>
+                    <span className="text-xl font-extrabold text-primary">باقة {activeSub.tier?.name}</span>
                   </div>
 
-                  <p className="text-xs text-white/60 leading-5">
+                  <p className="text-xs text-secondary leading-5">
                     {activeSub.tier?.description}
                   </p>
 
-                  <div className="border-t border-white/5 pt-3 grid grid-cols-2 gap-3 text-right">
+                  <div className="border-t border-border pt-3 grid grid-cols-2 gap-3 text-right">
                     <div>
-                      <span className="text-[9px] text-white/40 block">سعر التجديد</span>
-                      <span className="text-sm font-bold text-white">{activeSub.tier?.price_monthly}$ / شهرياً</span>
+                      <span className="text-[9px] text-muted block">سعر التجديد</span>
+                      <span className="text-sm font-bold text-primary">{activeSub.tier?.price_monthly}$ / شهرياً</span>
                     </div>
                     <div>
-                      <span className="text-[9px] text-white/40 block">تاريخ البدء</span>
-                      <span className="text-xs font-semibold text-white/80">
+                      <span className="text-[9px] text-muted block">تاريخ البدء</span>
+                      <span className="text-xs font-semibold text-primary">
                         {new Date(activeSub.start_date).toLocaleDateString("ar-EG")}
                       </span>
                     </div>
@@ -403,7 +403,7 @@ export default function SettingsPage() {
                   <div className="rounded-2xl bg-amber-500/5 border border-dashed border-amber-500/20 p-4 text-center">
                     <Sparkles className="h-6 w-6 text-amber-400 mx-auto mb-2" />
                     <h5 className="text-xs font-bold text-amber-400 mb-1">لا يوجد اشتراك نشط</h5>
-                    <p className="text-[10px] text-white/48 leading-5">
+                    <p className="text-[10px] text-muted leading-5">
                       قم بترقية حسابك لتفعيل ردود الوكيل الذكي على قنواتك.
                     </p>
                   </div>
@@ -419,8 +419,8 @@ export default function SettingsPage() {
           )}
 
           {/* Danger Zone Controls */}
-          <Card className="border-red-400/20 overflow-hidden">
-            <CardHeader className="bg-red-500/[0.02] border-b border-white/5">
+          <Card className="border-red-500/20 overflow-hidden">
+            <CardHeader className="bg-red-500/[0.02] border-b border-border">
               <CardTitle className="flex items-center justify-end gap-2 text-red-200 text-right">
                 <span>منطقة الخطر والتحكم</span>
                 <AlertTriangle className="h-5 w-5 text-red-400" />
@@ -433,11 +433,11 @@ export default function SettingsPage() {
               {confirmAction ? (
                 <div className="rounded-2xl border border-red-500/20 bg-red-500/5 p-4 text-right space-y-4 animate-in fade-in slide-in-from-top-2 duration-250">
                   <div>
-                    <h5 className="text-xs font-bold text-red-400 flex items-center justify-end gap-1.5">
+                    <h5 className="text-xs font-bold text-red-500 flex items-center justify-end gap-1.5">
                       <span>تأكيد الإجراء الحساس</span>
                       <AlertTriangle className="h-3.5 w-3.5" />
                     </h5>
-                    <p className="text-[11px] text-white/60 mt-1.5 leading-5">
+                    <p className="text-[11px] text-secondary mt-1.5 leading-5">
                       {confirmAction === "logout" && "هل أنت متأكد من تسجيل خروجك من حساب مسار؟"}
                       {confirmAction === "disconnect" && "هل تريد حقاً فصل كافة قنوات التواصل والواتساب؟ سيتوقف الرد الذكي فوراً."}
                       {confirmAction === "delete_chats" && "هل أنت متأكد من مسح كافة سجلات المحادثات والرسائل نهائياً؟ هذا الإجراء لا يمكن التراجع عنه."}
@@ -499,12 +499,12 @@ export default function SettingsPage() {
                 </>
               )}
 
-              <div className="rounded-3xl border border-white/5 bg-white/[0.015] p-4 text-right">
-                <div className="mb-2 flex items-center justify-end gap-2 text-xs font-semibold text-white/80">
+              <div className="rounded-3xl border border-border bg-surface p-4 text-right">
+                <div className="mb-2 flex items-center justify-end gap-2 text-xs font-semibold text-primary">
                   <span>ملاحظة أمان وسلامة البيانات</span>
-                  <ShieldCheck className="h-4 w-4 text-emeraldx-400" />
+                  <ShieldCheck className="h-4 w-4 text-brand" />
                 </div>
-                <p className="text-[11px] leading-5 text-white/40">
+                <p className="text-[11px] leading-5 text-muted">
                   منصة مسار مصممة لمساعدة العملاء والاستجابة الفورية لاستفساراتهم الواردة. نلتزم بحماية الخصوصية المطلقة للبيانات والمعلومات المشتركة عبر القنوات.
                 </p>
               </div>

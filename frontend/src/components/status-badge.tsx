@@ -46,8 +46,8 @@ export function StatusBadge({ status }: StatusBadgeProps) {
         ["NEEDS_HUMAN", "HUMAN_ACTIVE"].includes(status) && "bg-violetrx-500/16 text-violet-200",
         ["DISCONNECTED", "SETUP_REQUIRED", "PENDING_VERIFICATION", "PAUSED"].includes(status) &&
           "bg-amber-500/14 text-amber-200",
-        status === "ERROR" && "bg-red-500/16 text-red-200",
-        status === "CLOSED" && "bg-white/10 text-white/58"
+        status === "ERROR" && "bg-red-500/16 text-red-500",
+        status === "CLOSED" && "bg-surface-hover text-secondary"
       )}
     >
       <Icon className="h-3.5 w-3.5" />
