@@ -91,16 +91,45 @@ export default function OnboardingPage() {
   // Stepper saving transitions
   const [savingStep, setSavingStep] = useState(false);
 
-  // Connection mode toggle: chatwoot vs manual Meta API
-  const [connectionMode, setConnectionMode] = useState<"chatwoot" | "manual">("chatwoot");
+  // Connection mode toggle: chatwoot vs manual Meta API vs choose
+  const [connectionMode, setConnectionMode] = useState<"chatwoot" | "manual" | "choose">("choose");
 
   useEffect(() => {
     if (user?.chatwoot_account_id) {
       setConnectionMode("chatwoot");
     } else {
-      setConnectionMode("manual");
+      setConnectionMode("choose");
     }
   }, [user]);
+
+  const [provisioningChatwoot, setProvisioningChatwoot] = useState(false);
+
+  async function handleProvisionChatwoot() {
+    if (!token) return;
+    setProvisioningChatwoot(true);
+    setNotice("جاري إنشاء وتفعيل مساحة عمل Chatwoot الخاصة بك...");
+    try {
+      const res = await fetch("/api/integrations/chatwoot/provision", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+      const data = await res.json();
+      if (res.ok && data.ok) {
+        setAuth(token, data.user);
+        setConnectionMode("chatwoot");
+        setNotice("✨ تم تجهيز وتفعيل حساب Chatwoot الخاص بك بنجاح!");
+      } else {
+        setNotice(`❌ فشل التفعيل: ${data.error || "خطأ غير معروف"}`);
+      }
+    } catch (err) {
+      console.error(err);
+      setNotice("❌ حدث خطأ أثناء تفعيل حساب Chatwoot.");
+    } finally {
+      setProvisioningChatwoot(false);
+    }
+  }
 
   // Load user data on mount
   useEffect(() => {
@@ -385,7 +414,7 @@ export default function OnboardingPage() {
     </div>,
 
     <div key="connect" className="space-y-4">
-      {user?.chatwoot_account_id && (
+      {user?.chatwoot_account_id ? (
         <div className="flex justify-end mb-4">
           <div className="inline-flex rounded-2xl bg-white/[0.04] p-1 border border-white/5">
             <button
@@ -412,9 +441,96 @@ export default function OnboardingPage() {
             </button>
           </div>
         </div>
+      ) : (
+        connectionMode === "manual" && (
+          <div className="flex justify-end mb-4 animate-in fade-in">
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => setConnectionMode("choose")}
+              className="text-xs font-semibold text-cyanx-400 border border-cyanx-500/20 hover:bg-cyanx-500/10"
+            >
+              ✨ التبديل إلى تفعيل لوحة Chatwoot (موصى به)
+            </Button>
+          </div>
+        )
       )}
 
-      {connectionMode === "chatwoot" && user?.chatwoot_account_id ? (
+      {connectionMode === "choose" && !user?.chatwoot_account_id ? (
+        <div className="space-y-6 text-right max-w-4xl mx-auto py-4">
+          <div className="text-center space-y-2 mb-6">
+            <h3 className="text-2xl font-bold text-white">اختر طريقة ربط قنوات الاتصال</h3>
+            <p className="text-sm text-white/50">اختر الطريقة الأنسب لنشاطك لإدارة رسائل واتساب وفيسبوك وإنستغرام</p>
+          </div>
+
+          <div className="grid gap-6 md:grid-cols-2">
+            {/* Option A: Chatwoot */}
+            <Card className="border-emeraldx-400/20 bg-emeraldx-500/[0.02] flex flex-col justify-between p-6 rounded-3xl relative overflow-hidden transition hover:border-emeraldx-400/40">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="rounded-full bg-emeraldx-500/10 px-3 py-1 text-xs font-semibold text-emeraldx-400">موصى به</span>
+                  <div className="grid h-12 w-12 place-items-center rounded-2xl bg-emeraldx-500 text-ink-950 shadow-glow">
+                    <MessageCircle className="h-6 w-6" />
+                  </div>
+                </div>
+                <h4 className="text-lg font-bold text-white">الربط التلقائي الموحد (Chatwoot)</h4>
+                <p className="text-sm leading-6 text-white/60">
+                  نقوم بتجهيز مساحة عمل مخصصة لك على لوحة Chatwoot. تتيح لك إرسال واستقبال رسائل جميع قنواتك في مكان واحد، مع نظام كامل للموظفين والتحويل البشري المباشر.
+                </p>
+              </div>
+              <div className="mt-8 pt-4">
+                <Button 
+                  className="w-full flex items-center justify-center gap-2"
+                  disabled={provisioningChatwoot}
+                  onClick={handleProvisionChatwoot}
+                >
+                  {provisioningChatwoot ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span>جاري التجهيز...</span>
+                    </>
+                  ) : (
+                    <span>تفعيل وتجهيز لوحة Chatwoot</span>
+                  )}
+                </Button>
+              </div>
+            </Card>
+
+            {/* Option B: Manual */}
+            <Card className="border-white/10 bg-white/[0.02] flex flex-col justify-between p-6 rounded-3xl transition hover:border-white/20">
+              <div className="space-y-4">
+                <div className="flex justify-end">
+                  <div className="grid h-12 w-12 place-items-center rounded-2xl bg-white/5 text-white/60">
+                    <Bot className="h-6 w-6" />
+                  </div>
+                </div>
+                <h4 className="text-lg font-bold text-white">الربط اليدوي المباشر (Meta API)</h4>
+                <p className="text-sm leading-6 text-white/60">
+                  إذا كنت تفضل ربط قنواتك مباشرةً باستخدام مفاتيح Meta API وتلقي ردود الوكيل الذكي فوراً دون واجهة Chatwoot إضافية لإدارة المحادثات.
+                </p>
+              </div>
+              <div className="mt-8 pt-4">
+                <Button 
+                  variant="secondary" 
+                  className="w-full"
+                  onClick={() => setConnectionMode("manual")}
+                >
+                  استخدام الربط اليدوي المباشر
+                </Button>
+              </div>
+            </Card>
+          </div>
+
+          <div className="rounded-3xl border border-cyanx-400/20 bg-cyanx-500/10 p-4 text-sm font-semibold text-cyanx-400 mt-4">{notice}</div>
+          
+          <div className="flex justify-start mt-6">
+            <Button variant="ghost" onClick={next} className="text-white/60 hover:text-white">
+              تخطي هذه الخطوة مؤقتاً
+            </Button>
+          </div>
+        </div>
+      ) : connectionMode === "chatwoot" && user?.chatwoot_account_id ? (
         <div className="space-y-6 text-right">
           <div className="rounded-3xl border border-emeraldx-400/20 bg-emeraldx-500/5 p-6">
             <div className="flex flex-row-reverse items-center justify-between gap-4 mb-4">

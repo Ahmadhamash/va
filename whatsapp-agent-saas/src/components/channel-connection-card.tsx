@@ -47,9 +47,11 @@ export function ChannelConnectionCard({
   channels: ChannelConnection[];
   onDelete?: (channelId: string) => void;
 }) {
-  const { user } = useAuthStore();
+  const { token, user, setAuth } = useAuthStore();
   const isChatwootActive = !!user?.chatwoot_account_id;
   const [connectionMode, setConnectionMode] = useState<"chatwoot" | "manual">("chatwoot");
+  const [provisioning, setProvisioning] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   useEffect(() => {
     if (user?.chatwoot_account_id) {
@@ -58,6 +60,32 @@ export function ChannelConnectionCard({
       setConnectionMode("manual");
     }
   }, [user]);
+
+  const handleProvisionChatwoot = async () => {
+    if (!token) return;
+    setProvisioning(true);
+    setErrorMsg(null);
+    try {
+      const res = await fetch("/api/integrations/chatwoot/provision", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+      const data = await res.json();
+      if (res.ok && data.ok) {
+        setAuth(token, data.user);
+        setConnectionMode("chatwoot");
+      } else {
+        setErrorMsg(data.error || "فشل تفعيل حساب Chatwoot.");
+      }
+    } catch (err) {
+      console.error(err);
+      setErrorMsg("حدث خطأ أثناء الاتصال بالخادم.");
+    } finally {
+      setProvisioning(false);
+    }
+  };
 
   const connectedCount = channels.filter(c => c.status === "CONNECTED").length;
   const hasChannels = channels.length > 0;
@@ -157,6 +185,48 @@ export function ChannelConnectionCard({
             >
               الربط التلقائي (Chatwoot)
             </button>
+          </div>
+        </div>
+      )}
+
+      {!isChatwootActive && (
+        <div className="mt-6 rounded-3xl border border-emeraldx-400/20 bg-emeraldx-500/[0.02] p-5 text-right space-y-4 animate-in fade-in">
+          <div className="flex flex-row-reverse items-center justify-between gap-4">
+            <div className="grid h-10 w-10 place-items-center rounded-2xl bg-emeraldx-500 text-ink-950 shadow-glow">
+              <MessageCircle className="h-5 w-5" />
+            </div>
+            <div className="flex-1 pr-3">
+              <h4 className="text-sm font-bold text-white">تفعيل لوحة Chatwoot الموحدة (موصى به)</h4>
+              <p className="text-xs text-white/40 mt-1">احصل على صندوق وارد موحد لإدارة جميع محادثات عملائك من مكان واحد.</p>
+            </div>
+          </div>
+          <div className="text-xs leading-6 text-white/70">
+            من خلال تفعيل Chatwoot، يمكنك قراءة والرد على رسائل واتساب وفيسبوك وإنستجرام، وتعيين المحادثات لموظفي خدمة العملاء، مع بقاء الرد الآلي الذكي فعالاً.
+          </div>
+          {errorMsg && (
+            <div className="text-xs text-red-400 bg-red-500/10 rounded-2xl px-3 py-2 border border-red-500/20">
+              {errorMsg}
+            </div>
+          )}
+          <div className="flex justify-end pt-2">
+            <Button 
+              size="sm" 
+              onClick={handleProvisionChatwoot} 
+              disabled={provisioning}
+              className="flex items-center gap-2"
+            >
+              {provisioning ? (
+                <>
+                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-ink-950" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  <span>جاري التفعيل...</span>
+                </>
+              ) : (
+                <span>تفعيل وتجهيز لوحة Chatwoot الخاصة بك</span>
+              )}
+            </Button>
           </div>
         </div>
       )}

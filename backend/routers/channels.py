@@ -9,6 +9,7 @@ from database import get_db
 from middleware.auth_middleware import get_current_user
 from models import ChannelIntegration, User
 from schemas.channel import PLATFORMS, ChannelCreate, ChannelOut
+from schemas.user import UserOut
 
 router = APIRouter(prefix="/channels", tags=["channels"])
 
@@ -133,3 +134,32 @@ async def delete_channel(
     ci = await _owned(channel_id, current_user, db)
     await db.delete(ci)
     await db.commit()
+
+
+@router.post("/chatwoot/provision", response_model=UserOut)
+async def provision_user_chatwoot(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if current_user.role == "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admins cannot provision Chatwoot accounts",
+        )
+    if current_user.chatwoot_account_id:
+        return current_user
+
+    from services.chatwoot_service import provision_chatwoot_account
+    chatwoot_account_id = await provision_chatwoot_account(
+        current_user.business_name or f"Client {current_user.username}", current_user.email
+    )
+    if not chatwoot_account_id:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to provision Chatwoot account. Please try again or use manual mode.",
+        )
+        
+    current_user.chatwoot_account_id = chatwoot_account_id
+    await db.commit()
+    await db.refresh(current_user)
+    return current_user
