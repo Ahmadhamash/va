@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { AuthGuard } from "@/components/auth-guard";
+import { Providers } from "@/components/providers";
 
 export const metadata: Metadata = {
   title: "\u0645\u0633\u0627\u0631 | \u0648\u0643\u064A\u0644 \u0630\u0643\u0627\u0621 \u0627\u0635\u0637\u0646\u0627\u0639\u064A \u0644\u062E\u062F\u0645\u0629 \u0627\u0644\u0639\u0645\u0644\u0627\u0621",
@@ -15,7 +16,9 @@ export default function RootLayout({
   return (
     <html lang="ar" dir="rtl" className="dark" suppressHydrationWarning>
       <body>
-        <AuthGuard>{children}</AuthGuard>
+        <Providers>
+          <AuthGuard>{children}</AuthGuard>
+        </Providers>
       </body>
     </html>
   );

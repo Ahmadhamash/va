@@ -26,6 +26,8 @@ import { useAuthStore } from "@/store/use-auth-store";
 import { ToggleSetting } from "@/components/toggle-setting";
 import { GradientCard } from "@/components/gradient-card";
 import Link from "next/link";
+import { toast } from "react-hot-toast";
+import { apiClient } from "@/lib/api-client";
 
 interface SubscriptionTier {
   id: string;
@@ -70,14 +72,6 @@ export default function SettingsPage() {
   const [confirmAction, setConfirmAction] = useState<"logout" | "disconnect" | "delete_chats" | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
 
-  // Global Notice
-  const [notice, setNotice] = useState<{ message: string; type: "success" | "error" | "info" } | null>(null);
-
-  const showNotice = (message: string, type: "success" | "error" | "info" = "success") => {
-    setNotice({ message, type });
-    setTimeout(() => setNotice(null), 5000);
-  };
-
   // Sync profile form when user store changes
   useEffect(() => {
     if (user) {
@@ -91,19 +85,11 @@ export default function SettingsPage() {
     if (!token) return;
     async function loadSubscription() {
       try {
-        const res = await fetch("/api/billing/subscription", {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-        if (res.ok) {
-          const data = await res.json();
-          setActiveSub(data);
-        } else {
-          setActiveSub(null);
-        }
+        const res = await apiClient.get("/billing/subscription");
+        setActiveSub(res.data);
       } catch (err) {
         console.error("Error loading subscription:", err);
+        setActiveSub(null);
       } finally {
         setLoadingSub(false);
       }
@@ -125,7 +111,7 @@ export default function SettingsPage() {
   const handleToggleChange = (key: string, value: boolean, setter: (val: boolean) => void, label: string) => {
     setter(value);
     localStorage.setItem(key, String(value));
-    showNotice(`تم تحديث خيار: ${label}`, "success");
+    toast.success(`تم تحديث خيار: ${label}`);
   };
 
   // Update Profile details
@@ -134,29 +120,16 @@ export default function SettingsPage() {
     if (!token) return;
     setSavingProfile(true);
     try {
-      const res = await fetch("/api/auth/me", {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          business_name: businessName,
-          business_type: businessType,
-        }),
+      const res = await apiClient.put("/auth/me", {
+        business_name: businessName,
+        business_type: businessType,
       });
 
-      if (res.ok) {
-        const updatedUser = await res.json();
-        setAuth(token, updatedUser);
-        showNotice("✨ تم حفظ معلومات النشاط التجاري بنجاح!", "success");
-      } else {
-        const errData = await res.json();
-        showNotice(`❌ فشل الحفظ: ${errData.detail || "خطأ غير معروف"}`, "error");
-      }
-    } catch (err) {
+      setAuth(token, res.data);
+      toast.success("✨ تم حفظ معلومات النشاط التجاري بنجاح!");
+    } catch (err: any) {
       console.error(err);
-      showNotice("❌ حدث خطأ أثناء الاتصال بالخادم لحفظ البيانات.", "error");
+      toast.error(`❌ فشل الحفظ: ${err.response?.data?.detail || "خطأ غير معروف"}`);
     } finally {
       setSavingProfile(false);
     }
@@ -167,22 +140,11 @@ export default function SettingsPage() {
     if (!user?.email) return;
     setSendingReset(true);
     try {
-      const res = await fetch("/api/auth/forgot-password", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ email: user.email }),
-      });
-
-      if (res.ok) {
-        showNotice("📧 تم إرسال تعليمات إعادة تعيين كلمة المرور إلى بريدك الإلكتروني بنجاح.", "success");
-      } else {
-        showNotice("❌ فشل إرسال الرابط. يرجى المحاولة مرة أخرى لاحقاً.", "error");
-      }
+      await apiClient.post("/auth/forgot-password", { email: user.email });
+      toast.success("📧 تم إرسال تعليمات إعادة تعيين كلمة المرور إلى بريدك الإلكتروني بنجاح.");
     } catch (err) {
       console.error(err);
-      showNotice("❌ حدث خطأ أثناء محاولة إرسال الطلب.", "error");
+      toast.error("❌ فشل إرسال الرابط. يرجى المحاولة مرة أخرى لاحقاً.");
     } finally {
       setSendingReset(false);
     }
@@ -196,19 +158,19 @@ export default function SettingsPage() {
     try {
       if (confirmAction === "logout") {
         logout();
-        showNotice("تم تسجيل الخروج بنجاح.", "info");
+        toast("تم تسجيل الخروج بنجاح.", { icon: "ℹ️" });
       } else if (confirmAction === "disconnect") {
         // Simulating backend action
         await new Promise((resolve) => setTimeout(resolve, 1000));
-        showNotice("🔌 تم فصل كافة قنوات الاتصال والرد الآلي بنجاح.", "info");
+        toast.success("🔌 تم فصل كافة قنوات الاتصال والرد الآلي بنجاح.");
       } else if (confirmAction === "delete_chats") {
         // Simulating backend action
         await new Promise((resolve) => setTimeout(resolve, 1000));
-        showNotice("🗑️ تم تنظيف كافة المحادثات والرسائل المؤرشفة بنجاح.", "info");
+        toast.success("🗑️ تم تنظيف كافة المحادثات والرسائل المؤرشفة بنجاح.");
       }
     } catch (err) {
       console.error(err);
-      showNotice("❌ فشل تنفيذ الإجراء. يرجى إعادة المحاولة.", "error");
+      toast.error("❌ فشل تنفيذ الإجراء. يرجى إعادة المحاولة.");
     } finally {
       setActionLoading(false);
       setConfirmAction(null);
@@ -220,15 +182,6 @@ export default function SettingsPage() {
       <div className="grid gap-6 xl:grid-cols-[1fr_420px]">
         {/* Right column: Main Form Settings */}
         <div className="space-y-6">
-          {notice && (
-            <div className={`rounded-3xl border px-5 py-4 text-sm font-semibold text-right transition-all duration-300 ${
-              notice.type === "success" ? "border-emeraldx-400/20 bg-emeraldx-500/10 text-emeraldx-400" :
-              notice.type === "error" ? "border-red-400/20 bg-red-500/10 text-red-400" :
-              "border-cyanx-400/20 bg-cyanx-500/10 text-cyanx-400"
-            }`}>
-              {notice.message}
-            </div>
-          )}
 
           {/* Business Profile Details */}
           <Card>

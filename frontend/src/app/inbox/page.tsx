@@ -7,6 +7,8 @@ import { ConversationList } from "@/components/conversation-list";
 import { useAuthStore } from "@/store/use-auth-store";
 import type { Conversation, Message, ConversationStatus } from "@/lib/types";
 import { Loader2 } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { apiClient } from "@/lib/api-client";
 
 export default function InboxPage() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -15,59 +17,47 @@ export default function InboxPage() {
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
   const [messagesLoading, setMessagesLoading] = useState(false);
   const { token } = useAuthStore();
+  const queryClient = useQueryClient();
+
+  const { data: conversations = [], isLoading: loading } = useQuery({
+    queryKey: ["conversations"],
+    queryFn: async () => {
+      const res = await apiClient.get("/conversations");
+      const data = res.data.conversations || [];
+      return [...data].sort(
+        (a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime()
+      );
+    },
+    enabled: !!token,
+  });
 
   useEffect(() => {
-    async function load() {
-      if (!token) return;
-      try {
-        const res = await fetch("/api/conversations", {
-          headers: { Authorization: "Bearer " + token }
-        });
-        const data = await res.json();
-        if (data.ok && data.conversations) {
-          const sorted = [...data.conversations].sort(
-            (a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime()
-          );
-          setConversations(sorted);
-          if (sorted.length > 0) {
-            setSelectedId(sorted[0].id);
-          }
-        }
-      } catch (err) {
-        console.error("Failed to load conversations", err);
-      } finally {
-        setLoading(false);
-      }
+    if (conversations.length > 0 && !selectedId) {
+      setSelectedId(conversations[0].id);
     }
-    load();
-  }, [token]);
+  }, [conversations, selectedId]);
 
-  useEffect(() => {
-    async function loadMessages() {
-      if (!selectedId || !token) return;
-      const baseConversation = conversations.find(c => c.id === selectedId);
-      if (!baseConversation) return;
+  const { data: conversationDetails, isLoading: messagesLoading } = useQuery({
+    queryKey: ["conversation", selectedId],
+    queryFn: async () => {
+      if (!selectedId) return null;
+      const baseConversation = conversations.find((c) => c.id === selectedId);
+      if (!baseConversation) return null;
       
-      setMessagesLoading(true);
-      try {
-        const res = await fetch(`/api/conversations/${selectedId}`, {
-          headers: { Authorization: "Bearer " + token }
-        });
-        const data = await res.json();
-        if (data.ok && data.conversation) {
-          setSelectedConversation({ ...baseConversation, messages: data.conversation.messages });
-        } else {
-          setSelectedConversation(baseConversation);
-        }
-      } catch (err) {
-        console.error("Failed to load conversation details", err);
-        setSelectedConversation(baseConversation);
-      } finally {
-        setMessagesLoading(false);
+      const res = await apiClient.get(`/conversations/${selectedId}`);
+      if (res.data.conversation) {
+        return { ...baseConversation, messages: res.data.conversation.messages };
       }
+      return baseConversation;
+    },
+    enabled: !!selectedId && !!token && conversations.length > 0,
+  });
+
+  useEffect(() => {
+    if (conversationDetails) {
+      setSelectedConversation(conversationDetails);
     }
-    loadMessages();
-  }, [selectedId, token]); // Only trigger when selecting a different conversation
+  }, [conversationDetails]);
 
   function handleStatusChange(id: string, newStatus: ConversationStatus) {
     setConversations(prev =>

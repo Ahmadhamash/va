@@ -27,91 +27,81 @@ import type { Conversation } from "@/lib/types";
 import { useAuthStore } from "@/store/use-auth-store";
 import { Loader2 } from "lucide-react";
 
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiClient } from "@/lib/api-client";
+import { toast } from "react-hot-toast";
+
 export default function DashboardPage() {
-  const [notice, setNotice] = useState("كل الأنظمة تعمل بشكل طبيعي.");
+  const queryClient = useQueryClient();
   const [aiPaused, setAiPaused] = useState(false);
-  const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [loading, setLoading] = useState(true);
   const { token } = useAuthStore();
-  const [channels, setChannels] = useState<any[]>([]);
-  const [knowledgeCount, setKnowledgeCount] = useState(0);
-  const [productsCount, setProductsCount] = useState(0);
 
-  useEffect(() => {
-    async function load() {
-      if (!token) return;
-      try {
-        const [convRes, chanRes, knowRes, prodRes] = await Promise.all([
-          fetch("/api/conversations", { headers: { Authorization: "Bearer " + token } }),
-          fetch("/api/integrations/connect", { headers: { Authorization: "Bearer " + token } }),
-          fetch("/api/knowledge", { headers: { Authorization: "Bearer " + token } }),
-          fetch("/api/products", { headers: { Authorization: "Bearer " + token } })
-        ]);
+  const { data: conversations = [], isLoading: loadingConversations } = useQuery({
+    queryKey: ["conversations"],
+    queryFn: async () => {
+      const res = await apiClient.get("/conversations");
+      const data = res.data.conversations || [];
+      return [...data].sort((a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime());
+    },
+    enabled: !!token,
+  });
 
-        const [convData, chanData, knowData, prodData] = await Promise.all([
-          convRes.json().catch(() => ({})),
-          chanRes.json().catch(() => ({})),
-          knowRes.json().catch(() => ({})),
-          prodRes.json().catch(() => ({}))
-        ]);
+  const { data: channels = [], isLoading: loadingChannels } = useQuery({
+    queryKey: ["channels"],
+    queryFn: async () => {
+      const res = await apiClient.get("/integrations/connect");
+      return res.data.channels || [];
+    },
+    enabled: !!token,
+  });
 
-        if (convRes.ok && convData.conversations) {
-          const sorted = [...convData.conversations].sort(
-            (a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime()
-          );
-          setConversations(sorted);
-        }
-        
-        if (chanRes.ok && chanData.channels) {
-          setChannels(chanData.channels);
-        }
+  const { data: knowledgeCount = 0 } = useQuery({
+    queryKey: ["knowledgeCount"],
+    queryFn: async () => {
+      const res = await apiClient.get("/knowledge");
+      return res.data.knowledge?.length || 0;
+    },
+    enabled: !!token,
+  });
 
-        if (knowRes.ok && knowData.knowledge) {
-          setKnowledgeCount(knowData.knowledge.length);
-        }
+  const { data: productsCount = 0 } = useQuery({
+    queryKey: ["productsCount"],
+    queryFn: async () => {
+      const res = await apiClient.get("/products");
+      return res.data.products?.length || 0;
+    },
+    enabled: !!token,
+  });
 
-        if (prodRes.ok && prodData.products) {
-          setProductsCount(prodData.products.length);
-        }
-      } catch (err) {
-        console.error("Failed to load dashboard data", err);
-      } finally {
-        setLoading(false);
-      }
-    }
-    load();
-  }, [token]);
+  const deleteChannelMutation = useMutation({
+    mutationFn: async (channelId: string) => {
+      return apiClient.delete(`/integrations/connect/${channelId}`);
+    },
+    onSuccess: () => {
+      toast.success("تم حذف القناة بنجاح.");
+      queryClient.invalidateQueries({ queryKey: ["channels"] });
+    },
+    onError: () => {
+      toast.error("حدث خطأ أثناء حذف القناة.");
+    },
+  });
 
   async function deleteChannel(channelId: string) {
     if (!token) return;
-    try {
-      const res = await fetch(`/api/integrations/connect/${channelId}`, {
-        method: "DELETE",
-        headers: { Authorization: "Bearer " + token }
-      });
-      if (res.ok) {
-        setChannels((prev) => prev.filter((c: any) => c.id !== channelId));
-        setNotice("تم حذف القناة بنجاح.");
-      } else {
-        setNotice("حدث خطأ أثناء حذف القناة.");
-      }
-    } catch (e) {
-      setNotice("حدث خطأ أثناء الحذف.");
-    }
+    deleteChannelMutation.mutate(channelId);
   }
 
   const activeChannelsCount = channels.filter((c: any) => c.status === "CONNECTED").length;
-  const pendingHandoffs = conversations.filter((c) => c.status === "NEEDS_HUMAN").length;
-  const activeHandoffs = conversations.filter((c) => c.status === "HUMAN_ACTIVE").length;
+  const pendingHandoffs = conversations.filter((c: any) => c.status === "NEEDS_HUMAN").length;
+  const activeHandoffs = conversations.filter((c: any) => c.status === "HUMAN_ACTIVE").length;
+  const loading = loadingConversations || loadingChannels;
 
   return (
     <AppShell title="الرئيسية" subtitle="مركز تحكم بسيط لكل قنوات خدمة العملاء الذكية.">
       <div className="space-y-6">
         <ChannelConnectionCard channels={channels} onDelete={deleteChannel} />
 
-        <div className="rounded-3xl border border-cyanx-400/20 bg-cyanx-500/10 px-5 py-4 text-sm font-semibold text-cyanx-400">
-          {notice}
-        </div>
+
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           <MetricCard label="القنوات النشطة" value={String(activeChannelsCount)} hint={channels.length > 0 ? "نشط" : "لا توجد قنوات"} icon={MessageCircle} />

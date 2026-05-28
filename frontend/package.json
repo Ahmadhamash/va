@@ -11,12 +11,15 @@
     "prisma:seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
+    "@tanstack/react-query": "^5.100.14",
+    "axios": "^1.16.1",
     "clsx": "^2.1.1",
     "framer-motion": "^11.18.2",
     "lucide-react": "^0.468.0",
     "next": "^16.2.6",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "react-hot-toast": "^2.6.0",
     "tailwind-merge": "^2.6.0",
     "zustand": "^5.0.2"
   },
