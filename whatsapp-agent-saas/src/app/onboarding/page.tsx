@@ -91,6 +91,17 @@ export default function OnboardingPage() {
   // Stepper saving transitions
   const [savingStep, setSavingStep] = useState(false);
 
+  // Connection mode toggle: chatwoot vs manual Meta API
+  const [connectionMode, setConnectionMode] = useState<"chatwoot" | "manual">("chatwoot");
+
+  useEffect(() => {
+    if (user?.chatwoot_account_id) {
+      setConnectionMode("chatwoot");
+    } else {
+      setConnectionMode("manual");
+    }
+  }, [user]);
+
   // Load user data on mount
   useEffect(() => {
     if (user) {
@@ -374,7 +385,36 @@ export default function OnboardingPage() {
     </div>,
 
     <div key="connect" className="space-y-4">
-      {user?.chatwoot_account_id ? (
+      {user?.chatwoot_account_id && (
+        <div className="flex justify-end mb-4">
+          <div className="inline-flex rounded-2xl bg-white/[0.04] p-1 border border-white/5">
+            <button
+              type="button"
+              onClick={() => setConnectionMode("manual")}
+              className={`rounded-xl px-4 py-2 text-xs font-bold transition ${
+                connectionMode === "manual"
+                  ? "bg-emeraldx-500 text-ink-950 shadow-glow"
+                  : "text-white/60 hover:text-white"
+              }`}
+            >
+              الربط اليدوي المباشر (Meta)
+            </button>
+            <button
+              type="button"
+              onClick={() => setConnectionMode("chatwoot")}
+              className={`rounded-xl px-4 py-2 text-xs font-bold transition ${
+                connectionMode === "chatwoot"
+                  ? "bg-emeraldx-500 text-ink-950 shadow-glow"
+                  : "text-white/60 hover:text-white"
+              }`}
+            >
+              الربط التلقائي الموحد (Chatwoot)
+            </button>
+          </div>
+        </div>
+      )}
+
+      {connectionMode === "chatwoot" && user?.chatwoot_account_id ? (
         <div className="space-y-6 text-right">
           <div className="rounded-3xl border border-emeraldx-400/20 bg-emeraldx-500/5 p-6">
             <div className="flex flex-row-reverse items-center justify-between gap-4 mb-4">

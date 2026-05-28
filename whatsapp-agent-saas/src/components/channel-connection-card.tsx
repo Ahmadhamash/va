@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { 
   ArrowLeft, 
   CircleCheck, 
@@ -49,6 +49,16 @@ export function ChannelConnectionCard({
 }) {
   const { user } = useAuthStore();
   const isChatwootActive = !!user?.chatwoot_account_id;
+  const [connectionMode, setConnectionMode] = useState<"chatwoot" | "manual">("chatwoot");
+
+  useEffect(() => {
+    if (user?.chatwoot_account_id) {
+      setConnectionMode("chatwoot");
+    } else {
+      setConnectionMode("manual");
+    }
+  }, [user]);
+
   const connectedCount = channels.filter(c => c.status === "CONNECTED").length;
   const hasChannels = channels.length > 0;
 
@@ -68,6 +78,8 @@ export function ChannelConnectionCard({
     return `${base}${path}`;
   };
 
+  const showChatwootView = isChatwootActive && connectionMode === "chatwoot";
+
   return (
     <GradientCard className="border-emeraldx-400/20">
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -77,7 +89,7 @@ export function ChannelConnectionCard({
               <MessageCircle className="h-7 w-7" />
             </div>
             <div>
-              {isChatwootActive ? (
+              {showChatwootView ? (
                 <div className="flex items-center gap-1.5 rounded-full px-2 py-1 text-xs font-semibold bg-emeraldx-500/10 text-emeraldx-400">
                   <CircleCheck className="h-3 w-3" />
                   ربط Chatwoot مفعّل تلقائياً
@@ -89,10 +101,10 @@ export function ChannelConnectionCard({
                 </div>
               )}
               <h3 className="text-xl font-semibold text-white">
-                {isChatwootActive ? "قنوات الاتصال الموحدة" : "اربط قنوات العملاء"}
+                {showChatwootView ? "قنوات الاتصال الموحدة" : "اربط قنوات العملاء"}
               </h3>
               <p className="mt-1 max-w-2xl text-sm leading-7 text-white/58 text-right">
-                {isChatwootActive 
+                {showChatwootView 
                   ? "تتم إدارة قنواتك (واتساب، فيسبوك، إنستجرام) عبر لوحة تحكم Chatwoot ومزامنتها تلقائياً مع وكيل الذكاء الاصطناعي الخاص بنا."
                   : "واتساب، فيسبوك، وإنستغرام من لوحة واحدة. قم بربط قنواتك الرسمية لتفعيل ردود الوكيل الذكي وإدارة محادثات العملاء."
                 }
@@ -100,7 +112,7 @@ export function ChannelConnectionCard({
             </div>
           </div>
         </div>
-        {isChatwootActive ? (
+        {showChatwootView ? (
           <a
             href={`${process.env.NEXT_PUBLIC_CHATWOOT_URL || "https://chat.masarjo.com"}/app/accounts/${user.chatwoot_account_id}/dashboard`}
             target="_blank"
@@ -121,6 +133,35 @@ export function ChannelConnectionCard({
       </div>
 
       {isChatwootActive && (
+        <div className="flex justify-end mt-4 mb-2">
+          <div className="inline-flex rounded-2xl bg-white/[0.04] p-1 border border-white/5">
+            <button
+              type="button"
+              onClick={() => setConnectionMode("manual")}
+              className={`rounded-xl px-3 py-1.5 text-[10px] font-bold transition ${
+                connectionMode === "manual"
+                  ? "bg-emeraldx-500 text-ink-950 shadow-glow"
+                  : "text-white/60 hover:text-white"
+              }`}
+            >
+              الربط اليدوي المباشر (Meta)
+            </button>
+            <button
+              type="button"
+              onClick={() => setConnectionMode("chatwoot")}
+              className={`rounded-xl px-3 py-1.5 text-[10px] font-bold transition ${
+                connectionMode === "chatwoot"
+                  ? "bg-emeraldx-500 text-ink-950 shadow-glow"
+                  : "text-white/60 hover:text-white"
+              }`}
+            >
+              الربط التلقائي (Chatwoot)
+            </button>
+          </div>
+        </div>
+      )}
+
+      {showChatwootView && (
         <div className="mt-6 rounded-3xl border border-emeraldx-400/20 bg-emeraldx-500/5 p-6 text-right space-y-4">
           <div className="flex flex-row-reverse items-center justify-between gap-4">
             <div className="grid h-12 w-12 place-items-center rounded-2xl bg-white/8 text-emeraldx-400">
@@ -148,7 +189,7 @@ export function ChannelConnectionCard({
         </div>
       )}
 
-      {hasChannels && (
+      {hasChannels && (!isChatwootActive || connectionMode === "manual") && (
         <div className="mt-6 space-y-4">
           {isChatwootActive && (
             <h4 className="text-sm font-bold text-white/60 mb-2">القنوات التقليدية المربوطة يدوياً:</h4>
@@ -244,7 +285,7 @@ export function ChannelConnectionCard({
         </div>
       )}
 
-      {!isChatwootActive && !hasChannels && (
+      {(!isChatwootActive || connectionMode === "manual") && !hasChannels && (
         <div className="mt-6 flex flex-col items-center justify-center rounded-3xl border border-dashed border-white/15 bg-white/[0.025] py-10 text-center">
           <MessageCircle className="h-10 w-10 text-white/20 mb-3" />
           <p className="text-sm text-white/45">لا توجد قنوات مرتبطة حتى الآن</p>
