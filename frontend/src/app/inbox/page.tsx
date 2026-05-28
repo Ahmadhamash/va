@@ -11,11 +11,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
 
 export default function InboxPage() {
-  const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState("");
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
-  const [messagesLoading, setMessagesLoading] = useState(false);
   const { token } = useAuthStore();
   const queryClient = useQueryClient();
 
@@ -60,16 +57,18 @@ export default function InboxPage() {
   }, [conversationDetails]);
 
   function handleStatusChange(id: string, newStatus: ConversationStatus) {
-    setConversations(prev =>
-      prev.map(c => (c.id === id ? { ...c, status: newStatus } : c))
-    );
+    queryClient.setQueryData(["conversations"], (prev: Conversation[] | undefined) => {
+      if (!prev) return prev;
+      return prev.map(c => (c.id === id ? { ...c, status: newStatus } : c));
+    });
     setSelectedConversation(prev =>
       prev && prev.id === id ? { ...prev, status: newStatus } : prev
     );
   }
 
   function handleNewMessage(id: string, message: Message) {
-    setConversations(prev => {
+    queryClient.setQueryData(["conversations"], (prev: Conversation[] | undefined) => {
+      if (!prev) return prev;
       const updated = prev.map(c =>
         c.id === id
           ? {
