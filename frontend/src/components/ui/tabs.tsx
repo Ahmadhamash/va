@@ -48,8 +48,8 @@ export function TabsTrigger({
       type="button"
       onClick={() => ctx.setValue(value)}
       className={cn(
-        "flex-1 rounded-full py-2.5 text-sm font-semibold transition hover:scale-[1.02]",
-        active ? "bg-brand text-white" : "bg-surface-hover text-secondary hover:bg-surface hover:text-primary",
+        "rounded-2xl px-4 py-2 text-sm font-semibold transition",
+        active ? "bg-emeraldx-500 text-ink-950" : "bg-white/7 text-white/60 hover:bg-white/10 hover:text-white",
         className
       )}
     >

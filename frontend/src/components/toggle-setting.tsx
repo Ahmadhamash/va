@@ -32,16 +32,16 @@ export function ToggleSetting({
     <button
       type="button"
       onClick={handleToggle}
-      className="flex w-full items-center justify-between gap-4 rounded-3xl border border-border bg-surface p-4 text-right transition hover:bg-surface-hover"
+      className="flex w-full items-center justify-between gap-4 rounded-3xl border border-white/10 bg-white/[0.05] p-4 text-right transition hover:bg-white/[0.075]"
     >
       <span>
-        <span className="block text-sm font-semibold text-primary">{title}</span>
-        <span className="mt-1 block text-sm leading-6 text-muted text-right">{description}</span>
+        <span className="block text-sm font-semibold text-white">{title}</span>
+        <span className="mt-1 block text-sm leading-6 text-white/48 text-right">{description}</span>
       </span>
       <span
         className={cn(
           "relative h-7 w-12 shrink-0 rounded-full transition",
-          checked ? "bg-brand" : "bg-border"
+          checked ? "bg-emeraldx-500" : "bg-white/14"
         )}
       >
         <span

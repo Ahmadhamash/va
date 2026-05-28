@@ -115,8 +115,8 @@ export default function DashboardPage() {
           <GradientCard>
             <div className="mb-5 flex items-center justify-between gap-3">
               <div>
-                <h2 className="text-xl font-semibold text-primary">آخر المحادثات</h2>
-                <p className="mt-1 text-sm text-secondary">نظرة سريعة على العملاء والقناة وحالة المتابعة.</p>
+                <h2 className="text-xl font-semibold text-white">آخر المحادثات</h2>
+                <p className="mt-1 text-sm text-white/45">نظرة سريعة على العملاء والقناة وحالة المتابعة.</p>
               </div>
               <Link href="/inbox">
                 <Button variant="secondary">افتح المحادثات</Button>
@@ -128,28 +128,28 @@ export default function DashboardPage() {
                   <Loader2 className="h-6 w-6 animate-spin text-cyanx-400" />
                 </div>
               ) : conversations.length === 0 ? (
-                <div className="text-center text-muted py-8">لا توجد محادثات حديثة</div>
+                <div className="text-center text-white/45 py-8">لا توجد محادثات حديثة</div>
               ) : (
                 conversations.slice(0, 5).map((conversation) => (
-                  <div key={conversation.id} className="flex flex-wrap items-center justify-between gap-3 rounded-3xl border border-border bg-surface-hover p-4">
+                  <div key={conversation.id} className="flex flex-wrap items-center justify-between gap-3 rounded-3xl border border-white/10 bg-white/[0.045] p-4">
                     <div>
-                      <div className="flex items-center gap-2 font-semibold text-primary">
+                      <div className="flex items-center gap-2 font-semibold text-white">
                         {conversation.channel === "WHATSAPP" ? (
-                          <MessageCircle className="h-4 w-4 text-brand" />
+                          <MessageCircle className="h-4 w-4 text-emeraldx-400" />
                         ) : conversation.channel === "FACEBOOK" || conversation.channel === "MESSENGER" ? (
-                          <Facebook className="h-4 w-4 text-brand-accent" />
+                          <Facebook className="h-4 w-4 text-cyanx-400" />
                         ) : conversation.channel === "INSTAGRAM" ? (
-                          <Instagram className="h-4 w-4 text-violet-400" />
+                          <Instagram className="h-4 w-4 text-violet-200" />
                         ) : conversation.channel === "WEBHOOK" ? (
-                          <Webhook className="h-4 w-4 text-amber-400" />
+                          <Webhook className="h-4 w-4 text-amber-200" />
                         ) : conversation.channel === "WIDGET" ? (
-                          <Code className="h-4 w-4 text-teal-400" />
+                          <Code className="h-4 w-4 text-teal-200" />
                         ) : (
-                          <MessageCircle className="h-4 w-4 text-brand" />
+                          <MessageCircle className="h-4 w-4 text-emeraldx-400" />
                         )}
                         {conversation.customerName}
                       </div>
-                      <div className="mt-1 text-sm text-secondary">{conversation.lastMessage}</div>
+                      <div className="mt-1 text-sm text-white/45">{conversation.lastMessage}</div>
                     </div>
                     <StatusBadge status={conversation.status} />
                   </div>
@@ -162,8 +162,8 @@ export default function DashboardPage() {
             <GradientCard>
               <div className="flex items-center justify-between">
                 <div>
-                  <h2 className="text-xl font-semibold text-primary">صحة الوكيل</h2>
-                  <p className="mt-1 text-sm text-secondary">يرد من معلومات محفوظة ويتوقف عند الحساسية.</p>
+                  <h2 className="text-xl font-semibold text-white">صحة الوكيل</h2>
+                  <p className="mt-1 text-sm text-white/45">يرد من معلومات محفوظة ويتوقف عند الحساسية.</p>
                 </div>
                 <StatusBadge status={aiPaused ? "PAUSED" : "ACTIVE"} />
               </div>
@@ -173,16 +173,16 @@ export default function DashboardPage() {
                   ["المنتجات والخدمات", `${productsCount} متاح`],
                   ["قواعد التحويل البشري", "مفعّل"]
                 ].map(([label, value]) => (
-                  <div key={label} className="flex items-center justify-between rounded-2xl bg-surface-hover border border-border px-4 py-3 text-sm">
-                    <span className="text-secondary">{label}</span>
-                    <span className="font-semibold text-primary">{value}</span>
+                  <div key={label} className="flex items-center justify-between rounded-2xl bg-white/[0.055] px-4 py-3 text-sm">
+                    <span className="text-white/50">{label}</span>
+                    <span className="font-semibold text-white">{value}</span>
                   </div>
                 ))}
               </div>
             </GradientCard>
 
             <GradientCard>
-              <h2 className="text-xl font-semibold text-primary">إجراءات سريعة</h2>
+              <h2 className="text-xl font-semibold text-white">إجراءات سريعة</h2>
               <div className="mt-5 grid gap-3 sm:grid-cols-2">
                 <Button variant="secondary" className="w-full justify-start" onClick={() => setAiPaused((value) => !value)}>
                   <PauseCircle className="h-4 w-4" />
