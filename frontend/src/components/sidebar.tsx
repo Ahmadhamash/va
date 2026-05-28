@@ -16,7 +16,11 @@ import {
   Sparkles,
   Users,
   WalletCards,
-  X
+  X,
+  Mic,
+  Calendar,
+  Zap,
+  Scale
 } from "lucide-react";
 import { useAuthStore } from "@/store/use-auth-store";
 import { cn } from "@/lib/utils";
@@ -26,10 +30,14 @@ const clientNavItems = [
   { href: "/inbox", label: "المحادثات", icon: Inbox },
   { href: "/agent", label: "الوكيل الذكي", icon: Bot },
   { href: "/knowledge", label: "المعرفة", icon: WalletCards },
+  { href: "/bookings", label: "الحجوزات", icon: Calendar },
+  { href: "/workflows", label: "الأتمتة", icon: Zap },
+  { href: "/policies", label: "السياسات", icon: Scale },
   { href: "/analytics", label: "التحليلات", icon: BarChart3 },
   { href: "/team", label: "الفريق", icon: Users },
   { href: "/billing", label: "الباقات", icon: CreditCard },
-  { href: "/settings", label: "الإعدادات", icon: Settings }
+  { href: "/settings/voice", label: "إعدادات الصوت", icon: Mic },
+  { href: "/settings", label: "الإعدادات العامة", icon: Settings }
 ];
 
 const adminNavItems = [
