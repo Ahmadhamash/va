@@ -186,6 +186,20 @@ TOOLS = [
     },
 ]
 
+def get_tools_for_intent(intent: str) -> list[dict]:
+    base = [t for t in TOOLS if t["function"]["name"] == "escalate_to_human"]
+    
+    if intent == "sales":
+        allowed = {"get_catalog", "get_offers", "get_packages", "get_payment_methods"}
+    elif intent == "support":
+        allowed = {"get_delivery_info", "get_policies"}
+    elif intent == "booking":
+        allowed = {"get_available_slots", "create_booking"}
+    else: # general
+        allowed = set()
+        
+    return base + [t for t in TOOLS if t["function"]["name"] in allowed]
+
 
 # ─── DB tools ────────────────────────────────────────────────────────────────
 def _serialize_variant(v: ItemVariant) -> dict:

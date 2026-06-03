@@ -104,3 +104,18 @@ services:
 volumes:
   postgres_data:
   redis_data:
+
+  # ─── Optional: Local LLM (Ollama) ─────────────────────────────────────────
+  # Uncomment the following lines to run Ollama locally for the MoE architecture.
+  # You will need to pull a model first: docker exec -it va-ollama-1 ollama run llama3
+  #
+  # ollama:
+  #   image: ollama/ollama
+  #   restart: unless-stopped
+  #   ports:
+  #     - "11434:11434"
+  #   volumes:
+  #     - ollama_data:/root/.ollama
+  #
+  # # Don't forget to add ollama_data to volumes list below if uncommented
+  # # ollama_data:

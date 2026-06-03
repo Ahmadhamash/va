@@ -18,6 +18,12 @@ class Settings(BaseSettings):
     # OpenAI
     OPENAI_API_KEY: str = ""
 
+    # Local LLM / MoE
+    LOCAL_LLM_BASE_URL: str = ""
+    LOCAL_LLM_API_KEY: str = ""
+    LOCAL_LLM_MODEL: str = "llama3"
+    LOCAL_LLM_ENABLED: bool = False
+
     # Redis / task queue
     REDIS_URL: str = "redis://localhost:6379/0"
 

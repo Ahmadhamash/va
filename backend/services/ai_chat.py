@@ -19,7 +19,7 @@ from services.answer_verifier import (
     SAFE_RESPONSES,
 )
 
-from .ai_tools import TOOLS, execute_db_function
+from .ai_tools import TOOLS, execute_db_function, get_tools_for_intent
 from .ai_prompts import build_system_prompt, get_style_samples
 from .ai_media import transcribe_audio, TranscriptionError, _encode_image_from_url, _transcribe_from_url
 
@@ -104,8 +104,29 @@ async def _generate_reply(
     )
     workflows = list((await db.execute(stmt_wf)).scalars().all())
 
+    # Extract text content for the router
+    if isinstance(content, str):
+        text_content = content
+    elif isinstance(content, list):
+        text_content = next((item["text"] for item in content if item.get("type") == "text"), "")
+    else:
+        text_content = str(content)
+        
+    from services.router import get_intent_for_message
+    from config import settings
+    
+    intent = await get_intent_for_message(text_content, db)
+    allowed_tools = get_tools_for_intent(intent)
+    
+    if settings.LOCAL_LLM_ENABLED and intent in ("support", "general"):
+        model = settings.LOCAL_LLM_MODEL
+        client = AsyncOpenAI(
+            base_url=settings.LOCAL_LLM_BASE_URL,
+            api_key=settings.LOCAL_LLM_API_KEY or "dummy",
+        )
+
     messages: list[dict] = [
-        {"role": "system", "content": build_system_prompt(user, style_samples, workflows)},
+        {"role": "system", "content": build_system_prompt(user, style_samples, workflows, intent=intent)},
         *history,
         {"role": "user", "content": content},
     ]
@@ -113,8 +134,8 @@ async def _generate_reply(
     response = await client.chat.completions.create(
         model=model,
         messages=messages,
-        tools=TOOLS,
-        tool_choice="auto",
+        tools=allowed_tools if allowed_tools else None,
+        tool_choice="auto" if allowed_tools else "none",
         temperature=0.2,
         max_tokens=1000,
     )
@@ -152,8 +173,8 @@ async def _generate_reply(
         response = await client.chat.completions.create(
             model=model,
             messages=messages,
-            tools=TOOLS,
-            tool_choice="auto",
+            tools=allowed_tools if allowed_tools else None,
+            tool_choice="auto" if allowed_tools else "none",
             temperature=0.3,
             max_tokens=1000,
         )
