@@ -105,9 +105,6 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
-    networks:
-      - default
-      - chatwoot_proxy
     depends_on:
       - backend
       - frontend
@@ -141,7 +138,3 @@ volumes:
   caddy_data:
   caddy_config:
   backups_data:
-
-networks:
-  chatwoot_proxy:
-    external: true

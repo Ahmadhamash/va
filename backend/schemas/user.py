@@ -34,14 +34,13 @@ class UserOut(BaseModel):
     username: str
     email: EmailStr
     business_name: str | None
+    business_type: str | None = None
     ai_persona: str | None
     role: str
     is_active: bool
     created_at: datetime
     email_verified: bool
     ai_credit_balance: int
-    chatwoot_account_id: str | None = None
-    chatwoot_user_token: str | None = None
 
 
 class Token(BaseModel):

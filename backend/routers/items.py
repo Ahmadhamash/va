@@ -84,6 +84,12 @@ async def create_item(
         available=payload.available,
         image_url=payload.image_url,
         item_metadata=payload.item_metadata or {},
+        warranty_duration=payload.warranty_duration,
+        warranty_terms=payload.warranty_terms,
+        warranty_coverage=payload.warranty_coverage,
+        warranty_exclusions=payload.warranty_exclusions,
+        stock_quantity=payload.stock_quantity,
+        stock_status=payload.stock_status,
     )
     db.add(item)
     await db.commit()

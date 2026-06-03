@@ -98,7 +98,6 @@ async def register(
         business_type=payload.business_type,
         ai_persona=persona,
         role=role,
-        chatwoot_account_id=None,
     )
     db.add(user)
     await db.flush()  # To get user.id for policies
@@ -116,7 +115,7 @@ async def register(
         key="refresh_token",
         value=refresh_token,
         httponly=True,
-        secure=True,
+        secure=settings.APP_ENV == "production",
         samesite="lax",
         max_age=settings.REFRESH_TOKEN_EXPIRE_MINUTES * 60,
     )
@@ -147,7 +146,7 @@ async def login(
         key="refresh_token",
         value=refresh_token,
         httponly=True,
-        secure=True,
+        secure=settings.APP_ENV == "production",
         samesite="lax",
         max_age=settings.REFRESH_TOKEN_EXPIRE_MINUTES * 60,
     )
@@ -221,7 +220,7 @@ async def refresh(request: Request, response: Response, db: AsyncSession = Depen
         key="refresh_token",
         value=new_refresh_token,
         httponly=True,
-        secure=True,
+        secure=settings.APP_ENV == "production",
         samesite="lax",
         max_age=settings.REFRESH_TOKEN_EXPIRE_MINUTES * 60,
     )

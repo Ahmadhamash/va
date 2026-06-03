@@ -44,12 +44,22 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return NextResponse.json({ 
       ok: true, 
       product: {
+        ...item,
         id: item.id,
         name: item.name,
         price: String(item.price),
         available: item.available !== false,
         description: item.description || "",
-        category: item.category || ""
+        category: item.category || "",
+        currency: item.currency || "USD",
+        image_url: item.image_url || "",
+        metadata: item.metadata || item.item_metadata || {},
+        warranty_duration: item.warranty_duration || "",
+        warranty_terms: item.warranty_terms || "",
+        warranty_coverage: item.warranty_coverage || "",
+        warranty_exclusions: item.warranty_exclusions || "",
+        stock_quantity: item.stock_quantity ?? "",
+        stock_status: item.stock_status || "in_stock"
       } 
     });
   } catch (err) {

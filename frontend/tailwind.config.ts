@@ -19,21 +19,21 @@ const config: Config = {
           700: "#1d2942"
         },
         emeraldx: {
-          400: "#42f5b0",
-          500: "#10d28e",
-          600: "#0aac74"
+          400: "#60a5fa",
+          500: "#2563eb",
+          600: "#1d4ed8"
         },
         violetrx: {
           400: "#9f7aea",
           500: "#7c3aed"
         },
         cyanx: {
-          400: "#5ee7ff",
-          500: "#22c7e8"
+          400: "#38bdf8",
+          500: "#0284c7"
         }
       },
       boxShadow: {
-        glow: "0 0 60px rgba(16, 210, 142, 0.18)",
+        glow: "0 0 60px rgba(37, 99, 235, 0.22)",
         violet: "0 0 70px rgba(124, 58, 237, 0.16)"
       },
       borderRadius: {

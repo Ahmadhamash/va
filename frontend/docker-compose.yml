@@ -13,12 +13,3 @@ services:
     expose:
       - "3000"
     restart: unless-stopped
-    networks:
-      default:
-      chatwoot_proxy:
-        aliases:
-          - whatsapp-agent-saas
-
-networks:
-  chatwoot_proxy:
-    external: true

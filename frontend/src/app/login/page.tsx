@@ -48,11 +48,9 @@ export default function LoginPage() {
       const user = await meRes.json();
 
       setAuth(token, user);
-      if (user.role === "admin") {
-        router.push("/admin");
-      } else {
-        router.push("/dashboard");
-      }
+      if (user.role === "admin") router.push("/admin");
+      else if (user.role === "support_agent") router.push("/support");
+      else router.push("/dashboard");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "\u062D\u062F\u062B \u062E\u0637\u0623");
     } finally {
@@ -67,7 +65,7 @@ export default function LoginPage() {
           <div className="mx-auto grid h-16 w-16 place-items-center rounded-3xl bg-emeraldx-500 text-ink-950 shadow-glow">
             <MessageCircle className="h-8 w-8" />
           </div>
-          <h1 className="mt-6 text-2xl font-bold text-white">{"\u0645\u0633\u0627\u0631"}</h1>
+          <h1 className="mt-6 text-2xl font-bold text-white">chatter</h1>
           <p className="mt-2 text-sm text-white/50">
             {mode === "login" ? "\u0633\u062C\u0644 \u062F\u062E\u0648\u0644\u0643 \u0644\u0625\u062F\u0627\u0631\u0629 \u0645\u062D\u0627\u062F\u062B\u0627\u062A\u0643" : "\u0623\u0646\u0634\u0626 \u062D\u0633\u0627\u0628\u0643 \u0627\u0644\u062C\u062F\u064A\u062F"}
           </p>

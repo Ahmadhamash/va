@@ -438,7 +438,7 @@ export default function SettingsPage() {
                       <AlertTriangle className="h-3.5 w-3.5" />
                     </h5>
                     <p className="text-[11px] text-white/60 mt-1.5 leading-5">
-                      {confirmAction === "logout" && "هل أنت متأكد من تسجيل خروجك من حساب مسار؟"}
+                      {confirmAction === "logout" && "هل أنت متأكد من تسجيل خروجك من حساب chatter؟"}
                       {confirmAction === "disconnect" && "هل تريد حقاً فصل كافة قنوات التواصل والواتساب؟ سيتوقف الرد الذكي فوراً."}
                       {confirmAction === "delete_chats" && "هل أنت متأكد من مسح كافة سجلات المحادثات والرسائل نهائياً؟ هذا الإجراء لا يمكن التراجع عنه."}
                     </p>
@@ -505,7 +505,7 @@ export default function SettingsPage() {
                   <ShieldCheck className="h-4 w-4 text-emeraldx-400" />
                 </div>
                 <p className="text-[11px] leading-5 text-white/40">
-                  منصة مسار مصممة لمساعدة العملاء والاستجابة الفورية لاستفساراتهم الواردة. نلتزم بحماية الخصوصية المطلقة للبيانات والمعلومات المشتركة عبر القنوات.
+                  منصة chatter مصممة لمساعدة العملاء والاستجابة الفورية لاستفساراتهم الواردة. نلتزم بحماية الخصوصية المطلقة للبيانات والمعلومات المشتركة عبر القنوات.
                 </p>
               </div>
             </CardContent>

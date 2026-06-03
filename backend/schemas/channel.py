@@ -24,5 +24,7 @@ class ChannelOut(BaseModel):
     created_at: datetime
     # Which secret keys are configured (values never returned)
     configured_keys: list[str] = []
+    # Values that are safe and required for manual setup.
+    setup_values: dict = {}
     # Relative endpoints the client wires into the platform
     endpoints: dict = {}

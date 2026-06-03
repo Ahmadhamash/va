@@ -17,12 +17,51 @@ apiClient.interceptors.request.use((config) => {
   return config;
 });
 
-// Response interceptor to handle global errors like 401
+let refreshPromise: Promise<string | null> | null = null;
+
+async function refreshAccessToken() {
+  if (!refreshPromise) {
+    refreshPromise = fetch("/api/auth/refresh", {
+      method: "POST",
+      credentials: "include",
+    })
+      .then(async (res) => {
+        if (!res.ok) return null;
+        const data = await res.json();
+        return typeof data.access_token === "string" ? data.access_token : null;
+      })
+      .finally(() => {
+        refreshPromise = null;
+      });
+  }
+  return refreshPromise;
+}
+
+// Response interceptor to refresh once before logging the user out.
 apiClient.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
+    const originalRequest = error.config as (typeof error.config & { _retry?: boolean }) | undefined;
+    if (
+      error.response?.status === 401 &&
+      originalRequest &&
+      !originalRequest._retry &&
+      !String(originalRequest.url || "").includes("/auth/refresh")
+    ) {
+      originalRequest._retry = true;
+      const nextToken = await refreshAccessToken();
+      if (nextToken) {
+        const current = useAuthStore.getState();
+        if (current.user) {
+          current.setAuth(nextToken, current.user);
+        }
+        originalRequest.headers = originalRequest.headers || {};
+        originalRequest.headers.Authorization = `Bearer ${nextToken}`;
+        return apiClient(originalRequest);
+      }
+    }
+
     if (error.response?.status === 401) {
-      // Token expired or unauthorized
       useAuthStore.getState().logout();
       if (typeof window !== "undefined") {
         window.location.href = "/login";

@@ -1,19 +1,19 @@
-import { useState, useEffect } from "react";
-import { 
-  ArrowLeft, 
-  CircleCheck, 
-  Facebook, 
-  Instagram, 
-  MessageCircle, 
-  ShieldCheck, 
-  Webhook, 
-  Code, 
-  Trash2, 
-  Plus, 
-  Copy, 
-  ChevronDown, 
+import { useMemo, useState } from "react";
+import {
+  AlertCircle,
+  CheckCircle2,
+  ChevronDown,
   ChevronUp,
-  ExternalLink
+  Code,
+  Copy,
+  ExternalLink,
+  Facebook,
+  Instagram,
+  MessageCircle,
+  Plus,
+  ShieldCheck,
+  Trash2,
+  Webhook,
 } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -28,343 +28,283 @@ const channelIcons: Record<string, typeof MessageCircle> = {
   MESSENGER: Facebook,
   INSTAGRAM: Instagram,
   WEBHOOK: Webhook,
-  WIDGET: Code
+  WIDGET: Code,
 };
 
 const platformNames: Record<string, string> = {
   WHATSAPP: "واتساب",
   FACEBOOK: "فيسبوك",
-  MESSENGER: "ماسنجر",
-  INSTAGRAM: "إنستغرام",
-  WEBHOOK: "ويب هوك",
-  WIDGET: "ويدجت"
+  MESSENGER: "Messenger",
+  INSTAGRAM: "Instagram",
+  WEBHOOK: "Webhook",
+  WIDGET: "Widget",
 };
+
+const directConnectCards = [
+  {
+    platform: "messenger",
+    title: "Facebook Messenger",
+    description: "اربط الصفحة من Meta OAuth ونجهز التوكن والويبهوك قدر الإمكان.",
+    icon: Facebook,
+  },
+  {
+    platform: "instagram",
+    title: "Instagram",
+    description: "اربط حساب Instagram Professional المرتبط بصفحة فيسبوك.",
+    icon: Instagram,
+  },
+] as const;
+
+function endpointUrl(channel: any) {
+  if (typeof window === "undefined") return "";
+  const endpoints = channel.endpoints || {};
+  const path =
+    endpoints.callback_url ||
+    endpoints.inbound_url ||
+    endpoints.message_url ||
+    endpoints.script_url ||
+    `/api/webhooks/meta/${channel.public_id}`;
+  return `${window.location.origin}${path}`;
+}
 
 export function ChannelConnectionCard({
   channels,
-  onDelete
+  onDelete,
 }: {
   channels: ChannelConnection[];
   onDelete?: (channelId: string) => void;
 }) {
-  const { token, user, setAuth } = useAuthStore();
-  const isChatwootActive = !!user?.chatwoot_account_id;
-  const [connectionMode, setConnectionMode] = useState<"chatwoot" | "manual">("chatwoot");
-  const [provisioning, setProvisioning] = useState(false);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (user?.chatwoot_account_id) {
-      setConnectionMode("chatwoot");
-    } else {
-      setConnectionMode("manual");
-    }
-  }, [user]);
-
-  const handleProvisionChatwoot = async () => {
-    if (!token) return;
-    setProvisioning(true);
-    setErrorMsg(null);
-    try {
-      const res = await fetch("/api/integrations/chatwoot/provision", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      });
-      const data = await res.json();
-      if (res.ok && data.ok) {
-        setAuth(token, data.user);
-        setConnectionMode("chatwoot");
-      } else {
-        setErrorMsg(data.error || "فشل تفعيل حساب Chatwoot.");
-      }
-    } catch (err) {
-      console.error(err);
-      setErrorMsg("حدث خطأ أثناء الاتصال بالخادم.");
-    } finally {
-      setProvisioning(false);
-    }
-  };
-
-  const connectedCount = channels.filter(c => c.status === "CONNECTED").length;
-  const hasChannels = channels.length > 0;
-
+  const token = useAuthStore((s) => s.token);
   const [expandedChannelId, setExpandedChannelId] = useState<string | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [connectingPlatform, setConnectingPlatform] = useState<string | null>(null);
+  const [message, setMessage] = useState<{ type: "ok" | "warn"; text: string } | null>(null);
 
-  const handleCopy = (text: string, key: string) => {
-    navigator.clipboard.writeText(text);
+  const connectedCount = useMemo(
+    () => channels.filter((channel) => channel.status === "CONNECTED").length,
+    [channels],
+  );
+
+  const handleCopy = async (text: string, key: string) => {
+    await navigator.clipboard.writeText(text);
     setCopiedKey(key);
     setTimeout(() => setCopiedKey(null), 2000);
   };
 
-  const getAbsoluteWebhookUrl = (channel: any) => {
-    if (typeof window === "undefined") return "";
-    const base = window.location.origin;
-    const path = channel.endpoints?.callback_url || `/api/webhooks/meta/${channel.public_id}`;
-    return `${base}${path}`;
+  const startMetaOAuth = async (platform: "messenger" | "instagram") => {
+    if (!token) return;
+    setConnectingPlatform(platform);
+    setMessage(null);
+    try {
+      const res = await fetch(`/api/integrations/meta/start?platform=${platform}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.detail || data.error || "تعذر بدء الربط المباشر.");
+      }
+      if (!data.configured) {
+        setMessage({
+          type: "warn",
+          text:
+            data.reason ||
+            "ربط Meta المباشر يحتاج META_APP_ID و META_APP_SECRET و redirect URI عام. الخيار اليدوي جاهز تحت.",
+        });
+        return;
+      }
+      window.location.href = data.auth_url;
+    } catch (error) {
+      setMessage({
+        type: "warn",
+        text: error instanceof Error ? error.message : "صار خطأ أثناء تجهيز ربط Meta.",
+      });
+    } finally {
+      setConnectingPlatform(null);
+    }
   };
-
-  const showChatwootView = isChatwootActive && connectionMode === "chatwoot";
 
   return (
     <GradientCard className="border-emeraldx-400/20">
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-3">
-            <div className="grid h-14 w-14 place-items-center rounded-3xl bg-emeraldx-500 text-ink-950 shadow-glow">
-              <MessageCircle className="h-7 w-7" />
+        <div className="flex items-center gap-3">
+          <div className="grid h-14 w-14 place-items-center rounded-2xl bg-emeraldx-500 text-white shadow-glow">
+            <MessageCircle className="h-7 w-7" />
+          </div>
+          <div className="text-right">
+            <div className="mb-2 inline-flex items-center gap-1.5 rounded-full bg-emeraldx-500/10 px-2 py-1 text-xs font-semibold text-emeraldx-400">
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              {connectedCount > 0 ? `${connectedCount} قناة متصلة` : "جاهز للربط"}
             </div>
-            <div>
-              {showChatwootView ? (
-                <div className="flex items-center gap-1.5 rounded-full px-2 py-1 text-xs font-semibold bg-emeraldx-500/10 text-emeraldx-400">
-                  <CircleCheck className="h-3 w-3" />
-                  ربط Chatwoot مفعّل تلقائياً
-                </div>
-              ) : (
-                <div className={`flex items-center gap-1.5 rounded-full px-2 py-1 text-xs font-semibold ${connectedCount > 0 ? "bg-emeraldx-500/10 text-emeraldx-400" : "bg-amber-500/10 text-amber-400"}`}>
-                  <CircleCheck className="h-3 w-3" />
-                  {connectedCount > 0 ? `${connectedCount} قناة متصلة` : "لا توجد قنوات متصلة"}
-                </div>
-              )}
-              <h3 className="text-xl font-semibold text-white">
-                {showChatwootView ? "قنوات الاتصال الموحدة" : "اربط قنوات العملاء"}
-              </h3>
-              <p className="mt-1 max-w-2xl text-sm leading-7 text-white/58 text-right">
-                {showChatwootView 
-                  ? "تتم إدارة قنواتك (واتساب، فيسبوك، إنستجرام) عبر لوحة تحكم Chatwoot ومزامنتها تلقائياً مع وكيل الذكاء الاصطناعي الخاص بنا."
-                  : "واتساب، فيسبوك، وإنستغرام من لوحة واحدة. قم بربط قنواتك الرسمية لتفعيل ردود الوكيل الذكي وإدارة محادثات العملاء."
-                }
-              </p>
-            </div>
+            <h3 className="text-xl font-semibold text-white">قنوات العملاء</h3>
+            <p className="mt-1 max-w-2xl text-sm leading-7 text-white/58">
+              Messenger و Instagram صار إلهم Flow مباشر داخل المنصة قدر ما تسمح Meta. والربط اليدوي باقي موجود لكل قناة.
+            </p>
           </div>
         </div>
-        {showChatwootView ? (
-          <a
-            href={`${process.env.NEXT_PUBLIC_CHATWOOT_URL || "https://chat.masarjo.com"}/app/accounts/${user.chatwoot_account_id}/dashboard`}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-2 rounded-2xl bg-emeraldx-500 px-5 py-3 text-sm font-bold text-ink-950 transition hover:scale-[1.02] active:scale-[0.98] shadow-glow"
-          >
-            <span>لوحة تحكم Chatwoot</span>
-            <ExternalLink className="h-4 w-4" />
-          </a>
-        ) : (
-          <Link href="/onboarding">
-            <Button>
-              <Plus className="h-4 w-4" />
-              ابدأ الربط الرسمي
-            </Button>
-          </Link>
-        )}
+
+        <Link href="/onboarding">
+          <Button>
+            <Plus className="h-4 w-4" />
+            ربط يدوي
+          </Button>
+        </Link>
       </div>
 
-      {isChatwootActive && (
-        <div className="flex justify-end mt-4 mb-2">
-          <div className="inline-flex rounded-2xl bg-white/[0.04] p-1 border border-white/5">
-            <button
-              type="button"
-              onClick={() => setConnectionMode("manual")}
-              className={`rounded-xl px-3 py-1.5 text-[10px] font-bold transition ${
-                connectionMode === "manual"
-                  ? "bg-emeraldx-500 text-ink-950 shadow-glow"
-                  : "text-white/60 hover:text-white"
-              }`}
-            >
-              الربط اليدوي المباشر (Meta)
-            </button>
-            <button
-              type="button"
-              onClick={() => setConnectionMode("chatwoot")}
-              className={`rounded-xl px-3 py-1.5 text-[10px] font-bold transition ${
-                connectionMode === "chatwoot"
-                  ? "bg-emeraldx-500 text-ink-950 shadow-glow"
-                  : "text-white/60 hover:text-white"
-              }`}
-            >
-              الربط التلقائي (Chatwoot)
-            </button>
-          </div>
+      <div className="mt-6 grid gap-3 md:grid-cols-2">
+        {directConnectCards.map((card) => {
+          const Icon = card.icon;
+          const isLoading = connectingPlatform === card.platform;
+          return (
+            <div key={card.platform} className="rounded-2xl border border-white/10 bg-white/[0.045] p-4 text-right">
+              <div className="flex items-start justify-between gap-3">
+                <div className="grid h-11 w-11 place-items-center rounded-2xl bg-emeraldx-500/12 text-emeraldx-400">
+                  <Icon className="h-5 w-5" />
+                </div>
+                <div className="flex-1">
+                  <h4 className="font-semibold text-white">{card.title}</h4>
+                  <p className="mt-1 text-xs leading-6 text-white/50">{card.description}</p>
+                </div>
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                className="mt-4 w-full"
+                disabled={isLoading}
+                onClick={() => startMetaOAuth(card.platform)}
+              >
+                <ExternalLink className="h-4 w-4" />
+                {isLoading ? "جاري التجهيز..." : "ربط مباشر من Meta"}
+              </Button>
+            </div>
+          );
+        })}
+      </div>
+
+      {message && (
+        <div
+          className={`mt-4 flex items-start gap-3 rounded-2xl border px-4 py-3 text-right text-sm ${
+            message.type === "ok"
+              ? "border-emeraldx-400/20 bg-emeraldx-500/10 text-emeraldx-400"
+              : "border-amber-400/20 bg-amber-500/10 text-amber-300"
+          }`}
+        >
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>{message.text}</span>
         </div>
       )}
 
-      {!isChatwootActive && (
-        <div className="mt-6 rounded-3xl border border-emeraldx-400/20 bg-emeraldx-500/[0.02] p-5 text-right space-y-4 animate-in fade-in">
-          <div className="flex flex-row-reverse items-center justify-between gap-4">
-            <div className="grid h-10 w-10 place-items-center rounded-2xl bg-emeraldx-500 text-ink-950 shadow-glow">
-              <MessageCircle className="h-5 w-5" />
-            </div>
-            <div className="flex-1 pr-3">
-              <h4 className="text-sm font-bold text-white">تفعيل لوحة Chatwoot الموحدة (موصى به)</h4>
-              <p className="text-xs text-white/40 mt-1">احصل على صندوق وارد موحد لإدارة جميع محادثات عملائك من مكان واحد.</p>
-            </div>
-          </div>
-          <div className="text-xs leading-6 text-white/70">
-            من خلال تفعيل Chatwoot، يمكنك قراءة والرد على رسائل واتساب وفيسبوك وإنستجرام، وتعيين المحادثات لموظفي خدمة العملاء، مع بقاء الرد الآلي الذكي فعالاً.
-          </div>
-          {errorMsg && (
-            <div className="text-xs text-red-400 bg-red-500/10 rounded-2xl px-3 py-2 border border-red-500/20">
-              {errorMsg}
-            </div>
-          )}
-          <div className="flex justify-end pt-2">
-            <Button 
-              size="sm" 
-              onClick={handleProvisionChatwoot} 
-              disabled={provisioning}
-              className="flex items-center gap-2"
-            >
-              {provisioning ? (
-                <>
-                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-ink-950" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                  </svg>
-                  <span>جاري التفعيل...</span>
-                </>
-              ) : (
-                <span>تفعيل وتجهيز لوحة Chatwoot الخاصة بك</span>
-              )}
-            </Button>
-          </div>
+      <div className="mt-6 space-y-4">
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-sm text-white/45">الإعداد اليدوي والقنوات الحالية</span>
+          <span className="text-xs text-white/32">WhatsApp / Messenger / Instagram / Widget / Webhook</span>
         </div>
-      )}
 
-      {showChatwootView && (
-        <div className="mt-6 rounded-3xl border border-emeraldx-400/20 bg-emeraldx-500/5 p-6 text-right space-y-4">
-          <div className="flex flex-row-reverse items-center justify-between gap-4">
-            <div className="grid h-12 w-12 place-items-center rounded-2xl bg-white/8 text-emeraldx-400">
-              <MessageCircle className="h-6 w-6" />
-            </div>
-            <div className="flex-1 pr-4">
-              <h4 className="text-base font-bold text-white">حالة الاتصال الموحد (Omnichannel Link)</h4>
-              <p className="text-xs text-white/40 mt-1">حساب Chatwoot رقم: {user?.chatwoot_account_id}</p>
-            </div>
+        {channels.length === 0 ? (
+          <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-white/15 bg-white/[0.025] py-10 text-center">
+            <MessageCircle className="mb-3 h-10 w-10 text-white/20" />
+            <p className="text-sm text-white/45">لسه ما في قنوات مربوطة.</p>
+            <p className="mt-1 text-xs text-white/30">استخدم الربط المباشر، أو افتح الربط اليدوي لإضافة قناة.</p>
           </div>
-          <div className="text-sm leading-6 text-white/70 font-medium">
-            مساحة عملك على Chatwoot متصلة بنجاح مع وكيل الذكاء الاصطناعي. أي رسائل واردة إلى قنواتك هناك سيتم معالجتها والرد عليها تلقائياً.
-          </div>
-          <div className="flex gap-2 justify-end">
-            <a
-              href={`${process.env.NEXT_PUBLIC_CHATWOOT_URL || "https://chat.masarjo.com"}/app/accounts/${user?.chatwoot_account_id}/dashboard`}
-              target="_blank"
-              rel="noreferrer"
-              className="text-xs font-semibold text-cyanx-400 hover:text-cyanx-300 underline inline-flex items-center gap-1"
-            >
-              <span>إدارة صناديق الوارد والقنوات في Chatwoot</span>
-              <ExternalLink className="h-3.5 w-3.5" />
-            </a>
-          </div>
-        </div>
-      )}
-
-      {hasChannels && (!isChatwootActive || connectionMode === "manual") && (
-        <div className="mt-6 space-y-4">
-          {isChatwootActive && (
-            <h4 className="text-sm font-bold text-white/60 mb-2">القنوات التقليدية المربوطة يدوياً:</h4>
-          )}
+        ) : (
           <div className="grid gap-3 lg:grid-cols-3">
             {channels.map((channel) => {
               const anyChannel = channel as any;
               const Icon = channelIcons[channel.provider] || MessageCircle;
-              const isConfigured = channel.status === "CONNECTED";
               const isExpanded = expandedChannelId === channel.id;
+              const verifyToken = anyChannel.credentials?.verify_token || "verify_token";
+              const url = endpointUrl(anyChannel);
 
               return (
                 <div key={channel.id} className="space-y-3">
-                  <div className={`rounded-3xl border p-4 transition ${isConfigured ? "border-emeraldx-400/20 bg-emeraldx-500/5" : "border-white/10 bg-white/[0.055]"}`}>
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.045] p-4">
                     <div className="flex items-start justify-between gap-3">
                       <div className="grid h-11 w-11 place-items-center rounded-2xl bg-white/8 text-emeraldx-400">
                         <Icon className="h-5 w-5" />
                       </div>
                       <StatusBadge status={channel.status} />
                     </div>
-                    <div className="mt-4 text-base font-semibold text-white text-right">
-                      {platformNames[channel.provider] || channel.provider}
-                    </div>
-                    <div className="mt-1 text-xs text-white/40 text-right">
-                      {anyChannel.credentials?.phone_number_id ? `معرف الرقم: ${anyChannel.credentials.phone_number_id}` : "تم التهيئة ببيانات معتمدة"}
-                    </div>
-                    <div className="mt-4 flex items-center justify-between gap-3 text-xs font-semibold">
-                      <span className={`flex items-center gap-1.5 ${isConfigured ? "text-emeraldx-400" : "text-amber-400"}`}>
-                        <CircleCheck className="h-3.5 w-3.5" />
-                        {isConfigured ? "مفعّل" : "بحاجة إعداد"}
-                      </span>
-                      
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setExpandedChannelId(isExpanded ? null : channel.id)}
-                          className="rounded-full bg-white/8 px-3 py-1.5 text-white/70 transition hover:bg-white/12 flex items-center gap-1"
-                          title="تفاصيل الويب هوك"
-                        >
-                          {isExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-                          <span>إعدادات الويب هوك</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => onDelete?.(channel.id)}
-                          className="rounded-full bg-red-500/10 px-3 py-1.5 text-red-400 transition hover:bg-red-500 hover:text-white"
-                          title="حذف القناة"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
+
+                    <div className="mt-4 text-right">
+                      <div className="text-base font-semibold text-white">
+                        {platformNames[channel.provider] || channel.provider}
                       </div>
+                      <div className="mt-1 text-xs text-white/40">
+                        {anyChannel.configured_keys?.length
+                          ? `${anyChannel.configured_keys.length} إعداد محفوظ`
+                          : "بانتظار بيانات الربط"}
+                      </div>
+                    </div>
+
+                    <div className="mt-4 flex items-center justify-between gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setExpandedChannelId(isExpanded ? null : channel.id)}
+                        className="inline-flex items-center gap-1 rounded-full bg-white/8 px-3 py-1.5 text-xs font-semibold text-white/70 transition hover:bg-white/12"
+                      >
+                        {isExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                        الإعدادات
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onDelete?.(channel.id)}
+                        className="rounded-full bg-red-500/10 px-3 py-1.5 text-red-400 transition hover:bg-red-500 hover:text-white"
+                        aria-label="حذف القناة"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
                     </div>
                   </div>
 
-                  {/* Webhook Settings Expanded view */}
                   {isExpanded && (
-                    <div className="rounded-3xl border border-white/10 bg-white/[0.02] p-4 text-right space-y-3 animate-in fade-in duration-200">
-                      <div className="text-xs font-bold text-white/80">تفاصيل الويب هوك لـ Meta Developers:</div>
-                      
-                      <div className="space-y-1">
-                        <span className="text-[10px] text-white/40 block">Callback URL (رابط الاستقبال)</span>
-                        <div className="flex items-center justify-between rounded-xl bg-black/20 border border-white/5 px-2.5 py-1.5 text-[11px] font-mono">
-                          <button
-                            type="button"
-                            onClick={() => handleCopy(getAbsoluteWebhookUrl(anyChannel), channel.id + "_url")}
-                            className="text-cyanx-400 hover:text-cyanx-300 text-[9px] font-bold"
-                          >
-                            {copiedKey === channel.id + "_url" ? "✓ تم النسخ" : "نسخ"}
-                          </button>
-                          <span className="text-white/70 select-all overflow-x-auto whitespace-nowrap scrollbar-none">{getAbsoluteWebhookUrl(anyChannel)}</span>
-                        </div>
+                    <div className="space-y-3 rounded-2xl border border-white/10 bg-white/[0.025] p-4 text-right">
+                      <div className="text-xs font-bold text-white/80">
+                        {channel.provider === "WIDGET" ? "تفاصيل تركيب الـ Widget" : "تفاصيل الويبهوك"}
                       </div>
 
                       <div className="space-y-1">
-                        <span className="text-[10px] text-white/40 block">Verify Token (رمز التحقق)</span>
-                        <div className="flex items-center justify-between rounded-xl bg-black/20 border border-white/5 px-2.5 py-1.5 text-[11px] font-mono">
+                        <span className="block text-[11px] text-white/40">الرابط</span>
+                        <div className="flex items-center gap-2 rounded-xl border border-white/5 bg-black/20 px-2.5 py-2 text-[11px]">
                           <button
                             type="button"
-                            onClick={() => handleCopy(anyChannel.credentials?.verify_token || "verify_token", channel.id + "_token")}
-                            className="text-cyanx-400 hover:text-cyanx-300 text-[9px] font-bold"
+                            onClick={() => handleCopy(url, `${channel.id}_url`)}
+                            className="text-cyanx-400 transition hover:text-cyanx-300"
                           >
-                            {copiedKey === channel.id + "_token" ? "✓ تم النسخ" : "نسخ"}
+                            <Copy className="h-3.5 w-3.5" />
                           </button>
-                          <span className="text-white/70 select-all">{anyChannel.credentials?.verify_token || "verify_token"}</span>
+                          <span className="min-w-0 flex-1 select-all overflow-x-auto whitespace-nowrap font-mono text-white/70">
+                            {copiedKey === `${channel.id}_url` ? "تم النسخ" : url}
+                          </span>
                         </div>
                       </div>
+
+                      {channel.provider !== "WEBHOOK" && channel.provider !== "WIDGET" && (
+                        <div className="space-y-1">
+                          <span className="block text-[11px] text-white/40">Verify Token</span>
+                          <div className="flex items-center gap-2 rounded-xl border border-white/5 bg-black/20 px-2.5 py-2 text-[11px]">
+                            <button
+                              type="button"
+                              onClick={() => handleCopy(verifyToken, `${channel.id}_token`)}
+                              className="text-cyanx-400 transition hover:text-cyanx-300"
+                            >
+                              <Copy className="h-3.5 w-3.5" />
+                            </button>
+                            <span className="min-w-0 flex-1 select-all overflow-x-auto whitespace-nowrap font-mono text-white/70">
+                              {copiedKey === `${channel.id}_token` ? "تم النسخ" : verifyToken}
+                            </span>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
               );
             })}
           </div>
-        </div>
-      )}
-
-      {(!isChatwootActive || connectionMode === "manual") && !hasChannels && (
-        <div className="mt-6 flex flex-col items-center justify-center rounded-3xl border border-dashed border-white/15 bg-white/[0.025] py-10 text-center">
-          <MessageCircle className="h-10 w-10 text-white/20 mb-3" />
-          <p className="text-sm text-white/45">لا توجد قنوات مرتبطة حتى الآن</p>
-          <p className="mt-1 text-xs text-white/30">اضغط &quot;ابدأ الربط الرسمي&quot; لإضافة أول قناة</p>
-        </div>
-      )}
+        )}
+      </div>
 
       <div className="mt-5 flex flex-wrap gap-3">
-        {["رسائل العملاء فقط", "تكامل رسمي قابل للتوصيل", "تحويل بشري عند الحساسية"].map((item) => (
+        {["ربط مباشر عند توفر Meta permissions", "خيار يدوي دائم", "تحويل بشري عند الحاجة"].map((item) => (
           <div key={item} className="flex items-center gap-2 rounded-2xl bg-white/7 px-3 py-2 text-sm text-white/68">
             <ShieldCheck className="h-4 w-4 text-cyanx-400" />
             {item}

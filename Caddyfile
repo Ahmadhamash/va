@@ -5,20 +5,14 @@
 {$DOMAIN} {
     encode zstd gzip
 
-    # Chatwoot webhook bridge -> backend
-    @chatwootWebhook path /webhooks/chatwoot
-    handle @chatwootWebhook {
-        reverse_proxy backend:8000
-    }
-
     # Backend API routes that the FastAPI backend owns
-    @backendApi path /api/auth/* /api/items* /api/chat/* /api/admin/* /api/style/* /api/channels* /api/delivery* /api/escalations* /api/policies* /api/offers* /api/bookings* /api/workflows* /api/billing* /api/webhooks/* /api/chatwoot/* /api/handoff* /api/verification-logs* /api/voice-settings* /api/automation* /api/health /api/business-types /api/uploads/* /api/catalog-import/*
+    @backendApi path /api/auth/* /api/items* /api/chat/* /api/admin/* /api/style/* /api/channels* /api/delivery* /api/escalations* /api/policies* /api/offers* /api/bookings* /api/workflows* /api/billing* /api/webhooks/* /api/handoff* /api/verification-logs* /api/voice-settings* /api/automation* /api/health /api/business-types /api/uploads/*
     handle @backendApi {
         reverse_proxy backend:8000
     }
 
     # Next.js BFF API routes (conversations, products, knowledge, agent, whatsapp, onboarding, integrations)
-    @nextApi path /api/conversations* /api/products* /api/knowledge* /api/agent/* /api/whatsapp/* /api/onboarding/* /api/integrations/*
+    @nextApi path /api/conversations* /api/products* /api/knowledge* /api/agent/* /api/whatsapp/* /api/onboarding/* /api/integrations/* /api/catalog-import/*
     handle @nextApi {
         reverse_proxy frontend:3000
     }
@@ -27,10 +21,4 @@
     handle {
         reverse_proxy frontend:3000
     }
-}
-
-chat.masarjo.com {
-    encode zstd gzip
-
-    reverse_proxy chatwoot-rails:3000
 }

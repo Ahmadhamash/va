@@ -1,281 +1,275 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Plus, Upload, Trash2, FileText, CheckCircle2, RefreshCw, Sparkles, HelpCircle, BookOpen, ToggleLeft, ToggleRight, X, Loader2 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { CheckCircle2, Copy, ImagePlus, Link2, Loader2, Package, Plus, Trash2, Upload } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
-import { KnowledgeEditor } from "@/components/knowledge-editor";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { GradientCard } from "@/components/gradient-card";
 import { useAuthStore } from "@/store/use-auth-store";
-import type { Product, KnowledgeItem } from "@/lib/types";
 
-interface MockFile {
-  id: string;
-  name: string;
-  size: string;
-  uploadedAt: string;
-  status: "INDEXING" | "INDEXED" | "FAILED";
-}
+type BusinessType = "clothing" | "electronics" | "beauty" | "services" | "general";
 
-const tabs = [
-  { label: "معلومات النشاط", value: "business-info", icon: Sparkles },
-  { label: "المنتجات / الخدمات", value: "products-services", icon: FileText },
-  { label: "الأسئلة المتكررة", value: "faqs", icon: HelpCircle },
-  { label: "السياسات", value: "policies", icon: BookOpen },
-  { label: "الملفات المستندية", value: "files", icon: Upload }
+const businessTypes: Array<{ id: BusinessType; label: string; hint: string }> = [
+  { id: "clothing", label: "ملابس", hint: "قياسات، ألوان، خامة، استبدال" },
+  { id: "electronics", label: "أجهزة", hint: "مواصفات، موديل، كفالة، صيانة" },
+  { id: "beauty", label: "تجميل وعناية", hint: "استخدام، مكونات، تحذيرات" },
+  { id: "services", label: "خدمات", hint: "مدة التنفيذ، المتطلبات، الحجز" },
+  { id: "general", label: "عام", hint: "حقول مرنة لأي نشاط" },
 ];
 
+const emptyForm = {
+  name: "",
+  price: "",
+  currency: "JOD",
+  category: "",
+  description: "",
+  image_url: "",
+  warranty_duration: "",
+  warranty_terms: "",
+  warranty_coverage: "",
+  warranty_exclusions: "",
+  stock_quantity: "",
+  stock_status: "in_stock",
+  sizes: "",
+  colors: "",
+  material: "",
+  fit: "",
+  model: "",
+  specs: "",
+  usage: "",
+  included: "",
+  notes: "",
+};
+
+function imageSrc(url?: string) {
+  if (!url) return "";
+  if (url.startsWith("/uploads/")) return `/api${url}`;
+  return url;
+}
+
+function splitList(value: string) {
+  return value.split(",").map((item) => item.trim()).filter(Boolean);
+}
+
 export default function KnowledgeBasePage() {
-  const [products, setProducts] = useState<Product[]>([]);
-  const [knowledge, setKnowledge] = useState<KnowledgeItem[]>([]);
+  const { token, user, setAuth } = useAuthStore();
+  const [businessType, setBusinessType] = useState<BusinessType>((user?.business_type as BusinessType) || "general");
+  const [products, setProducts] = useState<any[]>([]);
+  const [knowledge, setKnowledge] = useState<any[]>([]);
+  const [form, setForm] = useState(emptyForm);
+  const [imageFile, setImageFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState("");
-  const { token } = useAuthStore();
+  const [importUrl, setImportUrl] = useState("");
+  const [importing, setImporting] = useState(false);
+  const [candidates, setCandidates] = useState<any[]>([]);
+  const [policyForm, setPolicyForm] = useState({ title: "", body: "", category: "policies" });
 
-  // Add Product Form
-  const [showProductForm, setShowProductForm] = useState(false);
-  const [productName, setProductName] = useState("");
-  const [productPrice, setProductPrice] = useState("");
-  const [productDescription, setProductDescription] = useState("");
+  const dynamicLabels = useMemo(() => {
+    if (businessType === "clothing") {
+      return [
+        ["sizes", "القياسات المتاحة"],
+        ["colors", "الألوان المتاحة"],
+        ["material", "الخامة"],
+        ["fit", "القصة أو المقاس"],
+      ];
+    }
+    if (businessType === "electronics") {
+      return [
+        ["model", "الموديل"],
+        ["specs", "المواصفات التقنية"],
+        ["included", "محتويات العلبة"],
+        ["notes", "ملاحظات صيانة أو استخدام"],
+      ];
+    }
+    if (businessType === "services") {
+      return [
+        ["usage", "آلية الخدمة"],
+        ["included", "ما يشمله السعر"],
+        ["notes", "متطلبات قبل البدء"],
+      ];
+    }
+    return [
+      ["usage", "طريقة الاستخدام"],
+      ["included", "المرفقات أو التفاصيل"],
+      ["notes", "ملاحظات مهمة"],
+    ];
+  }, [businessType]);
 
-  // Add FAQ Form
-  const [showFaqForm, setShowFaqForm] = useState(false);
-  const [faqQuestion, setFaqQuestion] = useState("");
-  const [faqAnswer, setFaqAnswer] = useState("");
-
-  // Add Policy Form
-  const [showPolicyForm, setShowPolicyForm] = useState(false);
-  const [policyTitle, setPolicyTitle] = useState("");
-  const [policyContent, setPolicyContent] = useState("");
-
-  // Document Upload Simulator
-  const [files, setFiles] = useState<MockFile[]>([]);
-  const [uploadingFile, setUploadingFile] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
-
-  const showNotice = (msg: string) => {
-    setNotice(msg);
-    setTimeout(() => setNotice(""), 3500);
-  };
+  async function load() {
+    if (!token) return;
+    setLoading(true);
+    try {
+      const [prodRes, knowRes] = await Promise.all([
+        fetch("/api/products", { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" }),
+        fetch("/api/knowledge", { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" }),
+      ]);
+      const prodData = await prodRes.json().catch(() => ({}));
+      const knowData = await knowRes.json().catch(() => ({}));
+      if (prodData.ok) setProducts(prodData.products || []);
+      if (knowData.ok) setKnowledge(knowData.knowledge || []);
+    } finally {
+      setLoading(false);
+    }
+  }
 
   useEffect(() => {
-    async function load() {
-      if (!token) return;
-      try {
-        const [prodRes, knowRes] = await Promise.all([
-          fetch("/api/products", { headers: { Authorization: "Bearer " + token } }),
-          fetch("/api/knowledge", { headers: { Authorization: "Bearer " + token } })
-        ]);
-        const prodData = await prodRes.json();
-        const knowData = await knowRes.json();
-        
-        if (prodData.ok && prodData.products) setProducts(prodData.products);
-        if (knowData.ok && knowData.knowledge) setKnowledge(knowData.knowledge);
-      } catch (err) {
-        console.error("Failed to load knowledge data", err);
-      } finally {
-        setLoading(false);
-      }
-    }
     load();
-
-    // Initialize mock files
-    const savedFiles = localStorage.getItem("mock_knowledge_files");
-    if (savedFiles) {
-      setFiles(JSON.parse(savedFiles));
-    } else {
-      const initialFiles: MockFile[] = [];
-      setFiles(initialFiles);
-      localStorage.setItem("mock_knowledge_files", JSON.stringify(initialFiles));
-    }
   }, [token]);
 
-  // Product CRUD
+  async function saveBusinessType(nextType: BusinessType) {
+    setBusinessType(nextType);
+    if (!token) return;
+    const res = await fetch("/api/auth/me", {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ business_type: nextType }),
+    });
+    if (res.ok) {
+      setAuth(token, await res.json());
+    }
+  }
+
+  function metadataFromForm() {
+    return {
+      business_type: businessType,
+      sizes: splitList(form.sizes),
+      colors: splitList(form.colors),
+      material: form.material,
+      fit: form.fit,
+      model: form.model,
+      specs: form.specs,
+      usage: form.usage,
+      included: form.included,
+      notes: form.notes,
+    };
+  }
+
   async function addProduct() {
-    if (!productName.trim() || !token) return;
+    if (!token || !form.name.trim()) return;
+    setSaving(true);
+    setNotice("");
     try {
       const res = await fetch("/api/products", {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
-        body: JSON.stringify({
-          name: productName,
-          price: productPrice,
-          description: productDescription
-        })
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ ...form, metadata: metadataFromForm() }),
       });
-      const data = await res.json();
-      if (data.ok && data.product) {
-        const mappedProd = {
-          id: data.product.id,
-          name: data.product.name,
-          price: String(data.product.price),
-          available: data.product.available !== false,
-          description: data.product.description || ""
-        };
-        setProducts((items) => [...items, mappedProd]);
-        setProductName("");
-        setProductPrice("");
-        setProductDescription("");
-        setShowProductForm(false);
-        showNotice("✨ تم حفظ المنتج/الخدمة وتدريب الوكيل بنجاح!");
-      }
-    } catch (err) {
-      console.error(err);
-      showNotice("❌ فشل حفظ المنتج.");
-    }
-  }
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) throw new Error(data.error || "تعذر حفظ المنتج.");
 
-  async function handleDeleteProduct(id: string) {
-    if (!token) return;
-    if (!confirm("هل أنت متأكد من حذف هذا المنتج؟")) return;
-    try {
-      const res = await fetch(`/api/products/${id}`, {
-        method: "DELETE",
-        headers: { Authorization: "Bearer " + token }
-      });
-      const data = await res.json();
-      if (data.ok) {
-        setProducts(prev => prev.filter(p => p.id !== id));
-        showNotice("🗑️ تم حذف المنتج بنجاح!");
-      }
-    } catch (err) {
-      console.error(err);
-      showNotice("❌ فشل حذف المنتج.");
-    }
-  }
-
-  async function handleToggleProduct(id: string) {
-    if (!token) return;
-    try {
-      const res = await fetch(`/api/products/${id}`, {
-        method: "PATCH",
-        headers: { Authorization: "Bearer " + token }
-      });
-      const data = await res.json();
-      if (data.ok && data.product) {
-        setProducts(prev => prev.map(p => p.id === id ? { ...p, available: data.product.available } : p));
-        showNotice(`🔔 تم تعديل توفر المنتج إلى: ${data.product.available ? "متاح" : "غير متاح"}`);
-      }
-    } catch (err) {
-      console.error(err);
-      showNotice("❌ فشل تحديث حالة التوفر.");
-    }
-  }
-
-  // Knowledge CRUD
-  async function addKnowledgeItem(category: string, title: string, body: string, callback: () => void) {
-    if (!title.trim() || !body.trim() || !token) return;
-    try {
-      const res = await fetch("/api/knowledge", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
-        body: JSON.stringify({
-          title,
+      if (imageFile && data.product?.id) {
+        const body = new FormData();
+        body.append("file", imageFile);
+        await fetch(`/api/products/${data.product.id}/image`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
           body,
-          category
-        })
-      });
-      const data = await res.json();
-      if (data.ok && data.knowledgeItem) {
-        const item = data.knowledgeItem;
-        setKnowledge((items) => [...items, {
-          id: item.id,
-          title: item.title,
-          body: item.content,
-          category: item.policy_type
-        }]);
-        callback();
-        showNotice("✨ تم حفظ بند المعرفة وتدريب الوكيل بنجاح!");
+        });
       }
-    } catch (err) {
-      console.error(err);
-      showNotice("❌ فشل حفظ المعلومة.");
+
+      setForm(emptyForm);
+      setImageFile(null);
+      setNotice("تم حفظ المنتج وتحديث قاعدة المعرفة.");
+      await load();
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "صار خطأ أثناء الحفظ.");
+    } finally {
+      setSaving(false);
     }
   }
 
-  async function handleDeleteKnowledge(id: string) {
-    if (!token) return;
-    if (!confirm("هل أنت متأكد من حذف بند المعرفة هذا؟")) return;
-    try {
-      const res = await fetch(`/api/knowledge/${id}`, {
-        method: "DELETE",
-        headers: { Authorization: "Bearer " + token }
-      });
-      const data = await res.json();
-      if (data.ok) {
-        setKnowledge(prev => prev.filter(k => k.id !== id));
-        showNotice("🗑️ تم حذف بند المعرفة بنجاح!");
-      }
-    } catch (err) {
-      console.error(err);
-      showNotice("❌ فشل الحذف.");
-    }
-  }
-
-  // Mock File Upload Simulation
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const fileList = e.target.files;
-    if (!fileList || fileList.length === 0) return;
-    
-    const file = fileList[0];
-    setUploadingFile(true);
-    setUploadProgress(0);
-
-    // Progress timer simulation
-    const interval = setInterval(() => {
-      setUploadProgress(prev => {
-        if (prev >= 100) {
-          clearInterval(interval);
-          setTimeout(() => {
-            const newFile: MockFile = {
-              id: `file-${Date.now()}`,
-              name: file.name,
-              size: `${(file.size / (1024 * 1024)).toFixed(1)} MB`,
-              uploadedAt: new Date().toISOString().split("T")[0],
-              status: "INDEXING"
-            };
-
-            setFiles(prevFiles => {
-              const updated = [newFile, ...prevFiles];
-              localStorage.setItem("mock_knowledge_files", JSON.stringify(updated));
-              return updated;
-            });
-            setUploadingFile(false);
-            showNotice("📤 تم رفع الملف، جاري الفهرسة بالذكاء الاصطناعي...");
-
-            // Process indexing status simulation
-            setTimeout(() => {
-              setFiles(prevFiles => {
-                const updated = prevFiles.map(f => f.id === newFile.id ? { ...f, status: "INDEXED" as const } : f);
-                localStorage.setItem("mock_knowledge_files", JSON.stringify(updated));
-                return updated;
-              });
-              showNotice("⚡ تم الانتهاء من فهرسة الملف وتدريب الوكيل بنجاح!");
-            }, 3000);
-          }, 300);
-          return 100;
-        }
-        return prev + 10;
-      });
-    }, 150);
-  };
-
-  const handleDeleteFile = (id: string) => {
-    if (!confirm("هل أنت متأكد من إزالة هذا المستند من معرفة الوكيل؟")) return;
-    setFiles(prev => {
-      const updated = prev.filter(f => f.id !== id);
-      localStorage.setItem("mock_knowledge_files", JSON.stringify(updated));
-      return updated;
+  async function deleteProduct(id: string) {
+    if (!token || !confirm("حذف المنتج من قاعدة المعرفة؟")) return;
+    const res = await fetch(`/api/products/${id}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
     });
-    showNotice("🗑️ تم حذف المستند وتحديث معرفة الوكيل.");
-  };
+    if (res.ok) {
+      setProducts((current) => current.filter((product) => product.id !== id));
+      setNotice("تم حذف المنتج.");
+    }
+  }
+
+  async function toggleProduct(id: string) {
+    if (!token) return;
+    const res = await fetch(`/api/products/${id}`, {
+      method: "PATCH",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const data = await res.json().catch(() => ({}));
+    if (data.ok) {
+      setProducts((current) => current.map((product) => product.id === id ? data.product : product));
+    }
+  }
+
+  async function importFromUrl() {
+    if (!token || !importUrl.trim()) return;
+    setImporting(true);
+    setNotice("");
+    try {
+      const res = await fetch("/api/catalog-import/url", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ url: importUrl }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.detail || data.error || "تعذر قراءة الرابط.");
+      setCandidates(data.candidates || []);
+      setNotice((data.candidates || []).length ? "تم استخراج مرشحات. راجعها وكمل الناقص قبل الحفظ." : "لم نجد بيانات منتج واضحة في الرابط.");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "صار خطأ أثناء الاستيراد.");
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  function fillFromCandidate(candidate: any) {
+    setForm({
+      ...emptyForm,
+      name: candidate.name || "",
+      description: candidate.description || "",
+      category: candidate.category || "",
+      price: candidate.price || "",
+      currency: candidate.currency || "JOD",
+      image_url: candidate.image_url || "",
+      notes: `مصدر البيانات: ${candidate.source_url || ""}`,
+    });
+  }
+
+  async function addKnowledgeItem() {
+    if (!token || !policyForm.title.trim() || !policyForm.body.trim()) return;
+    const res = await fetch("/api/knowledge", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(policyForm),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (data.ok) {
+      setPolicyForm({ title: "", body: "", category: "policies" });
+      setNotice("تم حفظ المعلومة.");
+      await load();
+    }
+  }
 
   if (loading) {
     return (
-      <AppShell title="المعرفة" subtitle="علّم الوكيل كأنك تدرّب موظف خدمة عملاء جديد.">
+      <AppShell title="قاعدة المعرفة" subtitle="المنتجات والسياسات التي يعتمد عليها الوكيل.">
         <div className="flex h-96 items-center justify-center">
           <Loader2 className="h-8 w-8 animate-spin text-emeraldx-400" />
         </div>
@@ -284,403 +278,178 @@ export default function KnowledgeBasePage() {
   }
 
   return (
-    <AppShell title="المعرفة" subtitle="علّم الوكيل كأنك تدرّب موظف خدمة عملاء جديد وتتحكم بنجاح في مصادر معلوماته.">
+    <AppShell title="قاعدة المعرفة" subtitle="منتجات، صور، كفالات، سياسات، ومعلومات مؤكدة بدون محاكاة.">
       {notice && (
-        <div className="mb-4 rounded-3xl border border-emeraldx-400/20 bg-emeraldx-500/10 px-5 py-4 text-sm font-semibold text-emeraldx-400 text-right animate-pulse">
+        <div className="mb-6 rounded-2xl border border-emeraldx-400/20 bg-emeraldx-500/10 px-4 py-3 text-sm text-emeraldx-400">
           {notice}
         </div>
       )}
 
-      <Tabs defaultValue="business-info">
-        <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-          <TabsList className="bg-white/[0.03] border border-white/10 rounded-2xl p-1.5 flex gap-1.5 overflow-x-auto max-w-full">
-            {tabs.map((tab) => {
-              const Icon = tab.icon;
-              return (
-                <TabsTrigger
-                  key={tab.value}
-                  value={tab.value}
-                  className="flex items-center gap-2 px-4 py-2 rounded-xl transition-all"
+      <div className="grid gap-6 xl:grid-cols-[1fr_420px]">
+        <div className="space-y-6">
+          <GradientCard>
+            <div className="mb-5 flex items-center justify-between">
+              <Package className="h-5 w-5 text-emeraldx-400" />
+              <h2 className="text-xl font-semibold text-white">نوع النشاط</h2>
+            </div>
+            <div className="grid gap-3 md:grid-cols-5">
+              {businessTypes.map((type) => (
+                <button
+                  key={type.id}
+                  type="button"
+                  onClick={() => saveBusinessType(type.id)}
+                  className={`rounded-2xl border p-4 text-right transition ${
+                    businessType === type.id
+                      ? "border-emeraldx-400/40 bg-emeraldx-500/12 text-white shadow-glow"
+                      : "border-white/10 bg-white/[0.035] text-white/65 hover:border-white/18 hover:bg-white/[0.06]"
+                  }`}
                 >
-                  <Icon className="h-4 w-4" />
-                  <span>{tab.label}</span>
-                </TabsTrigger>
-              );
-            })}
-          </TabsList>
+                  <div className="font-semibold">{type.label}</div>
+                  <div className="mt-2 text-xs leading-5 text-white/42">{type.hint}</div>
+                </button>
+              ))}
+            </div>
+          </GradientCard>
+
+          <GradientCard>
+            <div className="mb-5 flex items-center justify-between">
+              <Upload className="h-5 w-5 text-emeraldx-400" />
+              <h2 className="text-xl font-semibold text-white">إضافة منتج</h2>
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <Input className="text-right" placeholder="اسم المنتج" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+              <Input className="text-right" placeholder="الفئة" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} />
+              <Input dir="ltr" placeholder="السعر" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} />
+              <Input dir="ltr" placeholder="العملة" value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })} />
+              <Input dir="ltr" placeholder="رابط صورة المنتج" value={form.image_url} onChange={(e) => setForm({ ...form, image_url: e.target.value })} />
+              <Input type="number" placeholder="الكمية بالمخزون" value={form.stock_quantity} onChange={(e) => setForm({ ...form, stock_quantity: e.target.value })} />
+            </div>
+            <Textarea className="mt-3 min-h-24 text-right" placeholder="وصف المنتج، طريقة الاستخدام، أهم الملاحظات" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              {dynamicLabels.map(([key, label]) => (
+                <Input key={key} className="text-right" placeholder={label} value={(form as any)[key]} onChange={(e) => setForm({ ...form, [key]: e.target.value })} />
+              ))}
+            </div>
+
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              <Input className="text-right" placeholder="مدة الكفالة" value={form.warranty_duration} onChange={(e) => setForm({ ...form, warranty_duration: e.target.value })} />
+              <Input className="text-right" placeholder="ما الذي تغطيه الكفالة؟" value={form.warranty_coverage} onChange={(e) => setForm({ ...form, warranty_coverage: e.target.value })} />
+              <Textarea className="text-right" placeholder="شروط الكفالة" value={form.warranty_terms} onChange={(e) => setForm({ ...form, warranty_terms: e.target.value })} />
+              <Textarea className="text-right" placeholder="استثناءات الكفالة" value={form.warranty_exclusions} onChange={(e) => setForm({ ...form, warranty_exclusions: e.target.value })} />
+            </div>
+
+            <label className="mt-4 flex cursor-pointer items-center justify-between rounded-2xl border border-dashed border-white/15 bg-white/[0.025] px-4 py-3 text-sm text-white/55 hover:bg-white/[0.05]">
+              <span>{imageFile ? imageFile.name : "تحميل صورة من الجهاز"}</span>
+              <ImagePlus className="h-5 w-5 text-emeraldx-400" />
+              <input type="file" accept="image/*" className="hidden" onChange={(e) => setImageFile(e.target.files?.[0] || null)} />
+            </label>
+
+            <Button className="mt-4 w-full" onClick={addProduct} disabled={saving}>
+              <Plus className="h-4 w-4" />
+              {saving ? "جاري الحفظ..." : "حفظ المنتج"}
+            </Button>
+          </GradientCard>
+
+          <GradientCard>
+            <div className="mb-5 flex items-center justify-between">
+              <span className="text-xs text-white/40">{products.length} منتج</span>
+              <h2 className="text-xl font-semibold text-white">المنتجات الحالية</h2>
+            </div>
+            {products.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-white/12 py-10 text-center text-sm text-white/42">ما في منتجات مضافة حالياً.</div>
+            ) : (
+              <div className="grid gap-3 lg:grid-cols-2">
+                {products.map((product) => (
+                  <div key={product.id} className="rounded-2xl border border-white/10 bg-white/[0.035] p-4 text-right">
+                    <div className="flex gap-3">
+                      <div className="h-20 w-20 shrink-0 overflow-hidden rounded-2xl bg-white/8">
+                        {product.image_url ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={imageSrc(product.image_url)} alt="" className="h-full w-full object-cover" />
+                        ) : (
+                          <div className="grid h-full w-full place-items-center text-white/25"><Package className="h-6 w-6" /></div>
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-start justify-between gap-2">
+                          <button type="button" onClick={() => deleteProduct(product.id)} className="text-white/35 hover:text-red-400">
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                          <div>
+                            <h3 className="font-semibold text-white">{product.name}</h3>
+                            <p className="mt-1 text-xs text-white/42">{product.category || "بدون فئة"}</p>
+                          </div>
+                        </div>
+                        <p className="mt-3 line-clamp-2 text-xs leading-5 text-white/50">{product.description || "بدون وصف"}</p>
+                        <div className="mt-3 flex items-center justify-between">
+                          <button type="button" onClick={() => toggleProduct(product.id)} className={`rounded-full px-2 py-1 text-xs ${product.available ? "bg-emeraldx-500/10 text-emeraldx-400" : "bg-white/8 text-white/45"}`}>
+                            {product.available ? "متاح للرد" : "مخفي"}
+                          </button>
+                          <span className="text-sm font-semibold text-white">{product.price || "-"} {product.currency}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </GradientCard>
         </div>
 
-        {/* Tab 1: Business Info */}
-        <TabsContent value="business-info">
-          <Card className="rounded-3xl border border-white/10 bg-white/[0.02]">
-            <CardHeader className="text-right">
-              <CardTitle className="text-lg font-bold text-white flex items-center justify-end gap-2">
-                <span>معلومات النشاط الأساسية</span>
-                <Sparkles className="h-5 w-5 text-emeraldx-400" />
-              </CardTitle>
-              <CardDescription className="text-sm text-white/45">أدخل معلومات وقواعد شركتك ليعتمد عليها الوكيل في إجاباته الافتراضية.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="border border-white/5 bg-white/[0.02] p-5 rounded-3xl">
-                <KnowledgeEditor />
-              </div>
-              
-              <div className="text-right">
-                <h4 className="text-sm font-bold text-white/80 mb-3">الحقائق المخزنة حالياً للنشاط</h4>
-                {knowledge.filter(k => k.category === 'business-info' || !['faqs', 'policies'].includes(k.category || '')).length === 0 ? (
-                  <p className="text-xs text-white/35 py-4">لا توجد معلومات نشاط محفوظة حالياً.</p>
-                ) : (
-                  <div className="grid gap-4 md:grid-cols-2">
-                    {knowledge.filter(k => k.category === 'business-info' || !['faqs', 'policies'].includes(k.category || '')).map((item) => (
-                      <div key={item.id} className="relative rounded-3xl border border-white/10 bg-white/[0.045] p-5 text-right flex flex-col justify-between group hover:border-white/20 transition-all duration-300">
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteKnowledge(item.id)}
-                          className="absolute left-4 top-4 text-white/30 hover:text-red-400 transition p-1.5 opacity-0 group-hover:opacity-100"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                        <div>
-                          <div className="inline-flex bg-emeraldx-500/10 text-emeraldx-400 text-[10px] font-bold px-2 py-0.5 rounded-full mb-2">
-                            {item.category === "business-info" ? "معلومات عامة" : item.category}
-                          </div>
-                          <div className="font-semibold text-white text-sm mb-2">{item.title}</div>
-                          <p className="text-xs leading-5 text-white/50">{item.body}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Tab 2: Products & Services */}
-        <TabsContent value="products-services">
-          <Card className="rounded-3xl border border-white/10 bg-white/[0.02]">
-            <CardHeader className="text-right flex flex-row items-center justify-between gap-4">
-              <Button onClick={() => setShowProductForm(!showProductForm)} size="sm">
-                <Plus className="h-4 w-4 ml-1" />
-                {showProductForm ? "إلغاء الإضافة" : "إضافة خدمة أو منتج"}
-              </Button>
-              <div>
-                <CardTitle className="text-lg font-bold text-white flex items-center justify-end gap-2">
-                  <span>قائمة المنتجات والخدمات</span>
-                  <FileText className="h-5 w-5 text-emeraldx-400" />
-                </CardTitle>
-                <CardDescription className="text-sm text-white/45">إدارة الخدمات والأسعار التي سيتحدث عنها الوكيل ويقوم بتسويقها.</CardDescription>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {showProductForm && (
-                <Card className="border border-white/10 bg-white/[0.03] p-5 rounded-3xl">
-                  <h4 className="text-sm font-bold text-white mb-3 text-right">إضافة منتج أو خدمة جديدة</h4>
-                  <div className="grid gap-3 md:grid-cols-3 mb-4">
-                    <Input value={productName} onChange={(event) => setProductName(event.target.value)} placeholder="اسم المنتج/الخدمة (مثال: عطر مسار)" className="text-right text-xs pr-3" />
-                    <Input value={productPrice} onChange={(event) => setProductPrice(event.target.value)} placeholder="السعر بالدولار أو العملة المحددة" className="text-right text-xs pr-3" />
-                    <Input value={productDescription} onChange={(event) => setProductDescription(event.target.value)} placeholder="وصف الخدمة ومميزاتها بالتفصيل" className="text-right text-xs pr-3" />
-                  </div>
-                  <div className="flex gap-2 justify-end">
-                    <Button onClick={addProduct} size="sm">حفظ وتدريب الوكيل</Button>
-                    <Button onClick={() => setShowProductForm(false)} size="sm" variant="secondary">إلغاء</Button>
-                  </div>
-                </Card>
-              )}
-
-              {products.length === 0 ? (
-                <div className="text-center py-10 border border-dashed border-white/10 rounded-3xl bg-white/[0.01]">
-                  <p className="text-sm text-white/40 mb-3">لا توجد منتجات أو خدمات مضافة حالياً.</p>
-                  <Button onClick={() => setShowProductForm(true)} size="sm">إضافة منتجك الأول</Button>
-                </div>
-              ) : (
-                <div className="overflow-hidden rounded-3xl border border-white/10">
-                  <table className="w-full text-right text-sm">
-                    <thead className="bg-white/[0.045] text-white/45">
-                      <tr>
-                        <th className="px-5 py-3 text-right">الاسم</th>
-                        <th className="px-5 py-3 text-right">السعر</th>
-                        <th className="px-5 py-3 text-right">الحالة للوكيل</th>
-                        <th className="px-5 py-3 text-right">الوصف التسويقي</th>
-                        <th className="px-5 py-3 text-left">التحكم</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {products.map((product) => (
-                        <tr key={product.id} className="border-t border-white/10 hover:bg-white/[0.02] transition-colors">
-                          <td className="px-5 py-4 font-semibold text-white text-right">{product.name}</td>
-                          <td className="px-5 py-4 text-white/70 text-right">{product.price}</td>
-                          <td className="px-5 py-4 text-right">
-                            <button
-                              type="button"
-                              onClick={() => handleToggleProduct(product.id)}
-                              className="inline-flex items-center gap-1.5 text-xs focus:outline-none"
-                            >
-                              {product.available ? (
-                                <>
-                                  <ToggleRight className="h-5 w-5 text-emeraldx-500" />
-                                  <span className="text-emeraldx-400">نشط (يرد عليه)</span>
-                                </>
-                              ) : (
-                                <>
-                                  <ToggleLeft className="h-5 w-5 text-white/30" />
-                                  <span className="text-white/40">مخفي</span>
-                                </>
-                              )}
-                            </button>
-                          </td>
-                          <td className="px-5 py-4 text-white/50 text-right max-w-xs truncate">{product.description || "-"}</td>
-                          <td className="px-5 py-4 text-left">
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-8 w-8 p-0 text-white/40 hover:text-red-400"
-                              onClick={() => handleDeleteProduct(product.id)}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Tab 3: FAQs */}
-        <TabsContent value="faqs">
-          <Card className="rounded-3xl border border-white/10 bg-white/[0.02]">
-            <CardHeader className="text-right flex flex-row items-center justify-between gap-4">
-              <Button onClick={() => setShowFaqForm(!showFaqForm)} size="sm">
-                <Plus className="h-4 w-4 ml-1" />
-                {showFaqForm ? "إلغاء الإضافة" : "إضافة سؤال شائع"}
-              </Button>
-              <div>
-                <CardTitle className="text-lg font-bold text-white flex items-center justify-end gap-2">
-                  <span>الأسئلة الشائعة والإجابات (FAQs)</span>
-                  <HelpCircle className="h-5 w-5 text-emeraldx-400" />
-                </CardTitle>
-                <CardDescription className="text-sm text-white/45">أضف الأسئلة المتكررة التي يطرحها العملاء وإجاباتها الدقيقة ليرد بها الوكيل.</CardDescription>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {showFaqForm && (
-                <Card className="border border-white/10 bg-white/[0.03] p-5 rounded-3xl text-right">
-                  <h4 className="text-sm font-bold text-white mb-3">إضافة سؤال شائع جديد</h4>
-                  <div className="space-y-3 mb-4">
-                    <Input value={faqQuestion} onChange={(e) => setFaqQuestion(e.target.value)} placeholder="السؤال (مثال: هل توفرون شحن مجاني؟)" className="text-right text-xs pr-3" />
-                    <Textarea value={faqAnswer} onChange={(e) => setFaqAnswer(e.target.value)} placeholder="الإجابة المفصلة التي يعتمد عليها الوكيل..." className="text-right text-xs min-h-[80px]" />
-                  </div>
-                  <div className="flex gap-2 justify-end">
-                    <Button onClick={() => addKnowledgeItem("faqs", faqQuestion, faqAnswer, () => {
-                      setFaqQuestion("");
-                      setFaqAnswer("");
-                      setShowFaqForm(false);
-                    })} size="sm">حفظ السؤال</Button>
-                    <Button onClick={() => setShowFaqForm(false)} size="sm" variant="secondary">إلغاء</Button>
-                  </div>
-                </Card>
-              )}
-
-              {knowledge.filter(k => k.category === "faqs").length === 0 ? (
-                <div className="text-center py-10 border border-dashed border-white/10 rounded-3xl bg-white/[0.01]">
-                  <p className="text-sm text-white/40 mb-3">لا توجد أسئلة متكررة محفوظة حالياً.</p>
-                  <Button onClick={() => setShowFaqForm(true)} size="sm">إضافة سؤال متكرر</Button>
-                </div>
-              ) : (
-                <div className="grid gap-4">
-                  {knowledge.filter(k => k.category === "faqs").map((faq) => (
-                    <div key={faq.id} className="relative rounded-3xl border border-white/10 bg-white/[0.04] p-5 text-right flex flex-col justify-between group hover:border-white/20 transition-all duration-300">
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteKnowledge(faq.id)}
-                        className="absolute left-4 top-4 text-white/30 hover:text-red-400 transition p-1.5 opacity-0 group-hover:opacity-100"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                      <div className="pr-2">
-                        <div className="font-bold text-white text-sm mb-2">س: {faq.title}</div>
-                        <p className="text-xs leading-6 text-white/60">ج: {faq.body}</p>
+        <div className="space-y-6">
+          <GradientCard>
+            <div className="mb-5 flex items-center justify-between">
+              <Link2 className="h-5 w-5 text-emeraldx-400" />
+              <h2 className="text-xl font-semibold text-white">استيراد من رابط</h2>
+            </div>
+            <Input dir="ltr" placeholder="https://instagram.com/... أو رابط موقع المنتج" value={importUrl} onChange={(e) => setImportUrl(e.target.value)} />
+            <Button className="mt-3 w-full" onClick={importFromUrl} disabled={importing}>
+              {importing ? "جاري القراءة..." : "قراءة الرابط"}
+            </Button>
+            {candidates.length > 0 && (
+              <div className="mt-4 space-y-3">
+                {candidates.map((candidate, index) => (
+                  <div key={`${candidate.name}-${index}`} className="rounded-2xl border border-white/10 bg-white/[0.035] p-3 text-right">
+                    <div className="flex gap-3">
+                      {candidate.image_url && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={candidate.image_url} alt="" className="h-14 w-14 rounded-xl object-cover" />
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <h3 className="text-sm font-semibold text-white">{candidate.name}</h3>
+                        <p className="mt-1 line-clamp-2 text-xs text-white/45">{candidate.description || "الوصف غير واضح، كمله قبل الحفظ."}</p>
                       </div>
                     </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Tab 4: Policies */}
-        <TabsContent value="policies">
-          <Card className="rounded-3xl border border-white/10 bg-white/[0.02]">
-            <CardHeader className="text-right flex flex-row items-center justify-between gap-4">
-              <Button onClick={() => setShowPolicyForm(!showPolicyForm)} size="sm">
-                <Plus className="h-4 w-4 ml-1" />
-                {showPolicyForm ? "إلغاء الإضافة" : "إضافة سياسة جديدة"}
-              </Button>
-              <div>
-                <CardTitle className="text-lg font-bold text-white flex items-center justify-end gap-2">
-                  <span>السياسات وشروط الخدمة</span>
-                  <BookOpen className="h-5 w-5 text-emeraldx-400" />
-                </CardTitle>
-                <CardDescription className="text-sm text-white/45">حدد سياسات الاسترجاع، الشحن، الاستبدال والخصوصية للوكيل.</CardDescription>
+                    <Button size="sm" variant="secondary" className="mt-3 w-full" onClick={() => fillFromCandidate(candidate)}>
+                      تعبئة النموذج للمراجعة
+                    </Button>
+                  </div>
+                ))}
               </div>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {showPolicyForm && (
-                <Card className="border border-white/10 bg-white/[0.03] p-5 rounded-3xl text-right">
-                  <h4 className="text-sm font-bold text-white mb-3">إضافة سياسة نشاط جديدة</h4>
-                  <div className="space-y-3 mb-4">
-                    <Input value={policyTitle} onChange={(e) => setPolicyTitle(e.target.value)} placeholder="عنوان السياسة (مثال: سياسة الاستبدال والاسترجاع)" className="text-right text-xs pr-3" />
-                    <Textarea value={policyContent} onChange={(e) => setPolicyContent(e.target.value)} placeholder="اكتب شروط وبنود السياسة بوضوح للوكيل..." className="text-right text-xs min-h-[90px]" />
-                  </div>
-                  <div className="flex gap-2 justify-end">
-                    <Button onClick={() => addKnowledgeItem("policies", policyTitle, policyContent, () => {
-                      setPolicyTitle("");
-                      setPolicyContent("");
-                      setShowPolicyForm(false);
-                    })} size="sm">حفظ السياسة</Button>
-                    <Button onClick={() => setShowPolicyForm(false)} size="sm" variant="secondary">إلغاء</Button>
-                  </div>
-                </Card>
-              )}
+            )}
+          </GradientCard>
 
-              {knowledge.filter(k => k.category === "policies").length === 0 ? (
-                <div className="text-center py-10 border border-dashed border-white/10 rounded-3xl bg-white/[0.01]">
-                  <p className="text-sm text-white/40 mb-3">لا توجد سياسات محفوظة حالياً.</p>
-                  <Button onClick={() => setShowPolicyForm(true)} size="sm">إضافة سياسة نشاط</Button>
-                </div>
-              ) : (
-                <div className="grid gap-4 md:grid-cols-2">
-                  {knowledge.filter(k => k.category === "policies").map((policy) => (
-                    <div key={policy.id} className="relative rounded-3xl border border-white/10 bg-white/[0.045] p-5 text-right flex flex-col justify-between group hover:border-white/20 transition-all duration-300">
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteKnowledge(policy.id)}
-                        className="absolute left-4 top-4 text-white/30 hover:text-red-400 transition p-1.5 opacity-0 group-hover:opacity-100"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                      <div>
-                        <div className="font-bold text-white text-sm mb-2 flex items-center justify-end gap-1.5">
-                          <span>{policy.title}</span>
-                          <BookOpen className="h-4 w-4 text-emeraldx-400" />
-                        </div>
-                        <p className="text-xs leading-6 text-white/60">{policy.body}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
+          <GradientCard>
+            <div className="mb-5 flex items-center justify-between">
+              <CheckCircle2 className="h-5 w-5 text-emeraldx-400" />
+              <h2 className="text-xl font-semibold text-white">سياسات ومعلومات عامة</h2>
+            </div>
+            <Input className="text-right" placeholder="العنوان: سياسة الاستبدال" value={policyForm.title} onChange={(e) => setPolicyForm({ ...policyForm, title: e.target.value })} />
+            <Textarea className="mt-3 min-h-24 text-right" placeholder="النص الذي يعتمد عليه الوكيل" value={policyForm.body} onChange={(e) => setPolicyForm({ ...policyForm, body: e.target.value })} />
+            <Button className="mt-3 w-full" onClick={addKnowledgeItem}>حفظ المعلومة</Button>
 
-        {/* Tab 5: Documents & Files Upload (Simulator & Manager) */}
-        <TabsContent value="files">
-          <Card className="rounded-3xl border border-white/10 bg-white/[0.02]">
-            <CardHeader className="text-right">
-              <CardTitle className="text-lg font-bold text-white flex items-center justify-end gap-2">
-                <span>الملفات المستندية ومصادر المعرفة</span>
-                <Upload className="h-5 w-5 text-emeraldx-400" />
-              </CardTitle>
-              <CardDescription className="text-sm text-white/45">ارفع ملفات PDF، Word، أو نصوص ليقوم الذكاء الاصطناعي باستخراج المعلومات وفهرستها.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {/* Drag and drop zone */}
-              <div className="relative border-2 border-dashed border-white/15 rounded-3xl bg-white/[0.015] hover:bg-white/[0.035] hover:border-emeraldx-400/40 p-8 text-center transition-all duration-300">
-                <input
-                  type="file"
-                  id="file-upload"
-                  className="absolute inset-0 opacity-0 cursor-pointer"
-                  disabled={uploadingFile}
-                  accept=".pdf,.docx,.txt,.doc"
-                  onChange={handleFileUpload}
-                />
-                <div className="flex flex-col items-center justify-center space-y-4">
-                  <div className="grid h-12 w-12 place-items-center rounded-2xl bg-white/5 text-white/60">
-                    <Upload className="h-6 w-6" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-white">اسحب وأفلت مستنداتك هنا أو انقر للتصفح</p>
-                    <p className="text-xs text-white/40 mt-1">يدعم ملفات PDF, Word, TXT حتى 10 ميغابايت</p>
-                  </div>
+            <div className="mt-4 space-y-2">
+              {knowledge.slice(0, 6).map((item) => (
+                <div key={item.id} className="rounded-2xl bg-white/[0.035] p-3 text-right">
+                  <div className="font-semibold text-white text-sm">{item.title}</div>
+                  <p className="mt-1 line-clamp-2 text-xs text-white/45">{item.body}</p>
                 </div>
-              </div>
-
-              {uploadingFile && (
-                <div className="bg-white/[0.03] border border-white/5 p-4 rounded-2xl text-right space-y-2">
-                  <div className="flex justify-between items-center text-xs text-white/60">
-                    <span className="font-semibold text-emeraldx-400">{uploadProgress}%</span>
-                    <span>جاري رفع وفهرسة المستند...</span>
-                  </div>
-                  <div className="h-1.5 w-full bg-white/10 rounded-full overflow-hidden">
-                    <div className="h-full bg-emeraldx-500 rounded-full transition-all duration-150" style={{ width: `${uploadProgress}%` }} />
-                  </div>
-                </div>
-              )}
-
-              {/* Uploaded files manager */}
-              <div className="text-right">
-                <h4 className="text-sm font-bold text-white/80 mb-3 flex items-center justify-end gap-1.5">
-                  <span>المستندات المفهرسة حالياً للوكيل</span>
-                  <FileText className="h-4 w-4 text-white/40" />
-                </h4>
-                
-                {files.length === 0 ? (
-                  <div className="text-center py-6 text-xs text-white/30 border border-white/5 rounded-3xl bg-white/[0.01]">
-                    لا توجد مستندات مرفوعة حالياً لتأهيل الوكيل.
-                  </div>
-                ) : (
-                  <div className="grid gap-3">
-                    {files.map((file) => (
-                      <div key={file.id} className="flex items-center justify-between border border-white/5 bg-white/[0.025] hover:bg-white/[0.045] p-4 rounded-2xl transition-all duration-200">
-                        <div className="flex gap-2">
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="h-8 w-8 p-0 text-white/40 hover:text-red-400"
-                            onClick={() => handleDeleteFile(file.id)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                        
-                        <div className="flex items-center gap-3">
-                          <div className="text-right">
-                            <div className="text-xs font-semibold text-white">{file.name}</div>
-                            <div className="text-[10px] text-white/40 mt-0.5">{file.size} · رفع في {file.uploadedAt}</div>
-                          </div>
-                          
-                          <div className="flex items-center gap-2">
-                            {file.status === "INDEXED" ? (
-                              <span className="inline-flex items-center gap-1 bg-emeraldx-500/10 border border-emeraldx-500/20 text-emeraldx-400 text-[10px] px-2 py-0.5 rounded-full">
-                                <CheckCircle2 className="h-3 w-3" />
-                                تم الاستخراج والفهرسة
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 bg-amber-500/10 border border-amber-500/20 text-amber-400 text-[10px] px-2 py-0.5 rounded-full animate-pulse">
-                                <RefreshCw className="h-3 w-3 animate-spin" />
-                                جاري تحليل النصوص للوكيل...
-                              </span>
-                            )}
-                            <div className="grid h-9 w-9 place-items-center rounded-xl bg-white/5 text-white/60">
-                              <FileText className="h-5 w-5" />
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+              ))}
+            </div>
+          </GradientCard>
+        </div>
+      </div>
     </AppShell>
   );
 }

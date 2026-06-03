@@ -302,7 +302,6 @@ async def create_client(
         business_type=payload.business_type,
         ai_persona=persona,
         role="client",
-        chatwoot_account_id=None,
     )
     db.add(client)
     await db.flush()

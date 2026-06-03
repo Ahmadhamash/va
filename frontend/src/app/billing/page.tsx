@@ -196,9 +196,9 @@ export default function BillingPage() {
             })}
           </div>
           
-          {/* Bottom Security Info Badge */}
-          <div className="text-center py-4 text-[10px] text-white/30 flex items-center justify-center gap-1">
-            <span>جميع المعاملات تتم بأمان وحماية مشفرة 100% بالتعاون مع بوابات الدفع العالمية</span>
+          {/* Billing integration note */}
+          <div className="text-center py-4 text-[10px] text-white/40 flex items-center justify-center gap-1">
+            <span>تغيير الخطة هنا يفعّل الاشتراك داخل النظام. الدفع الإلكتروني الحقيقي يحتاج ربط بوابة دفع وإعداد مفاتيحها على السيرفر.</span>
             <ShieldCheck className="h-3.5 w-3.5 text-white/30" />
           </div>
         </div>

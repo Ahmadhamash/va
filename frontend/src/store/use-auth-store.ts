@@ -9,9 +9,8 @@ interface User {
   email: string;
   business_name: string | null;
   business_type: string | null;
+  ai_persona: string | null;
   role: string;
-  chatwoot_account_id: string | null;
-  chatwoot_user_token: string | null;
 }
 
 interface AuthState {

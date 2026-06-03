@@ -55,13 +55,11 @@ class Settings(BaseSettings):
     # Voice / TTS
     ELEVENLABS_API_KEY: str = ""
 
-    # Chatwoot bridge
-    CHATWOOT_BASE_URL: str = ""
-    CHATWOOT_ACCOUNT_ID: str = ""
-    CHATWOOT_API_ACCESS_TOKEN: str = ""
-    CHATWOOT_BOT_AGENT_ID: str = ""
-    CHATWOOT_WEBHOOK_SECRET: str = ""
-    CHATWOOT_USER_ID: str = ""
+    # Meta OAuth for Facebook Messenger / Instagram direct connection
+    META_APP_ID: str = ""
+    META_APP_SECRET: str = ""
+    META_OAUTH_REDIRECT_URI: str = ""
+    META_OAUTH_SUCCESS_URL: str = ""
     AI_AUTO_REPLY_ENABLED: bool = True
     AI_HUMAN_HANDOFF_LABEL: str = "human_handoff"
 

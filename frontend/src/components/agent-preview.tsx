@@ -1,7 +1,7 @@
 "use client";
 
-import { Bot, Send, RotateCcw, ShieldAlert } from "lucide-react";
-import { useState, useRef, useEffect } from "react";
+import { Bot, RotateCcw, Send, ShieldAlert } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { GradientCard } from "@/components/gradient-card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -11,24 +11,31 @@ interface Message {
   id: string;
   sender: "CUSTOMER" | "AI" | "SYSTEM";
   body: string;
-  createdAt: Date;
 }
 
+const dialectGreeting: Record<string, string> = {
+  jordanian: "يا هلا، كيف بقدر أساعدك اليوم؟",
+  syrian: "أهلاً وسهلاً، كيف فيني ساعدك؟",
+  saudi: "يا هلا ومرحبا، كيف أقدر أساعدك؟",
+  egyptian: "أهلاً بيك، أقدر أساعدك إزاي؟",
+  msa: "أهلاً بك، كيف يمكنني مساعدتك؟",
+};
+
 export function AgentPreview({
-  agentName = "مساعد مسار",
-  tone = "عربي ودود",
-  strictness = "متوازن",
-  workingHours = "9 ص - 11 م",
-  systemPrompt = "",
-  fallbackMessage = "لحظة من فضلك، رح أحولك لموظف يساعدك بشكل أفضل.",
+  agentName = "مساعد chatter",
+  dialect = "jordanian",
+  tone = "friendly",
+  strictness = "balanced",
+  workingHours = "9 صباحاً - 6 مساءً",
+  fallbackMessage = "ثواني بس، رح أحولك لموظف يساعدك بشكل أدق.",
   bannedPhrases = [],
-  handoffToggles = { angry: true, refund: true, sensitive: true }
+  handoffToggles = { angry: true, refund: true, sensitive: true },
 }: {
   agentName?: string;
+  dialect?: string;
   tone?: string;
   strictness?: string;
   workingHours?: string;
-  systemPrompt?: string;
   fallbackMessage?: string;
   bannedPhrases?: string[];
   handoffToggles?: { angry: boolean; refund: boolean; sensitive: boolean };
@@ -37,279 +44,149 @@ export function AgentPreview({
   const [inputText, setInputText] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const [agentStatus, setAgentStatus] = useState<"ONLINE" | "HANDOFF">("ONLINE");
-  const [handoffReason, setHandoffReason] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Initialize with greeting
-  useEffect(() => {
-    resetChat();
-  }, [agentName, tone]);
-
-  const resetChat = () => {
-    let initialGreeting = `أهلاً بك! أنا ${agentName}، كيف يمكنني مساعدتك اليوم؟`;
-    if (tone.includes("أردنية") || tone.includes("ودود") || tone.includes("friendly")) {
-      initialGreeting = `يا هلا والله! أنا ${agentName}، كيف بقدر أخدمك وأساعدك اليوم؟ 😊`;
-    } else if (tone.includes("سعودية") || tone.includes("saudi")) {
-      initialGreeting = `يا هلا ومرحبا فيك! أنا ${agentName}، كيف أقدر أساعدك اليوم طال عمرك؟ 🇸🇦`;
-    } else if (tone.includes("مصرية") || tone.includes("egyptian")) {
-      initialGreeting = `أهلاً وسهلاً بحضرتك! منورنا، أنا ${agentName}، إزاي أقدر أساعدك النهاردة يا فندم؟ 🌸`;
-    }
-
+  function resetChat() {
+    setAgentStatus("ONLINE");
     setMessages([
       {
         id: "init",
         sender: "AI",
-        body: initialGreeting,
-        createdAt: new Date()
-      }
+        body: `أنا ${agentName}. ${dialectGreeting[dialect] || dialectGreeting.jordanian}`,
+      },
     ]);
-    setAgentStatus("ONLINE");
-    setHandoffReason("");
-  };
+  }
 
-  // Scroll to bottom
+  useEffect(() => {
+    resetChat();
+  }, [agentName, dialect]);
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isTyping]);
 
-  const handleSend = (textToSend = inputText) => {
-    if (!textToSend.trim()) return;
+  function responseFor(input: string): { text: string; handoff?: boolean; reason?: string } {
+    const text = input.toLowerCase();
+    const banned = bannedPhrases.find((phrase) => phrase.trim() && text.includes(phrase.toLowerCase().trim()));
+    if (banned) {
+      return { text: `هاي العبارة ممنوعة عندنا: ${banned}. بقدر أساعدك بسؤال ثاني ضمن معلومات النشاط.` };
+    }
+    if (handoffToggles.angry && ["شكوى", "غاضب", "سيء", "نصب", "مشكلة"].some((word) => text.includes(word))) {
+      return { text: fallbackMessage, handoff: true, reason: "شكوى أو غضب" };
+    }
+    if (handoffToggles.refund && ["استرجاع", "إلغاء", "فلوسي", "مصاري", "ترجيع"].some((word) => text.includes(word))) {
+      return { text: fallbackMessage, handoff: true, reason: "إلغاء أو استرجاع" };
+    }
+    if (handoffToggles.sensitive && ["قانوني", "كلمة المرور", "سري", "اختراق"].some((word) => text.includes(word))) {
+      return { text: fallbackMessage, handoff: true, reason: "معلومة حساسة" };
+    }
+    if (["دوام", "أوقات", "متى"].some((word) => text.includes(word))) {
+      return { text: `أوقات العمل هي ${workingHours}. وإذا بدك تفاصيل أكثر بحولك للموظف المناسب.` };
+    }
+    if (strictness === "strict") {
+      return { text: "ما بقدر أعطي معلومة مش موجودة بقاعدة المعرفة. احكيلي اسم المنتج أو السؤال بشكل أدق." };
+    }
+    if (tone === "salesy") {
+      return { text: "تمام، بعطيك المعلومة المؤكدة وبساعدك تختار الأنسب بدون ما أخترع تفاصيل مش موجودة." };
+    }
+    if (tone === "professional") {
+      return { text: "أكيد، سأجيبك بناءً على المعلومات المتوفرة فقط، وإذا احتجنا تفاصيل إضافية سأطلبها منك بوضوح." };
+    }
+    return { text: "أكيد، احكيلي أي منتج أو خدمة تقصد وبجاوبك من المعلومات الموجودة عندنا." };
+  }
 
-    // Add user message
-    const userMsg: Message = {
-      id: `user-${Date.now()}`,
-      sender: "CUSTOMER",
-      body: textToSend,
-      createdAt: new Date()
-    };
-
-    setMessages(prev => [...prev, userMsg]);
+  function handleSend(textToSend = inputText) {
+    if (!textToSend.trim() || agentStatus === "HANDOFF") return;
+    setMessages((current) => [...current, { id: `user-${Date.now()}`, sender: "CUSTOMER", body: textToSend }]);
     setInputText("");
     setIsTyping(true);
-
-    // Simulate Agent processing
     setTimeout(() => {
+      const result = responseFor(textToSend);
       setIsTyping(false);
-      const res = getMockResponse(textToSend);
-
-      if (res.handoff) {
-        setAgentStatus("HANDOFF");
-        setHandoffReason(res.reason || "");
-        setMessages(prev => [
-          ...prev,
-          {
-            id: `ai-${Date.now()}`,
-            sender: "AI",
-            body: res.text,
-            createdAt: new Date()
-          },
-          {
-            id: `sys-${Date.now()}`,
-            sender: "SYSTEM",
-            body: `⚠️ تم تشغيل قاعدة التحويل البشري: (${res.reason}). المحادثة معلقة بانتظار موظف.`,
-            createdAt: new Date()
-          }
-        ]);
-      } else {
-        setMessages(prev => [
-          ...prev,
-          {
-            id: `ai-${Date.now()}`,
-            sender: "AI",
-            body: res.text,
-            createdAt: new Date()
-          }
-        ]);
-      }
-    }, 1000);
-  };
-
-  const getMockResponse = (input: string) => {
-    const text = input.toLowerCase();
-
-    // 1. Banned Phrases Check
-    const triggeredBanned = bannedPhrases.find(phrase =>
-      phrase.trim() && text.includes(phrase.toLowerCase().trim())
-    );
-    if (triggeredBanned) {
-      return {
-        text: `عذراً، لقد كتبت عبارة تحتوي على كلمة محظورة من قبل إدارة النظام (${triggeredBanned}). كوكيل ذكي، يمنع عليّ استخدام أو مناقشة هذه الكلمات بناءً على سياسة النشاط.`,
-        handoff: false
-      };
-    }
-
-    // 2. Anger Check
-    const angryWords = ["غاضب", "سيء", "شكوى", "سيئه", "تافه", "كذاب", "احتيال", "نصب", "زفت", "غبي", "حمار"];
-    const isAngry = angryWords.some(w => text.includes(w));
-    if (isAngry && handoffToggles.angry) {
-      return {
-        text: fallbackMessage || "لحظة من فضلك، رح أحولك لموظف يساعدك بشكل أفضل.",
-        handoff: true,
-        reason: "غضب العميل"
-      };
-    }
-
-    // 3. Refund/Cancel Check
-    const refundWords = ["استرجاع", "الغاء", "الاسترجاع", "الإلغاء", "ترجيع", "فلوسي", "مصاري", "الغاء الاشتراك", "ارجاع"];
-    const isRefund = refundWords.some(w => text.includes(w));
-    if (isRefund && handoffToggles.refund) {
-      return {
-        text: fallbackMessage || "لحظة من فضلك، رح أحولك لموظف يساعدك بشكل أفضل.",
-        handoff: true,
-        reason: "طلب إلغاء/استرجاع"
-      };
-    }
-
-    // 4. Sensitive Information Check
-    const sensitiveWords = ["سري", "باسورد", "اختراق", "تهديد", "قانوني", "محامي", "سرقة", "كلمة المرور"];
-    const isSensitive = sensitiveWords.some(w => text.includes(w));
-    if (isSensitive && handoffToggles.sensitive) {
-      return {
-        text: "عذراً، هذا الاستفسار يتعلق بمعلومات حساسة. جاري تحويلك مباشرة للتحقق البشري لمتابعة الطلب بأمان.",
-        handoff: true,
-        reason: "معلومات حساسة"
-      };
-    }
-
-    // 5. Working Hours Check
-    const hoursWords = ["ساعات", "مواعيد", "وقت", "اوقات", "متى", "تفتحوا", "دوام"];
-    const isHours = hoursWords.some(w => text.includes(w));
-    if (isHours) {
-      return {
-        text: `أوقات عملنا الرسمية للرد البشري هي: ${workingHours}. ولكن أنا كوكيل ذكي متواجد لخدمتك على مدار الساعة!`,
-        handoff: false
-      };
-    }
-
-    // 6. Greetings Check
-    const greetings = ["مرحبا", "هلا", "السلام", "مرحب", "سلام", "hi", "hello"];
-    const isGreeting = greetings.some(g => text.includes(g));
-    if (isGreeting) {
-      let greetingText = `أهلاً بك مجدداً! كيف يمكنني مساعدتك اليوم؟`;
-      if (tone.includes("أردنية") || tone.includes("ودود") || tone.includes("friendly")) {
-        greetingText = `يا هلا والله وغلا! كيف بقدر أخدمك وأساعدك اليوم؟ 😊`;
-      } else if (tone.includes("سعودية") || tone.includes("saudi")) {
-        greetingText = `يا هلا ومرحبا فيك! كيف أقدر أساعدك اليوم طال عمرك؟ 🇸🇦`;
-      } else if (tone.includes("مصرية") || tone.includes("egyptian")) {
-        greetingText = `أهلاً وسهلاً بحضرتك يا فندم! إزاي أقدر أساعدك النهاردة؟ 🌸`;
-      }
-      return { text: greetingText, handoff: false };
-    }
-
-    // 7. Strictness Check
-    if (strictness.includes("صارم")) {
-      return {
-        text: `أنا آسف، كوكيل ذكي مضبوط على الوضع الصارم، يمكنني الإجابة فقط على الأسئلة المطابقة للمعلومات المحفوظة في قاعدة المعرفة. يرجى إعادة صياغة سؤالك حول خدماتنا الأساسية.`,
-        handoff: false
-      };
-    }
-
-    // Default responses based on dialect
-    let replyText = "";
-    if (tone.includes("أردنية") || tone.includes("ودود") || tone.includes("friendly")) {
-      replyText = `على راسي، بخصوص سؤالك عن "${input}"، وكيلنا مبرمج باللهجة الأردنية الودودة لمساعدتك. تحب تستفسر عن الأسعار أو طريقة الربط؟`;
-    } else if (tone.includes("سعودية") || tone.includes("saudi")) {
-      replyText = `أبشر، استفسارك بخصوص "${input}" محل اهتمامنا. منصة مسار توفر لك ربط تلقائي ومبيعات ذكية لعملائك بكل سهولة. وش تبي تعرف أكثر؟`;
-    } else if (tone.includes("مصرية") || tone.includes("egyptian")) {
-      replyText = `يا فندم بخصوص "${input}"، عيونا ليك! إحنا بنسهل عليك الربط والرد التلقائي بالكامل عشان تريح بالك. تحب أبعتلك تفاصيل الأسعار؟`;
-    } else {
-      replyText = `بخصوص استفسارك حول "${input}"، يسعدني إعلامك أن الوكيل الذكي يعمل بكفاءة لمعالجة طلباتك. يرجى تزويدنا بالمزيد من التفاصيل لنتمكن من إفادتك بشكل أدق.`;
-    }
-
-    return { text: replyText, handoff: false };
-  };
+      setMessages((current) => [
+        ...current,
+        { id: `ai-${Date.now()}`, sender: "AI", body: result.text },
+        ...(result.handoff
+          ? [{ id: `sys-${Date.now()}`, sender: "SYSTEM" as const, body: `تم تشغيل التحويل البشري: ${result.reason}.` }]
+          : []),
+      ]);
+      if (result.handoff) setAgentStatus("HANDOFF");
+    }, 650);
+  }
 
   const quickTests = [
-    { label: "⏰ أوقات العمل", query: "ما هي أوقات العمل والدوام؟" },
-    { label: "💳 طلب استرجاع", query: "أريد إلغاء الطلب واسترجاع أموالي!" },
-    { label: "🚫 كلمة محظورة", query: bannedPhrases[0] ? `هل تقدمون ${bannedPhrases[0]}؟` : "هل تقدمون خصم خاص؟" },
-    { label: "💡 استفسار عام", query: "كيف يعمل الربط مع واتساب؟" }
+    { label: "أوقات العمل", query: "شو أوقات الدوام؟" },
+    { label: "استرجاع", query: "بدي استرجاع مصاري" },
+    { label: "شكوى", query: "عندي شكوى ومشكلة" },
+    { label: "سؤال عام", query: "كيف بقدر أطلب؟" },
   ];
 
   return (
-    <GradientCard className="flex flex-col h-[650px] p-0 overflow-hidden border border-white/10 bg-white/[0.035] rounded-3xl">
-      {/* Mock Chat Header */}
+    <GradientCard className="flex h-[650px] flex-col overflow-hidden rounded-2xl border border-white/10 bg-white/[0.035] p-0">
       <div className="flex items-center justify-between border-b border-white/10 bg-white/[0.04] p-4">
         <div className="flex items-center gap-3">
           <div className="relative">
-            <div className="grid h-10 w-10 place-items-center rounded-2xl bg-emeraldx-500 text-ink-950 shadow-glow">
+            <div className="grid h-10 w-10 place-items-center rounded-2xl bg-emeraldx-500 text-white shadow-glow">
               <Bot className="h-5 w-5" />
             </div>
-            <span className={cn(
-              "absolute -bottom-1 -left-1 h-3.5 w-3.5 rounded-full border-2 border-ink-950",
-              agentStatus === "ONLINE" ? "bg-emeraldx-400" : "bg-amber-500"
-            )} />
+            <span className={cn("absolute -bottom-1 -left-1 h-3.5 w-3.5 rounded-full border-2 border-ink-950", agentStatus === "ONLINE" ? "bg-emeraldx-400" : "bg-amber-500")} />
           </div>
           <div className="text-right">
             <h3 className="text-sm font-semibold text-white">{agentName}</h3>
-            <p className="text-[10px] text-white/50 text-right">
-              {agentStatus === "ONLINE" ? "نشط الآن (الذكاء)" : `تحويل بشري نشط (${handoffReason})`}
-            </p>
+            <p className="text-[10px] text-white/50">{agentStatus === "ONLINE" ? "نشط الآن" : "تحويل بشري نشط"}</p>
           </div>
         </div>
-        <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-white/40 hover:text-white" onClick={resetChat}>
+        <Button type="button" size="sm" variant="ghost" className="h-8 w-8 p-0 text-white/40 hover:text-white" onClick={resetChat}>
           <RotateCcw className="h-4 w-4" />
         </Button>
       </div>
 
-      {/* Simulator Details Indicator */}
-      <div className="bg-white/[0.02] border-b border-white/5 px-4 py-2 flex items-center justify-between text-[11px] text-white/45">
-        <span>الأسلوب: <b className="text-white/60">{tone}</b></span>
-        <span>الصرامة: <b className="text-white/60">{strictness}</b></span>
+      <div className="flex items-center justify-between border-b border-white/5 bg-white/[0.02] px-4 py-2 text-[11px] text-white/45">
+        <span>{dialect}</span>
+        <span>{tone} / {strictness}</span>
       </div>
 
-      {/* Message Screen */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
+      <div className="custom-scrollbar flex-1 space-y-3 overflow-y-auto p-4">
         {messages.map((msg) => {
           if (msg.sender === "SYSTEM") {
             return (
-              <div key={msg.id} className="mx-auto max-w-[90%] rounded-2xl border border-amber-500/20 bg-amber-500/5 p-3 text-center text-xs text-amber-300 flex items-center justify-center gap-2">
+              <div key={msg.id} className="mx-auto flex max-w-[90%] items-center justify-center gap-2 rounded-2xl border border-amber-500/20 bg-amber-500/5 p-3 text-center text-xs text-amber-300">
                 <ShieldAlert className="h-4 w-4 shrink-0" />
                 <span>{msg.body}</span>
               </div>
             );
           }
-
-          const fromCustomer = msg.sender === "CUSTOMER";
+          const customer = msg.sender === "CUSTOMER";
           return (
-            <div key={msg.id} className={cn("flex w-full", fromCustomer ? "justify-end" : "justify-start")}>
-              <div
-                className={cn(
-                  "max-w-[80%] rounded-2xl px-3.5 py-2.5 text-xs leading-5 shadow-sm text-right",
-                  fromCustomer 
-                    ? "rounded-br-none bg-white/[0.07] border border-white/5 text-white/90"
-                    : "rounded-bl-none bg-gradient-to-br from-emeraldx-500 to-teal-400 text-ink-950 font-medium"
-                )}
-              >
-                <div>{msg.body}</div>
+            <div key={msg.id} className={cn("flex w-full", customer ? "justify-end" : "justify-start")}>
+              <div className={cn("max-w-[80%] rounded-2xl px-3.5 py-2.5 text-right text-xs leading-5", customer ? "rounded-br-none border border-white/5 bg-white/[0.07] text-white/90" : "rounded-bl-none bg-emeraldx-500 font-medium text-white")}>
+                {msg.body}
               </div>
             </div>
           );
         })}
-
         {isTyping && (
           <div className="flex w-full justify-start">
-            <div className="rounded-2xl rounded-bl-none bg-white/[0.07] border border-white/5 px-4 py-3 flex gap-1 items-center">
-              <span className="h-2 w-2 rounded-full bg-white/40 animate-bounce" style={{ animationDelay: "0ms" }} />
-              <span className="h-2 w-2 rounded-full bg-white/40 animate-bounce" style={{ animationDelay: "150ms" }} />
-              <span className="h-2 w-2 rounded-full bg-white/40 animate-bounce" style={{ animationDelay: "300ms" }} />
+            <div className="flex items-center gap-1 rounded-2xl rounded-bl-none border border-white/5 bg-white/[0.07] px-4 py-3">
+              <span className="h-2 w-2 animate-bounce rounded-full bg-white/40" />
+              <span className="h-2 w-2 animate-bounce rounded-full bg-white/40 [animation-delay:150ms]" />
+              <span className="h-2 w-2 animate-bounce rounded-full bg-white/40 [animation-delay:300ms]" />
             </div>
           </div>
         )}
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Quick Test Tags */}
-      <div className="p-3 bg-white/[0.02] border-t border-white/5">
-        <div className="text-[10px] text-white/40 mb-2 font-medium text-right">:اختبارات سريعة للتحقق من أداء الوكيل</div>
-        <div className="flex flex-wrap gap-1.5 justify-end">
-          {quickTests.map((test, index) => (
+      <div className="border-t border-white/5 bg-white/[0.02] p-3">
+        <div className="mb-2 text-right text-[10px] font-medium text-white/40">اختبارات سريعة</div>
+        <div className="flex flex-wrap justify-end gap-1.5">
+          {quickTests.map((test) => (
             <button
               type="button"
-              key={index}
+              key={test.label}
               disabled={agentStatus === "HANDOFF"}
               onClick={() => handleSend(test.query)}
-              className="text-[10px] bg-white/[0.04] border border-white/5 hover:bg-white/[0.08] hover:border-white/10 text-white/70 rounded-full px-2.5 py-1 transition disabled:opacity-50 disabled:cursor-not-allowed"
+              className="rounded-full border border-white/5 bg-white/[0.04] px-2.5 py-1 text-[10px] text-white/70 transition hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-50"
             >
               {test.label}
             </button>
@@ -317,32 +194,24 @@ export function AgentPreview({
         </div>
       </div>
 
-      {/* Input area */}
-      <div className="p-3 bg-white/[0.04] border-t border-white/10">
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            handleSend();
-          }}
-          className="flex gap-2"
-        >
-          <Input
-            value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
-            disabled={agentStatus === "HANDOFF" || isTyping}
-            placeholder={agentStatus === "HANDOFF" ? "تم تحويل المحادثة للموظف..." : "اكتب رسالة لتجربة الوكيل..."}
-            className="h-9 text-xs text-right pr-3"
-          />
-          <Button
-            type="submit"
-            disabled={agentStatus === "HANDOFF" || isTyping || !inputText.trim()}
-            size="sm"
-            className="h-9 px-3"
-          >
-            <Send className="h-3.5 w-3.5 transform scale-x-[-1]" />
-          </Button>
-        </form>
-      </div>
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          handleSend();
+        }}
+        className="flex gap-2 border-t border-white/10 bg-white/[0.04] p-3"
+      >
+        <Input
+          value={inputText}
+          onChange={(event) => setInputText(event.target.value)}
+          disabled={agentStatus === "HANDOFF" || isTyping}
+          placeholder={agentStatus === "HANDOFF" ? "المحادثة محولة لموظف..." : "اكتب رسالة للتجربة..."}
+          className="h-9 pr-3 text-right text-xs"
+        />
+        <Button type="submit" disabled={agentStatus === "HANDOFF" || isTyping || !inputText.trim()} size="sm" className="h-9 px-3">
+          <Send className="h-3.5 w-3.5 scale-x-[-1]" />
+        </Button>
+      </form>
     </GradientCard>
   );
 }
