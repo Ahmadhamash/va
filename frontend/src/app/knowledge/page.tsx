@@ -688,7 +688,7 @@ export default function KnowledgeBasePage() {
                 <div className="text-sm font-medium text-white/50 mb-6">رسالة تدريب (Style Sample) مستخرجة</div>
                 
                 {(styleStats?.total || 0) > 0 ? (
-                  <Button variant="destructive" size="sm" onClick={clearStyleSamples}>
+                  <Button variant="danger" size="sm" onClick={clearStyleSamples}>
                     <Trash2 className="h-4 w-4 ml-1.5" />
                     مسح كل العينات
                   </Button>
