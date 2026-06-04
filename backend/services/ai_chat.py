@@ -53,7 +53,11 @@ async def get_session_history(
     )
     rows = list((await db.execute(stmt)).scalars().all())
     rows.reverse()
-    return [{"role": "assistant" if m.role == "agent" else m.role, "content": m.content or ""} for m in rows]
+    history = [{"role": "assistant" if m.role == "agent" else m.role, "content": m.content or ""} for m in rows]
+    if len(history) > 0:
+        # Give the AI context that it's an ongoing chat to prevent repetitive greetings
+        history.append({"role": "system", "content": "Context: This is an ongoing conversation. Do NOT say hello or welcome again."})
+    return history
 
 
 async def save_message(
@@ -131,12 +135,15 @@ async def _generate_reply(
         {"role": "user", "content": content},
     ]
 
+    # Dynamic Temperature: higher for general chat, lower for sales/support (precision)
+    dynamic_temp = 0.6 if intent == "general" else 0.2
+
     response = await client.chat.completions.create(
         model=model,
         messages=messages,
         tools=allowed_tools if allowed_tools else None,
         tool_choice="auto" if allowed_tools else "none",
-        temperature=0.2,
+        temperature=dynamic_temp,
         max_tokens=1000,
     )
 
@@ -175,7 +182,7 @@ async def _generate_reply(
             messages=messages,
             tools=allowed_tools if allowed_tools else None,
             tool_choice="auto" if allowed_tools else "none",
-            temperature=0.3,
+            temperature=0.3, # Slightly higher after tools to naturalize the data
             max_tokens=1000,
         )
 

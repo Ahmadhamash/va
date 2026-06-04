@@ -100,6 +100,11 @@ async def process_session_task(ctx, session_id: str, seq: int) -> str:
                             )
                     else:
                         # Text-only reply
+                        await adapter.send_typing_indicator(external_id, credentials)
+                        import asyncio
+                        # Simulate typing time based on length (min 1.5s, max 4s)
+                        typing_delay = min(4.0, max(1.5, len(text_reply) / 50.0))
+                        await asyncio.sleep(typing_delay)
                         delivery = await adapter.send_text_message(
                             external_id, text_reply, credentials
                         )
