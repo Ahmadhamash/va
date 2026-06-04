@@ -102,7 +102,8 @@ async def process_session_task(ctx, session_id: str, seq: int) -> str:
                         import asyncio
                         
                         # Multi-Bubble Messaging Strategy
-                        # Split by newlines, clean up, and filter empty strings
+                        # Replace literal '\n' that LLMs sometimes generate, then split by newlines
+                        text_reply = text_reply.replace("\\n", "\n")
                         bubbles = [b.strip() for b in text_reply.split("\n") if b.strip()]
                         
                         if not bubbles:
