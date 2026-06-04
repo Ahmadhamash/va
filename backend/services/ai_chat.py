@@ -22,6 +22,7 @@ from services.answer_verifier import (
 from .ai_tools import TOOLS, execute_db_function, get_tools_for_intent
 from .ai_prompts import build_system_prompt, get_style_samples
 from .ai_media import transcribe_audio, TranscriptionError, _encode_image_from_url, _transcribe_from_url
+from .humanizer import HumanizerAgent
 
 logger = logging.getLogger("ai_chat")
 HISTORY_LIMIT = 20
@@ -239,24 +240,50 @@ async def _verify_and_finalize(
     """
     user_id = user.id
     api_key = await effective_openai_key(db)
+    
+    # 1. Fetch Style Samples and Voice Settings for the Humanizer
+    style_samples = await get_style_samples(user_id, db)
+    
+    # Extract voice settings from the HTML comment in persona (if present)
+    import re
+    voice_settings = {}
+    persona = user.ai_persona or ""
+    match = re.search(r"<!--\s*({.*?})\s*-->", persona)
+    if match:
+        try:
+            voice_settings = json.loads(match.group(1))
+        except json.JSONDecodeError:
+            pass
+            
+    # 2. Humanize the draft
+    humanizer = HumanizerAgent(api_key=api_key)
+    logger.info("Sending draft to Humanizer Agent: %s", draft_answer)
+    humanized_draft = await humanizer.rewrite(
+        logic_draft=draft_answer,
+        style_samples=style_samples,
+        voice_settings=voice_settings
+    )
+    logger.info("Humanized draft: %s", humanized_draft)
+
+    # 3. Security check with AnswerVerifier on the humanized draft
     verifier = AnswerVerifier(api_key=api_key)
 
     try:
-        result = await verifier.verify(customer_message, retrieved_data, draft_answer)
+        result = await verifier.verify(customer_message, retrieved_data, humanized_draft)
     except Exception:
         logger.exception("Answer verification failed — sending with caution")
-        return draft_answer, "sent"
+        return humanized_draft, "sent"
 
     logger.info(
         "Verification: verdict=%s risk=%.2f reasons=%s",
         result.verdict, result.risk_score, result.reasons,
     )
 
-    final_reply = draft_answer
+    final_reply = humanized_draft
     action = "sent"
 
     if result.verdict == SAFE_TO_SEND:
-        final_reply = draft_answer
+        final_reply = humanized_draft
         action = "sent"
 
     elif result.verdict == ASK_CLARIFICATION:

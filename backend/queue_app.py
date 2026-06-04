@@ -99,22 +99,39 @@ async def process_session_task(ctx, session_id: str, seq: int) -> str:
                                 is_fallback=True,
                             )
                     else:
-                        # Text-only reply
-                        await adapter.send_typing_indicator(external_id, credentials)
                         import asyncio
-                        # Simulate typing time based on length (min 1.5s, max 4s)
-                        typing_delay = min(4.0, max(1.5, len(text_reply) / 50.0))
-                        await asyncio.sleep(typing_delay)
-                        delivery = await adapter.send_text_message(
-                            external_id, text_reply, credentials
-                        )
-                        await _log_delivery(
-                            db,
-                            channel=channel,
-                            delivery_type="text",
-                            result=delivery,
-                            session_id=session_id,
-                        )
+                        
+                        # Multi-Bubble Messaging Strategy
+                        # Split by newlines, clean up, and filter empty strings
+                        bubbles = [b.strip() for b in text_reply.split("\n") if b.strip()]
+                        
+                        if not bubbles:
+                            bubbles = [text_reply] # Fallback if empty
+                            
+                        final_delivery = None
+                        for i, bubble in enumerate(bubbles):
+                            await adapter.send_typing_indicator(external_id, credentials)
+                            # Simulate typing time based on length (min 1.0s, max 3.5s)
+                            typing_delay = min(3.5, max(1.0, len(bubble) / 40.0))
+                            await asyncio.sleep(typing_delay)
+                            
+                            delivery = await adapter.send_text_message(
+                                external_id, bubble, credentials
+                            )
+                            final_delivery = delivery # Track the last one for error handling
+                            
+                            await _log_delivery(
+                                db,
+                                channel=channel,
+                                delivery_type="text",
+                                result=delivery,
+                                session_id=session_id,
+                            )
+                            
+                            if not delivery.success:
+                                break # Stop sending remaining bubbles if one fails
+                                
+                        delivery = final_delivery or DeliveryResult(success=False, error_message="Empty message")
 
                     if not delivery.success:
                         job_try = ctx.get("job_try", 1)
