@@ -95,7 +95,7 @@ export default function InboxPage() {
   }
 
   return (
-    <AppShell title="المحادثات" subtitle="صندوق موحد لرسائل واتساب وفيسبوك وإنستغرام مع الذكاء والتحويل البشري." actionLabel="اختبار الديمو">
+    <AppShell title="المحادثات" subtitle="صندوق موحد لرسائل واتساب وفيسبوك وإنستغرام مع الذكاء والتحويل البشري.">
       <div className="grid gap-5 xl:grid-cols-[390px_1fr] xl:h-[calc(100vh-170px)] xl:min-h-[620px]">
         {loading ? (
           <div className="flex h-96 items-center justify-center col-span-2">

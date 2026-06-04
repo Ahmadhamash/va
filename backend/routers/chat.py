@@ -276,6 +276,30 @@ async def agent_send_message(
         media_url=None,
         db=db,
     )
+
+    # Dispatch to the external channel
+    if session.channel in ("messenger", "instagram", "whatsapp") and session.external_user_id:
+        from models import ChannelIntegration
+        from services.channels import get_adapter
+        res = await db.execute(
+            select(ChannelIntegration).where(
+                ChannelIntegration.user_id == session.user_id,
+                ChannelIntegration.platform == session.channel,
+                ChannelIntegration.is_active.is_(True),
+            )
+        )
+        integration = res.scalar_one_or_none()
+        if integration:
+            adapter = get_adapter(session.channel)
+            credentials = integration.credentials or {}
+            # In a real system, you'd want to handle delivery failures/retries,
+            # but for synchronous UI calls, fire-and-forget or await is fine.
+            try:
+                await adapter.send_text_message(session.external_user_id, message, credentials)
+            except Exception as e:
+                import logging
+                logging.getLogger("agent-send").exception(f"Failed to send message to {session.channel}: {e}")
+
     return msg
 
 @router.delete("/sessions/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
