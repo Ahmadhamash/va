@@ -26,6 +26,7 @@ export default function InboxPage() {
       );
     },
     enabled: !!token,
+    refetchInterval: 3000,
   });
 
   useEffect(() => {
@@ -48,6 +49,7 @@ export default function InboxPage() {
       return baseConversation;
     },
     enabled: !!selectedId && !!token && conversations.length > 0,
+    refetchInterval: 3000,
   });
 
   useEffect(() => {

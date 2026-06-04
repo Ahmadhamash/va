@@ -45,7 +45,7 @@ function MessageBubble({ message }: { message: Message }) {
           "max-w-[78%] rounded-[20px] px-4 py-3 text-sm leading-6 shadow-sm backdrop-blur-md",
           fromCustomer && "rounded-br-none bg-white/[0.07] border border-white/5 text-white/90",
           message.sender === "AI" && "rounded-bl-none bg-gradient-to-br from-emeraldx-500 to-teal-400 text-ink-950 font-medium shadow-emeraldx-500/10",
-          message.sender === "HUMAN" && "rounded-bl-none bg-gradient-to-br from-violetrx-600 to-indigo-500 text-white shadow-violetrx-600/15",
+          message.sender === "HUMAN" && "rounded-bl-none bg-gradient-to-br from-violetrx-500 to-indigo-500 text-white shadow-violetrx-500/15",
           fromSystem && "mx-auto max-w-[86%] rounded-2xl border border-white/10 bg-white/[0.04] text-center text-white/45"
         )}
       >
@@ -159,6 +159,8 @@ export function ChatWindow({
     }
   }
 
+  const isAiHandling = status === "AI_HANDLING";
+
   return (
     <div className="grid h-full min-h-[680px] xl:min-h-0 gap-4 lg:grid-cols-[1fr_280px]">
       <div className="flex h-full min-h-[680px] xl:min-h-0 flex-col rounded-3xl border border-white/10 bg-white/[0.045]">
@@ -204,7 +206,7 @@ export function ChatWindow({
         </div>
 
         <div className="border-t border-white/10 p-4">
-          <div className="mb-3 rounded-3xl border border-emeraldx-400/20 bg-emeraldx-500/10 p-4">
+          <div className={cn("mb-3 rounded-3xl border p-4 transition-opacity", isAiHandling ? "opacity-50 pointer-events-none border-white/10 bg-white/5" : "border-emeraldx-400/20 bg-emeraldx-500/10")}>
             <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-2 text-sm font-semibold text-emeraldx-400">
                 <Bot className="h-4 w-4" />
@@ -226,8 +228,14 @@ export function ChatWindow({
             <p className="text-sm leading-6 text-white/68">{suggestedReply}</p>
           </div>
           <div className="flex gap-2">
-            <Input value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="اكتب رد الموظف..." />
+            <Input 
+              value={draft} 
+              onChange={(event) => setDraft(event.target.value)} 
+              placeholder={isAiHandling ? "لا يمكن الرد بينما الذكاء الاصطناعي مفعل..." : "اكتب رد الموظف..."} 
+              disabled={isAiHandling}
+            />
             <Button
+              disabled={isAiHandling || !draft.trim()}
               onClick={() => {
                 addMessage("HUMAN", draft);
                 setDraft("");
