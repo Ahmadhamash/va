@@ -190,6 +190,48 @@ async def list_sessions(
     return list(result.scalars().all())
 
 
+@router.get("/inbox-conversations")
+async def inbox_conversations(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=100),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from models import HandoffSession
+    result = await db.execute(
+        select(ChatSession)
+        .where(ChatSession.user_id == current_user.id)
+        .order_by(ChatSession.created_at.desc())
+        .offset(skip).limit(limit)
+    )
+    sessions = result.scalars().all()
+    
+    out = []
+    for s in sessions:
+        msg_result = await db.execute(
+            select(Message).where(Message.session_id == s.id, Message.content.isnot(None)).order_by(Message.created_at.desc()).limit(1)
+        )
+        msg = msg_result.scalar_one_or_none()
+        
+        handoff_result = await db.execute(
+            select(HandoffSession).where(HandoffSession.session_id == s.id).order_by(HandoffSession.created_at.desc()).limit(1)
+        )
+        handoff = handoff_result.scalar_one_or_none()
+        
+        out.append({
+            "id": str(s.id),
+            "customerName": s.title or "عميل",
+            "customerPhone": s.external_user_id or "",
+            "channel": s.channel.upper(),
+            "raw_status": handoff.status if handoff else "returned_to_ai",
+            "lastMessage": msg.content if msg else "",
+            "lastMessageAt": msg.created_at.isoformat() if msg else s.created_at.isoformat(),
+            "aiSuggestedReply": handoff.ai_suggested_reply if handoff else None,
+        })
+    return out
+
+
+
 @router.get("/sessions/{session_id}/messages", response_model=list[MessageOut])
 async def session_messages(
     session_id: uuid.UUID,

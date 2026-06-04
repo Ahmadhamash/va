@@ -9,38 +9,15 @@ export async function GET(request: Request) {
   }
 
   try {
-    const [activeRes, resolvedRes, aiRes] = await Promise.all([
-      backendFetch("/handoff", { token }),
-      backendFetch("/handoff?status=resolved", { token }),
-      backendFetch("/handoff?status=returned_to_ai", { token }),
-    ]);
+    const res = await backendFetch("/chat/inbox-conversations", { token });
 
-    if (!activeRes.ok) {
-      return NextResponse.json({ ok: false, error: "Failed to fetch conversations" }, { status: activeRes.status });
+    if (!res.ok) {
+      return NextResponse.json({ ok: false, error: "Failed to fetch conversations" }, { status: res.status });
     }
 
-    const activeHandoffs = await activeRes.json().catch(() => []);
-    const resolvedHandoffs = resolvedRes.ok ? await resolvedRes.json().catch(() => []) : [];
-    const aiHandoffs = aiRes.ok ? await aiRes.json().catch(() => []) : [];
+    const inboxConversations = await res.json().catch(() => []);
 
-    const allHandoffs = [
-      ...activeHandoffs,
-      ...resolvedHandoffs,
-      ...aiHandoffs
-    ];
-
-    // Group by session_id and keep the latest handoff session
-    const uniqueHandoffsMap = new Map<string, any>();
-    allHandoffs.forEach((h: any) => {
-      const existing = uniqueHandoffsMap.get(h.session_id);
-      if (!existing || new Date(h.created_at) > new Date(existing.created_at)) {
-        uniqueHandoffsMap.set(h.session_id, h);
-      }
-    });
-
-    const uniqueHandoffs = Array.from(uniqueHandoffsMap.values());
-
-    const conversations = uniqueHandoffs.map((h: any) => {
+    const conversations = inboxConversations.map((h: any) => {
       // Map database statuses (h.raw_status) to ConversationStatus types
       let status: "NEEDS_HUMAN" | "HUMAN_ACTIVE" | "AI_HANDLING" | "CLOSED" = "AI_HANDLING";
       if (h.raw_status === "unassigned" || h.raw_status === "pending") {
@@ -54,14 +31,14 @@ export async function GET(request: Request) {
       }
 
       return {
-        id: h.session_id,
-        customerName: h.customer_name || h.reason || "عميل",
-        customerPhone: h.customer_phone || "",
-        channel: "WHATSAPP" as const,
+        id: h.id,
+        customerName: h.customerName || "عميل",
+        customerPhone: h.customerPhone || "",
+        channel: h.channel || "WHATSAPP",
         status,
-        lastMessage: h.reason || h.ai_summary || "",
-        lastMessageAt: h.created_at || new Date().toISOString(),
-        aiSuggestedReply: h.ai_suggested_reply || null,
+        lastMessage: h.lastMessage || "",
+        lastMessageAt: h.lastMessageAt || new Date().toISOString(),
+        aiSuggestedReply: h.aiSuggestedReply || null,
         messages: [],
       };
     });
