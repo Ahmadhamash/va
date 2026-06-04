@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CheckCircle2, Copy, ImagePlus, Link2, Loader2, Package, Plus, Trash2, Upload } from "lucide-react";
+import { CheckCircle2, Copy, ImagePlus, Link2, Loader2, Package, Plus, Trash2, Upload, Settings2, Info } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { GradientCard } from "@/components/gradient-card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuthStore } from "@/store/use-auth-store";
 
 type BusinessType = "clothing" | "electronics" | "beauty" | "services" | "general";
@@ -179,10 +180,11 @@ export default function KnowledgeBasePage() {
 
       setForm(emptyForm);
       setImageFile(null);
-      setNotice("تم حفظ المنتج وتحديث قاعدة المعرفة.");
+      setNotice("تم حفظ المنتج بنجاح.");
+      setTimeout(() => setNotice(""), 3000);
       await load();
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "صار خطأ أثناء الحفظ.");
+      setNotice(error instanceof Error ? error.message : "حدث خطأ أثناء الحفظ.");
     } finally {
       setSaving(false);
     }
@@ -197,6 +199,7 @@ export default function KnowledgeBasePage() {
     if (res.ok) {
       setProducts((current) => current.filter((product) => product.id !== id));
       setNotice("تم حذف المنتج.");
+      setTimeout(() => setNotice(""), 3000);
     }
   }
 
@@ -228,9 +231,9 @@ export default function KnowledgeBasePage() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.detail || data.error || "تعذر قراءة الرابط.");
       setCandidates(data.candidates || []);
-      setNotice((data.candidates || []).length ? "تم استخراج مرشحات. راجعها وكمل الناقص قبل الحفظ." : "لم نجد بيانات منتج واضحة في الرابط.");
+      setNotice((data.candidates || []).length ? "تم استخراج البيانات. راجعها وقم بحفظها." : "لم نجد بيانات منتج واضحة في الرابط.");
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "صار خطأ أثناء الاستيراد.");
+      setNotice(error instanceof Error ? error.message : "حدث خطأ أثناء الاستيراد.");
     } finally {
       setImporting(false);
     }
@@ -247,6 +250,8 @@ export default function KnowledgeBasePage() {
       image_url: candidate.image_url || "",
       notes: `مصدر البيانات: ${candidate.source_url || ""}`,
     });
+    setNotice("تمت تعبئة النموذج للمراجعة.");
+    setTimeout(() => setNotice(""), 3000);
   }
 
   async function addKnowledgeItem() {
@@ -262,7 +267,8 @@ export default function KnowledgeBasePage() {
     const data = await res.json().catch(() => ({}));
     if (data.ok) {
       setPolicyForm({ title: "", body: "", category: "policies" });
-      setNotice("تم حفظ المعلومة.");
+      setNotice("تم حفظ المعلومة بنجاح.");
+      setTimeout(() => setNotice(""), 3000);
       await load();
     }
   }
@@ -278,19 +284,28 @@ export default function KnowledgeBasePage() {
   }
 
   return (
-    <AppShell title="قاعدة المعرفة" subtitle="منتجات، صور، كفالات، سياسات، ومعلومات مؤكدة بدون محاكاة.">
+    <AppShell title="قاعدة المعرفة" subtitle="إدارة منتجاتك، سياساتك، والمعلومات التي يستند إليها الذكاء الاصطناعي لخدمة العملاء.">
       {notice && (
-        <div className="mb-6 rounded-2xl border border-emeraldx-400/20 bg-emeraldx-500/10 px-4 py-3 text-sm text-emeraldx-400">
+        <div className="mb-6 flex animate-in fade-in slide-in-from-top-2 items-center gap-2 rounded-2xl border border-emeraldx-400/20 bg-emeraldx-500/10 px-4 py-3 text-sm font-medium text-emeraldx-400 shadow-lg">
+          <CheckCircle2 className="h-4 w-4" />
           {notice}
         </div>
       )}
 
-      <div className="grid gap-6 xl:grid-cols-[1fr_420px]">
-        <div className="space-y-6">
+      <Tabs defaultValue="products" className="space-y-6">
+        <TabsList className="w-full justify-start rounded-2xl border border-white/5 bg-white/[0.02] p-1">
+          <TabsTrigger value="products" className="flex-1 py-2.5">المنتجات (الكتالوج)</TabsTrigger>
+          <TabsTrigger value="import" className="flex-1 py-2.5">استيراد المنتجات</TabsTrigger>
+          <TabsTrigger value="policies" className="flex-1 py-2.5">السياسات والمعلومات</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="products" className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
           <GradientCard>
             <div className="mb-5 flex items-center justify-between">
-              <Package className="h-5 w-5 text-emeraldx-400" />
-              <h2 className="text-xl font-semibold text-white">نوع النشاط</h2>
+              <div className="flex items-center gap-2">
+                <Settings2 className="h-5 w-5 text-emeraldx-400" />
+                <h2 className="text-xl font-semibold text-white">تخصيص الحقول حسب النشاط</h2>
+              </div>
             </div>
             <div className="grid gap-3 md:grid-cols-5">
               {businessTypes.map((type) => (
@@ -298,158 +313,264 @@ export default function KnowledgeBasePage() {
                   key={type.id}
                   type="button"
                   onClick={() => saveBusinessType(type.id)}
-                  className={`rounded-2xl border p-4 text-right transition ${
+                  className={`rounded-2xl border p-4 text-right transition-all duration-200 hover:-translate-y-0.5 ${
                     businessType === type.id
                       ? "border-emeraldx-400/40 bg-emeraldx-500/12 text-white shadow-glow"
                       : "border-white/10 bg-white/[0.035] text-white/65 hover:border-white/18 hover:bg-white/[0.06]"
                   }`}
                 >
                   <div className="font-semibold">{type.label}</div>
-                  <div className="mt-2 text-xs leading-5 text-white/42">{type.hint}</div>
+                  <div className="mt-2 text-[11px] leading-5 text-white/42">{type.hint}</div>
                 </button>
               ))}
             </div>
           </GradientCard>
 
-          <GradientCard>
-            <div className="mb-5 flex items-center justify-between">
-              <Upload className="h-5 w-5 text-emeraldx-400" />
-              <h2 className="text-xl font-semibold text-white">إضافة منتج</h2>
-            </div>
-            <div className="grid gap-3 md:grid-cols-2">
-              <Input className="text-right" placeholder="اسم المنتج" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-              <Input className="text-right" placeholder="الفئة" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} />
-              <Input dir="ltr" placeholder="السعر" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} />
-              <Input dir="ltr" placeholder="العملة" value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })} />
-              <Input dir="ltr" placeholder="رابط صورة المنتج" value={form.image_url} onChange={(e) => setForm({ ...form, image_url: e.target.value })} />
-              <Input type="number" placeholder="الكمية بالمخزون" value={form.stock_quantity} onChange={(e) => setForm({ ...form, stock_quantity: e.target.value })} />
-            </div>
-            <Textarea className="mt-3 min-h-24 text-right" placeholder="وصف المنتج، طريقة الاستخدام، أهم الملاحظات" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+          <div className="grid gap-6 xl:grid-cols-[400px_1fr]">
+            <GradientCard className="h-fit">
+              <div className="mb-5 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Plus className="h-5 w-5 text-emeraldx-400" />
+                  <h2 className="text-lg font-semibold text-white">إضافة منتج جديد</h2>
+                </div>
+              </div>
+              
+              <div className="space-y-4">
+                <div className="grid gap-3 grid-cols-2">
+                  <div className="col-span-2">
+                    <label className="mb-1.5 block text-xs text-white/60">اسم المنتج</label>
+                    <Input className="text-right bg-white/[0.03]" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-xs text-white/60">الفئة (Category)</label>
+                    <Input className="text-right bg-white/[0.03]" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-xs text-white/60">الكمية</label>
+                    <Input type="number" className="text-right bg-white/[0.03]" value={form.stock_quantity} onChange={(e) => setForm({ ...form, stock_quantity: e.target.value })} />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-xs text-white/60">العملة</label>
+                    <Input dir="ltr" className="text-left bg-white/[0.03]" value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })} />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-xs text-white/60">السعر</label>
+                    <Input dir="ltr" className="text-left bg-white/[0.03]" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} />
+                  </div>
+                </div>
 
-            <div className="mt-4 grid gap-3 md:grid-cols-2">
-              {dynamicLabels.map(([key, label]) => (
-                <Input key={key} className="text-right" placeholder={label} value={(form as any)[key]} onChange={(e) => setForm({ ...form, [key]: e.target.value })} />
-              ))}
-            </div>
+                <div>
+                  <label className="mb-1.5 block text-xs text-white/60">الوصف العام والتفاصيل</label>
+                  <Textarea className="min-h-24 text-right bg-white/[0.03]" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+                </div>
 
-            <div className="mt-4 grid gap-3 md:grid-cols-2">
-              <Input className="text-right" placeholder="مدة الكفالة" value={form.warranty_duration} onChange={(e) => setForm({ ...form, warranty_duration: e.target.value })} />
-              <Input className="text-right" placeholder="ما الذي تغطيه الكفالة؟" value={form.warranty_coverage} onChange={(e) => setForm({ ...form, warranty_coverage: e.target.value })} />
-              <Textarea className="text-right" placeholder="شروط الكفالة" value={form.warranty_terms} onChange={(e) => setForm({ ...form, warranty_terms: e.target.value })} />
-              <Textarea className="text-right" placeholder="استثناءات الكفالة" value={form.warranty_exclusions} onChange={(e) => setForm({ ...form, warranty_exclusions: e.target.value })} />
-            </div>
+                {dynamicLabels.length > 0 && (
+                  <div className="rounded-xl border border-white/5 bg-white/[0.015] p-3">
+                    <div className="mb-3 text-[11px] font-medium text-white/40">حقول مخصصة للنشاط: {businessTypes.find(t => t.id === businessType)?.label}</div>
+                    <div className="grid gap-3 grid-cols-2">
+                      {dynamicLabels.map(([key, label]) => (
+                        <div key={key}>
+                          <label className="mb-1.5 block text-[10px] text-white/50">{label}</label>
+                          <Input className="h-8 text-right text-xs bg-white/[0.03]" value={(form as any)[key]} onChange={(e) => setForm({ ...form, [key]: e.target.value })} />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
-            <label className="mt-4 flex cursor-pointer items-center justify-between rounded-2xl border border-dashed border-white/15 bg-white/[0.025] px-4 py-3 text-sm text-white/55 hover:bg-white/[0.05]">
-              <span>{imageFile ? imageFile.name : "تحميل صورة من الجهاز"}</span>
-              <ImagePlus className="h-5 w-5 text-emeraldx-400" />
-              <input type="file" accept="image/*" className="hidden" onChange={(e) => setImageFile(e.target.files?.[0] || null)} />
-            </label>
+                <div className="rounded-xl border border-white/5 bg-white/[0.015] p-3">
+                  <div className="mb-3 text-[11px] font-medium text-white/40">تفاصيل الكفالة (إن وجدت)</div>
+                  <div className="grid gap-3 grid-cols-2">
+                    <Input className="h-8 text-right text-xs bg-white/[0.03]" placeholder="المدة (مثال: سنة)" value={form.warranty_duration} onChange={(e) => setForm({ ...form, warranty_duration: e.target.value })} />
+                    <Input className="h-8 text-right text-xs bg-white/[0.03]" placeholder="التغطية" value={form.warranty_coverage} onChange={(e) => setForm({ ...form, warranty_coverage: e.target.value })} />
+                  </div>
+                </div>
 
-            <Button className="mt-4 w-full" onClick={addProduct} disabled={saving}>
-              <Plus className="h-4 w-4" />
-              {saving ? "جاري الحفظ..." : "حفظ المنتج"}
-            </Button>
-          </GradientCard>
+                <label className="group flex cursor-pointer items-center justify-between rounded-xl border border-dashed border-white/20 bg-white/[0.02] px-4 py-3 text-sm text-white/55 transition hover:bg-white/[0.04]">
+                  <span className="truncate pr-2 text-xs">{imageFile ? imageFile.name : "تحميل صورة للمنتج (اختياري)"}</span>
+                  <div className="grid h-8 w-8 place-items-center rounded-lg bg-white/5 text-white/70 transition group-hover:bg-emeraldx-500 group-hover:text-ink-950">
+                    <ImagePlus className="h-4 w-4" />
+                  </div>
+                  <input type="file" accept="image/*" className="hidden" onChange={(e) => setImageFile(e.target.files?.[0] || null)} />
+                </label>
 
-          <GradientCard>
-            <div className="mb-5 flex items-center justify-between">
-              <span className="text-xs text-white/40">{products.length} منتج</span>
-              <h2 className="text-xl font-semibold text-white">المنتجات الحالية</h2>
-            </div>
-            {products.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-white/12 py-10 text-center text-sm text-white/42">ما في منتجات مضافة حالياً.</div>
-            ) : (
-              <div className="grid gap-3 lg:grid-cols-2">
-                {products.map((product) => (
-                  <div key={product.id} className="rounded-2xl border border-white/10 bg-white/[0.035] p-4 text-right">
-                    <div className="flex gap-3">
-                      <div className="h-20 w-20 shrink-0 overflow-hidden rounded-2xl bg-white/8">
-                        {product.image_url ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={imageSrc(product.image_url)} alt="" className="h-full w-full object-cover" />
-                        ) : (
-                          <div className="grid h-full w-full place-items-center text-white/25"><Package className="h-6 w-6" /></div>
-                        )}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-start justify-between gap-2">
-                          <button type="button" onClick={() => deleteProduct(product.id)} className="text-white/35 hover:text-red-400">
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                          <div>
-                            <h3 className="font-semibold text-white">{product.name}</h3>
-                            <p className="mt-1 text-xs text-white/42">{product.category || "بدون فئة"}</p>
+                <Button className="w-full shadow-lg" onClick={addProduct} disabled={saving}>
+                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Package className="h-4 w-4" />}
+                  {saving ? "جاري الحفظ..." : "حفظ ورفع المنتج"}
+                </Button>
+              </div>
+            </GradientCard>
+
+            <GradientCard className="h-fit">
+              <div className="mb-5 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Package className="h-5 w-5 text-emeraldx-400" />
+                  <h2 className="text-xl font-semibold text-white">المنتجات الحالية</h2>
+                </div>
+                <div className="rounded-full bg-white/10 px-2.5 py-0.5 text-xs font-semibold text-white/80">
+                  {products.length} منتج
+                </div>
+              </div>
+              
+              {products.length === 0 ? (
+                <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-white/10 py-16 text-center">
+                  <Package className="mb-4 h-12 w-12 text-white/10" />
+                  <div className="text-sm font-medium text-white/50">لا يوجد منتجات مضافة بعد</div>
+                  <div className="mt-1 text-xs text-white/30">أضف أول منتج ليتعلمه الذكاء الاصطناعي</div>
+                </div>
+              ) : (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {products.map((product) => (
+                    <div key={product.id} className="group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-white/10 bg-white/[0.02] transition hover:border-white/20 hover:bg-white/[0.04]">
+                      <div className="flex gap-3 p-3">
+                        <div className="h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-white/5">
+                          {product.image_url ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={imageSrc(product.image_url)} alt="" className="h-full w-full object-cover transition duration-300 group-hover:scale-110" />
+                          ) : (
+                            <div className="grid h-full w-full place-items-center text-white/20"><Package className="h-6 w-6" /></div>
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-start justify-between gap-1">
+                            <div>
+                              <h3 className="truncate text-sm font-semibold text-white">{product.name}</h3>
+                              <p className="mt-0.5 text-[10px] text-white/40">{product.category || "بدون فئة"}</p>
+                            </div>
+                          </div>
+                          <div className="mt-2 text-sm font-bold text-emeraldx-400">
+                            {product.price || "-"} {product.currency}
                           </div>
                         </div>
-                        <p className="mt-3 line-clamp-2 text-xs leading-5 text-white/50">{product.description || "بدون وصف"}</p>
-                        <div className="mt-3 flex items-center justify-between">
-                          <button type="button" onClick={() => toggleProduct(product.id)} className={`rounded-full px-2 py-1 text-xs ${product.available ? "bg-emeraldx-500/10 text-emeraldx-400" : "bg-white/8 text-white/45"}`}>
-                            {product.available ? "متاح للرد" : "مخفي"}
-                          </button>
-                          <span className="text-sm font-semibold text-white">{product.price || "-"} {product.currency}</span>
+                      </div>
+                      
+                      <div className="flex items-center justify-between border-t border-white/5 bg-white/[0.02] px-3 py-2">
+                        <button type="button" onClick={() => toggleProduct(product.id)} className={`flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-medium transition ${product.available ? "bg-emeraldx-500/15 text-emeraldx-400 hover:bg-emeraldx-500/25" : "bg-white/10 text-white/50 hover:bg-white/15"}`}>
+                          {product.available ? (
+                            <><span className="h-1.5 w-1.5 rounded-full bg-emeraldx-400" /> متاح</>
+                          ) : (
+                            <><span className="h-1.5 w-1.5 rounded-full bg-white/40" /> مخفي</>
+                          )}
+                        </button>
+                        
+                        <button type="button" onClick={() => deleteProduct(product.id)} className="rounded p-1 text-white/30 transition hover:bg-red-500/10 hover:text-red-400">
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </GradientCard>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="import" className="animate-in fade-in slide-in-from-bottom-2">
+          <div className="mx-auto max-w-2xl">
+            <GradientCard>
+              <div className="mb-6 flex items-center gap-3">
+                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-blue-500/20 text-blue-400">
+                  <Link2 className="h-5 w-5" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-semibold text-white">استيراد منتجات من رابط</h2>
+                  <p className="text-xs text-white/50">قم بجلب بيانات المنتج مباشرة من روابط المتاجر أو الانستجرام.</p>
+                </div>
+              </div>
+              
+              <div className="flex gap-2">
+                <Input dir="ltr" className="h-11 flex-1 text-left" placeholder="https://instagram.com/... أو رابط متجر" value={importUrl} onChange={(e) => setImportUrl(e.target.value)} />
+                <Button className="h-11 px-6 shadow-lg shadow-blue-500/20" onClick={importFromUrl} disabled={importing}>
+                  {importing ? <Loader2 className="h-4 w-4 animate-spin" /> : "جلب البيانات"}
+                </Button>
+              </div>
+
+              {candidates.length > 0 && (
+                <div className="mt-8 space-y-4">
+                  <h3 className="text-sm font-medium text-white/80">المنتجات المستخرجة:</h3>
+                  {candidates.map((candidate, index) => (
+                    <div key={`${candidate.name}-${index}`} className="flex flex-col gap-4 sm:flex-row sm:items-center justify-between rounded-2xl border border-white/10 bg-white/[0.03] p-4 transition hover:bg-white/[0.05]">
+                      <div className="flex items-center gap-4">
+                        {candidate.image_url ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={candidate.image_url} alt="" className="h-16 w-16 shrink-0 rounded-xl object-cover border border-white/10" />
+                        ) : (
+                          <div className="grid h-16 w-16 shrink-0 place-items-center rounded-xl bg-white/5 text-white/20"><ImagePlus className="h-6 w-6" /></div>
+                        )}
+                        <div>
+                          <h3 className="font-semibold text-white">{candidate.name || "بدون اسم"}</h3>
+                          <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-white/50">{candidate.description || "الوصف غير واضح، ستحتاج لإكماله قبل الحفظ."}</p>
+                          {candidate.price && (
+                            <div className="mt-2 text-xs font-bold text-emeraldx-400">{candidate.price} {candidate.currency}</div>
+                          )}
                         </div>
                       </div>
+                      <Button size="sm" variant="secondary" className="shrink-0" onClick={() => fillFromCandidate(candidate)}>
+                        تعبئة للمراجعة
+                      </Button>
                     </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </GradientCard>
-        </div>
-
-        <div className="space-y-6">
-          <GradientCard>
-            <div className="mb-5 flex items-center justify-between">
-              <Link2 className="h-5 w-5 text-emeraldx-400" />
-              <h2 className="text-xl font-semibold text-white">استيراد من رابط</h2>
-            </div>
-            <Input dir="ltr" placeholder="https://instagram.com/... أو رابط موقع المنتج" value={importUrl} onChange={(e) => setImportUrl(e.target.value)} />
-            <Button className="mt-3 w-full" onClick={importFromUrl} disabled={importing}>
-              {importing ? "جاري القراءة..." : "قراءة الرابط"}
-            </Button>
-            {candidates.length > 0 && (
-              <div className="mt-4 space-y-3">
-                {candidates.map((candidate, index) => (
-                  <div key={`${candidate.name}-${index}`} className="rounded-2xl border border-white/10 bg-white/[0.035] p-3 text-right">
-                    <div className="flex gap-3">
-                      {candidate.image_url && (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={candidate.image_url} alt="" className="h-14 w-14 rounded-xl object-cover" />
-                      )}
-                      <div className="min-w-0 flex-1">
-                        <h3 className="text-sm font-semibold text-white">{candidate.name}</h3>
-                        <p className="mt-1 line-clamp-2 text-xs text-white/45">{candidate.description || "الوصف غير واضح، كمله قبل الحفظ."}</p>
-                      </div>
-                    </div>
-                    <Button size="sm" variant="secondary" className="mt-3 w-full" onClick={() => fillFromCandidate(candidate)}>
-                      تعبئة النموذج للمراجعة
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </GradientCard>
-
-          <GradientCard>
-            <div className="mb-5 flex items-center justify-between">
-              <CheckCircle2 className="h-5 w-5 text-emeraldx-400" />
-              <h2 className="text-xl font-semibold text-white">سياسات ومعلومات عامة</h2>
-            </div>
-            <Input className="text-right" placeholder="العنوان: سياسة الاستبدال" value={policyForm.title} onChange={(e) => setPolicyForm({ ...policyForm, title: e.target.value })} />
-            <Textarea className="mt-3 min-h-24 text-right" placeholder="النص الذي يعتمد عليه الوكيل" value={policyForm.body} onChange={(e) => setPolicyForm({ ...policyForm, body: e.target.value })} />
-            <Button className="mt-3 w-full" onClick={addKnowledgeItem}>حفظ المعلومة</Button>
-
-            <div className="mt-4 space-y-2">
-              {knowledge.slice(0, 6).map((item) => (
-                <div key={item.id} className="rounded-2xl bg-white/[0.035] p-3 text-right">
-                  <div className="font-semibold text-white text-sm">{item.title}</div>
-                  <p className="mt-1 line-clamp-2 text-xs text-white/45">{item.body}</p>
+                  ))}
                 </div>
-              ))}
-            </div>
-          </GradientCard>
-        </div>
-      </div>
+              )}
+            </GradientCard>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="policies" className="animate-in fade-in slide-in-from-bottom-2">
+          <div className="grid gap-6 lg:grid-cols-2">
+            <GradientCard>
+              <div className="mb-5 flex items-center gap-2">
+                <CheckCircle2 className="h-5 w-5 text-emeraldx-400" />
+                <h2 className="text-xl font-semibold text-white">إضافة سياسة أو معلومة</h2>
+              </div>
+              <p className="mb-6 text-xs leading-5 text-white/50">
+                أضف أي معلومات عامة أو سياسات يلتزم بها الوكيل للرد على العملاء (مثل سياسة الاستبدال، أوقات العمل، أو الأسئلة الشائعة).
+              </p>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="mb-1.5 block text-xs font-medium text-white/70">عنوان المعلومة</label>
+                  <Input className="h-10 text-right bg-white/[0.03]" placeholder="مثال: سياسة الاستبدال والاسترجاع" value={policyForm.title} onChange={(e) => setPolicyForm({ ...policyForm, title: e.target.value })} />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-xs font-medium text-white/70">التفاصيل</label>
+                  <Textarea className="min-h-32 text-right leading-6 bg-white/[0.03]" placeholder="اكتب النص كامل لتوجيه الذكاء الاصطناعي بشكل سليم..." value={policyForm.body} onChange={(e) => setPolicyForm({ ...policyForm, body: e.target.value })} />
+                </div>
+                <Button className="w-full" onClick={addKnowledgeItem}>
+                  <Plus className="h-4 w-4" />
+                  حفظ في قاعدة المعرفة
+                </Button>
+              </div>
+            </GradientCard>
+
+            <GradientCard>
+              <div className="mb-5 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Info className="h-5 w-5 text-emeraldx-400" />
+                  <h2 className="text-xl font-semibold text-white">السياسات الحالية</h2>
+                </div>
+                <span className="text-xs font-medium text-white/40">{knowledge.length} معلومات مسجلة</span>
+              </div>
+
+              {knowledge.length === 0 ? (
+                <div className="flex h-40 flex-col items-center justify-center rounded-2xl border border-dashed border-white/10 text-center">
+                  <Info className="mb-3 h-8 w-8 text-white/20" />
+                  <div className="text-sm font-medium text-white/40">لا توجد سياسات مضافة بعد</div>
+                </div>
+              ) : (
+                <div className="space-y-3 custom-scrollbar max-h-[500px] overflow-y-auto pr-2">
+                  {knowledge.map((item) => (
+                    <div key={item.id} className="rounded-2xl border border-white/5 bg-white/[0.02] p-4 transition hover:bg-white/[0.04]">
+                      <div className="font-semibold text-white text-sm">{item.title}</div>
+                      <p className="mt-2 whitespace-pre-wrap text-[11px] leading-relaxed text-white/50">{item.body}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </GradientCard>
+          </div>
+        </TabsContent>
+      </Tabs>
     </AppShell>
   );
 }

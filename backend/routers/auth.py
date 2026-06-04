@@ -261,3 +261,13 @@ async def reset_password(token: str, payload: PasswordReset, db: AsyncSession = 
     user.token_version += 1
     await db.commit()
     return {"message": "Password updated successfully"}
+
+
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+async def logout_endpoint(response: Response):
+    response.delete_cookie(
+        key="refresh_token",
+        secure=settings.APP_ENV == "production",
+        samesite="lax",
+    )
+    return None

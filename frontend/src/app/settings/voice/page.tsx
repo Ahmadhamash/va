@@ -72,10 +72,30 @@ export default function VoiceSettingsPage() {
     setSaving(true);
     setNotice("");
     try {
-      await apiClient.put("/voice-settings/", settings);
+      const payload = {
+        voice_mode: settings.voice_mode,
+        fallback_to_text: settings.fallback_to_text,
+        max_audio_duration_seconds: settings.max_audio_duration_seconds,
+        preferred_voice: settings.preferred_voice,
+        stt_provider: settings.stt_provider,
+        tts_provider: settings.tts_provider,
+        audio_format: settings.audio_format,
+        speech_speed: settings.speech_speed,
+        voice_personality: settings.voice_personality,
+        stt_config: settings.stt_config,
+        tts_config: settings.tts_config,
+      };
+      await apiClient.put("/voice-settings/", payload);
       setNotice("تم حفظ إعدادات الصوت.");
     } catch (error: any) {
-      setNotice(error?.response?.data?.detail || "تعذر حفظ إعدادات الصوت.");
+      let msg = "تعذر حفظ إعدادات الصوت.";
+      const detail = error?.response?.data?.detail;
+      if (Array.isArray(detail)) {
+        msg = detail.map((e) => `${e.loc?.join(".") || ""}: ${e.msg}`).join(" | ");
+      } else if (typeof detail === "string") {
+        msg = detail;
+      }
+      setNotice(msg);
     } finally {
       setSaving(false);
     }
@@ -96,7 +116,14 @@ export default function VoiceSettingsPage() {
       if (!res.data.success) throw new Error(res.data.error || "تعذر توليد المعاينة.");
       setAudioUrl(normalizeAudioUrl(res.data.audio_url));
     } catch (error: any) {
-      setNotice(error?.response?.data?.detail || error.message || "تعذر تشغيل المعاينة.");
+      let msg = error.message || "تعذر تشغيل المعاينة.";
+      const detail = error?.response?.data?.detail;
+      if (Array.isArray(detail)) {
+        msg = detail.map((e) => `${e.loc?.join(".") || ""}: ${e.msg}`).join(" | ");
+      } else if (typeof detail === "string") {
+        msg = detail;
+      }
+      setNotice(msg);
     } finally {
       setPreviewing(null);
     }

@@ -20,7 +20,7 @@ from middleware.auth_middleware import get_current_user
 from models import ChatSession, Message, User
 from schemas.chat import ChatSendResponse, MessageOut, SessionOut
 from services.ai_media import TranscriptionError
-from services.ai_chat import process_message, save_message
+from services.ai_chat import process_message, save_message, generate_preview_reply
 from services.file_service import save_upload
 
 router = APIRouter(prefix="/chat", tags=["chat"])
@@ -99,6 +99,26 @@ async def send_message(
         reply=result["reply"],
         transcription=result.get("transcription"),
     )
+
+from pydantic import BaseModel
+class PreviewRequest(BaseModel):
+    message: str
+    persona: str
+
+@router.post("/preview")
+async def preview_message(
+    payload: PreviewRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if not payload.message or not payload.message.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Provide a message",
+        )
+    
+    reply = await generate_preview_reply(payload.persona, payload.message, db)
+    return {"reply": reply}
 
 @router.post("/stream")
 async def send_message_stream(

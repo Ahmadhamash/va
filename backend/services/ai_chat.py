@@ -182,6 +182,39 @@ async def _generate_reply(
     draft = response.choices[0].message.content or "I don't have that information."
     return draft, retrieved_data
 
+async def generate_preview_reply(
+    persona_text: str, message: str, db: AsyncSession
+) -> str:
+    """Generate a quick preview reply using only the persona, no tools or history."""
+    api_key = await effective_openai_key(db)
+    model = await effective_model(db)
+    client = _client_for(api_key)
+
+    # We mock a User object just to pass the persona to the prompt builder
+    dummy_user = User(
+        business_name="chatter demo",
+        ai_persona=persona_text,
+    )
+    
+    system_prompt = build_system_prompt(dummy_user, style_samples=None, workflows=None, intent="general")
+
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": message},
+    ]
+
+    try:
+        response = await client.chat.completions.create(
+            model=model,
+            messages=messages,
+            temperature=0.2,
+            max_tokens=400,
+        )
+        return response.choices[0].message.content or "No response generated."
+    except Exception as e:
+        logger.exception("Preview reply failed")
+        return f"Error: {e}"
+
 
 # ─── Answer Verification ─────────────────────────────────────────────────────
 async def _verify_and_finalize(

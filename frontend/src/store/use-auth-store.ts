@@ -31,7 +31,12 @@ export const useAuthStore = create<AuthState>()(
       setAuth: (token, user) => {
         set({ token, user, loading: false });
       },
-      logout: () => {
+      logout: async () => {
+        try {
+          await fetch("/api/auth/logout", { method: "POST" });
+        } catch (e) {
+          console.error("Logout error", e);
+        }
         set({ token: null, user: null, loading: false });
       },
       setLoading: (loading) => set({ loading }),

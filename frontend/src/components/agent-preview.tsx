@@ -6,6 +6,7 @@ import { GradientCard } from "@/components/gradient-card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useAuthStore } from "@/store/use-auth-store";
 
 interface Message {
   id: string;
@@ -65,53 +66,77 @@ export function AgentPreview({
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isTyping]);
 
-  function responseFor(input: string): { text: string; handoff?: boolean; reason?: string } {
-    const text = input.toLowerCase();
-    const banned = bannedPhrases.find((phrase) => phrase.trim() && text.includes(phrase.toLowerCase().trim()));
-    if (banned) {
-      return { text: `هاي العبارة ممنوعة عندنا: ${banned}. بقدر أساعدك بسؤال ثاني ضمن معلومات النشاط.` };
-    }
-    if (handoffToggles.angry && ["شكوى", "غاضب", "سيء", "نصب", "مشكلة"].some((word) => text.includes(word))) {
-      return { text: fallbackMessage, handoff: true, reason: "شكوى أو غضب" };
-    }
-    if (handoffToggles.refund && ["استرجاع", "إلغاء", "فلوسي", "مصاري", "ترجيع"].some((word) => text.includes(word))) {
-      return { text: fallbackMessage, handoff: true, reason: "إلغاء أو استرجاع" };
-    }
-    if (handoffToggles.sensitive && ["قانوني", "كلمة المرور", "سري", "اختراق"].some((word) => text.includes(word))) {
-      return { text: fallbackMessage, handoff: true, reason: "معلومة حساسة" };
-    }
-    if (["دوام", "أوقات", "متى"].some((word) => text.includes(word))) {
-      return { text: `أوقات العمل هي ${workingHours}. وإذا بدك تفاصيل أكثر بحولك للموظف المناسب.` };
-    }
-    if (strictness === "strict") {
-      return { text: "ما بقدر أعطي معلومة مش موجودة بقاعدة المعرفة. احكيلي اسم المنتج أو السؤال بشكل أدق." };
-    }
-    if (tone === "salesy") {
-      return { text: "تمام، بعطيك المعلومة المؤكدة وبساعدك تختار الأنسب بدون ما أخترع تفاصيل مش موجودة." };
-    }
-    if (tone === "professional") {
-      return { text: "أكيد، سأجيبك بناءً على المعلومات المتوفرة فقط، وإذا احتجنا تفاصيل إضافية سأطلبها منك بوضوح." };
-    }
-    return { text: "أكيد، احكيلي أي منتج أو خدمة تقصد وبجاوبك من المعلومات الموجودة عندنا." };
-  }
-
-  function handleSend(textToSend = inputText) {
+  async function handleSend(textToSend = inputText) {
     if (!textToSend.trim() || agentStatus === "HANDOFF") return;
     setMessages((current) => [...current, { id: `user-${Date.now()}`, sender: "CUSTOMER", body: textToSend }]);
     setInputText("");
     setIsTyping(true);
-    setTimeout(() => {
-      const result = responseFor(textToSend);
-      setIsTyping(false);
+
+    const config = {
+      prompt_mode: "custom_settings",
+      dialect,
+      tone,
+      emoji: "low",
+      strictness,
+      agent_name: agentName,
+      working_hours: workingHours,
+      fallback_message: fallbackMessage,
+      handoff_angry: handoffToggles.angry,
+      handoff_refund: handoffToggles.refund,
+      handoff_sensitive: handoffToggles.sensitive,
+      banned_phrases: bannedPhrases,
+    };
+    
+    const persona = [
+      `<!-- ${JSON.stringify(config)} -->`,
+      `اسم الوكيل الظاهر للعملاء: ${agentName}.`,
+      `أوقات العمل: ${workingHours}.`,
+      `مستوى الالتزام: ${strictness}. لا تخترع منتجات أو أسعار أو وعود غير موجودة في قاعدة المعرفة.`,
+      bannedPhrases.length ? `تجنب هذه العبارات: ${bannedPhrases.join(", ")}.` : "",
+      `رسالة التحويل البشري: ${fallbackMessage}`,
+    ].filter(Boolean).join("\n");
+
+    try {
+      const res = await fetch("/api/chat/preview", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${useAuthStore.getState().token}`,
+        },
+        body: JSON.stringify({ message: textToSend, persona }),
+      });
+      const data = await res.json();
+      
+      let replyText = data.reply || "عذراً، ما قدرت أرد حالياً.";
+      let isHandoff = false;
+      let handoffReason = "";
+
+      // Simple frontend check for handoff terms to simulate handoff state visually
+      const textLower = textToSend.toLowerCase();
+      if (handoffToggles.angry && ["شكوى", "غاضب", "سيء", "نصب", "مشكلة"].some((word) => textLower.includes(word))) {
+        isHandoff = true; handoffReason = "شكوى أو غضب"; replyText = fallbackMessage;
+      } else if (handoffToggles.refund && ["استرجاع", "إلغاء", "فلوسي", "مصاري", "ترجيع"].some((word) => textLower.includes(word))) {
+        isHandoff = true; handoffReason = "إلغاء أو استرجاع"; replyText = fallbackMessage;
+      } else if (handoffToggles.sensitive && ["قانوني", "كلمة المرور", "سري", "اختراق"].some((word) => textLower.includes(word))) {
+        isHandoff = true; handoffReason = "معلومة حساسة"; replyText = fallbackMessage;
+      }
+
       setMessages((current) => [
         ...current,
-        { id: `ai-${Date.now()}`, sender: "AI", body: result.text },
-        ...(result.handoff
-          ? [{ id: `sys-${Date.now()}`, sender: "SYSTEM" as const, body: `تم تشغيل التحويل البشري: ${result.reason}.` }]
+        { id: `ai-${Date.now()}`, sender: "AI", body: replyText },
+        ...(isHandoff
+          ? [{ id: `sys-${Date.now()}`, sender: "SYSTEM" as const, body: `تم تشغيل التحويل البشري: ${handoffReason}.` }]
           : []),
       ]);
-      if (result.handoff) setAgentStatus("HANDOFF");
-    }, 650);
+      if (isHandoff) setAgentStatus("HANDOFF");
+    } catch (error) {
+      setMessages((current) => [
+        ...current,
+        { id: `ai-${Date.now()}`, sender: "AI", body: "حصل خطأ في الاتصال بالسيرفر. تأكد من إعداداتك." },
+      ]);
+    } finally {
+      setIsTyping(false);
+    }
   }
 
   const quickTests = [
