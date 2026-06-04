@@ -337,6 +337,15 @@ async def _verify_and_finalize(
         logger.warning("Unknown verifier verdict: %s", result.verdict)
         action = "sent"
 
+    # 4. If the verifier blocked the humanized draft and fell back to a formal safe_response, humanize the fallback!
+    if result.verdict != SAFE_TO_SEND and final_reply:
+        logger.info("Humanizing the verifier's fallback response: %s", final_reply)
+        final_reply = await humanizer.rewrite(
+            logic_draft=final_reply,
+            style_samples=style_samples,
+            voice_settings=voice_settings
+        )
+
     # Log the verification decision
     try:
         await verifier.log_verification(
