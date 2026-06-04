@@ -28,6 +28,7 @@ const voiceModes = [
 function normalizeAudioUrl(url?: string) {
   if (!url) return "";
   if (url.startsWith("/uploads/")) return `/api${url}`;
+  if (!url.startsWith("http") && !url.startsWith("/")) return `/api/uploads/${url}`;
   return url;
 }
 
