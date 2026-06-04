@@ -68,6 +68,10 @@ export default function KnowledgeBasePage() {
   const [importing, setImporting] = useState(false);
   const [candidates, setCandidates] = useState<any[]>([]);
   const [policyForm, setPolicyForm] = useState({ title: "", body: "", category: "policies" });
+  const [styleFile, setStyleFile] = useState<File | null>(null);
+  const [styleMyName, setStyleMyName] = useState("");
+  const [styleUploading, setStyleUploading] = useState(false);
+  const [styleStats, setStyleStats] = useState<{ total: number } | null>(null);
 
   const dynamicLabels = useMemo(() => {
     if (businessType === "clothing") {
@@ -112,8 +116,22 @@ export default function KnowledgeBasePage() {
       const knowData = await knowRes.json().catch(() => ({}));
       if (prodData.ok) setProducts(prodData.products || []);
       if (knowData.ok) setKnowledge(knowData.knowledge || []);
+      loadStyleStats();
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function loadStyleStats() {
+    if (!token) return;
+    try {
+      const res = await fetch("/api/style/samples", { headers: { Authorization: `Bearer ${token}` } });
+      if (res.ok) {
+        const data = await res.json();
+        setStyleStats({ total: data.length });
+      }
+    } catch (e) {
+      // ignore
     }
   }
 
@@ -273,6 +291,53 @@ export default function KnowledgeBasePage() {
     }
   }
 
+  async function uploadStyleFile(e: React.FormEvent) {
+    e.preventDefault();
+    if (!token || !styleFile) return;
+    setStyleUploading(true);
+    setNotice("");
+    try {
+      const body = new FormData();
+      body.append("file", styleFile);
+      if (styleMyName) body.append("my_name", styleMyName);
+
+      const res = await fetch("/api/style/upload", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.detail || "تعذر رفع الملف.");
+      
+      setStyleFile(null);
+      setStyleMyName("");
+      setNotice(`تم رفع واستخراج ${data.added} رسالة لتدريب الذكاء الاصطناعي بنجاح.`);
+      setTimeout(() => setNotice(""), 4000);
+      await loadStyleStats();
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "حدث خطأ أثناء الرفع.");
+    } finally {
+      setStyleUploading(false);
+    }
+  }
+
+  async function clearStyleSamples() {
+    if (!token || !confirm("هل أنت متأكد من رغبتك في مسح كل عينات التدريب؟ سيفقد الذكاء الاصطناعي أسلوبك!")) return;
+    setNotice("");
+    try {
+      const res = await fetch("/api/style/samples", {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error("تعذر مسح العينات.");
+      setNotice("تم مسح كل عينات التدريب.");
+      setTimeout(() => setNotice(""), 3000);
+      await loadStyleStats();
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "حدث خطأ أثناء المسح.");
+    }
+  }
+
   if (loading) {
     return (
       <AppShell title="قاعدة المعرفة" subtitle="المنتجات والسياسات التي يعتمد عليها الوكيل.">
@@ -297,6 +362,7 @@ export default function KnowledgeBasePage() {
           <TabsTrigger value="products" className="flex-1 py-2.5">المنتجات (الكتالوج)</TabsTrigger>
           <TabsTrigger value="import" className="flex-1 py-2.5">استيراد المنتجات</TabsTrigger>
           <TabsTrigger value="policies" className="flex-1 py-2.5">السياسات والمعلومات</TabsTrigger>
+          <TabsTrigger value="style" className="flex-1 py-2.5">عينات الأسلوب</TabsTrigger>
         </TabsList>
 
         <TabsContent value="products" className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
@@ -567,6 +633,71 @@ export default function KnowledgeBasePage() {
                   ))}
                 </div>
               )}
+            </GradientCard>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="style" className="animate-in fade-in slide-in-from-bottom-2">
+          <div className="grid gap-6 lg:grid-cols-2">
+            <GradientCard>
+              <div className="mb-5 flex items-center gap-2">
+                <Upload className="h-5 w-5 text-emeraldx-400" />
+                <h2 className="text-xl font-semibold text-white">استيراد محادثات الواتساب</h2>
+              </div>
+              <p className="mb-6 text-xs leading-5 text-white/50">
+                ارفع ملف (Export Chat) من الواتساب بصيغة .txt ليقوم النظام باستخراج أسلوبك في الرد وتدريب "وكيل الأنسنة" للرد بنفس لهجتك.
+              </p>
+              
+              <form onSubmit={uploadStyleFile} className="space-y-4">
+                <div>
+                  <label className="mb-1.5 block text-xs font-medium text-white/70">ملف المحادثة (.txt, .json, .csv)</label>
+                  <Input 
+                    type="file" 
+                    accept=".txt,.json,.csv"
+                    className="h-10 text-right bg-white/[0.03] file:bg-white/[0.05] file:text-white file:border-0 file:py-1 file:px-3 file:rounded-xl file:mr-2 file:text-xs cursor-pointer" 
+                    onChange={(e) => setStyleFile(e.target.files?.[0] || null)} 
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-xs font-medium text-white/70">اسم المتجر / المتحدث (اختياري)</label>
+                  <Input 
+                    className="h-10 text-right bg-white/[0.03]" 
+                    placeholder="ليتعرف الذكاء الاصطناعي على رسائلك في الملف" 
+                    value={styleMyName} 
+                    onChange={(e) => setStyleMyName(e.target.value)} 
+                  />
+                  <p className="mt-1.5 text-[10px] text-white/40">إذا تركت الحقل فارغاً، سيحاول النظام اكتشاف رسائل المبيعات تلقائياً.</p>
+                </div>
+                <Button className="w-full" type="submit" disabled={!styleFile || styleUploading}>
+                  {styleUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                  رفع وتدريب النظام
+                </Button>
+              </form>
+            </GradientCard>
+
+            <GradientCard>
+              <div className="mb-5 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="h-5 w-5 text-emeraldx-400" />
+                  <h2 className="text-xl font-semibold text-white">إحصائيات التدريب</h2>
+                </div>
+              </div>
+
+              <div className="flex flex-col items-center justify-center py-8 text-center border border-white/5 rounded-2xl bg-white/[0.02]">
+                <div className="text-4xl font-bold text-white mb-2">{styleStats?.total || 0}</div>
+                <div className="text-sm font-medium text-white/50 mb-6">رسالة تدريب (Style Sample) مستخرجة</div>
+                
+                {(styleStats?.total || 0) > 0 ? (
+                  <Button variant="destructive" size="sm" onClick={clearStyleSamples}>
+                    <Trash2 className="h-4 w-4 ml-1.5" />
+                    مسح كل العينات
+                  </Button>
+                ) : (
+                  <div className="text-xs text-amber-400/80 bg-amber-500/10 px-3 py-1.5 rounded-lg">
+                    الذكاء الاصطناعي لا يمتلك أمثلة للتدريب حالياً
+                  </div>
+                )}
+              </div>
             </GradientCard>
           </div>
         </TabsContent>
