@@ -25,7 +25,7 @@ export async function backendFetch(path: string, opts: FetchOptions = {}) {
   const res = await fetch(url, {
     method: opts.method || "GET",
     headers,
-    body: opts.body ? JSON.stringify(opts.body) : undefined,
+    body: opts.body ? (typeof opts.body === "string" || opts.body instanceof FormData || opts.body instanceof URLSearchParams ? opts.body as any : JSON.stringify(opts.body)) : undefined,
     cache: "no-store",
   });
 
