@@ -1,7 +1,7 @@
 """add ai_trace to verification logs
 
-Revision ID: 0016_add_ai_trace_to_verification_logs
-Revises: 0015_remove_chatwoot_fields
+Revision ID: 0016
+Revises: 0015
 Create Date: 2026-06-05
 """
 from alembic import op
@@ -9,8 +9,8 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 
-revision = "0016_add_ai_trace_to_verification_logs"
-down_revision = "0015_remove_chatwoot_fields"
+revision = "0016"
+down_revision = "0015"
 branch_labels = None
 depends_on = None
 
