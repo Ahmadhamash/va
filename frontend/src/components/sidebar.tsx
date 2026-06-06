@@ -46,6 +46,7 @@ const clientNavGroups = [
   {
     title: "إدارة العمل",
     items: [
+      { href: "/onboarding", label: "ربط القنوات", icon: MessageCircle },
       { href: "/bookings", label: "الحجوزات", icon: Calendar },
       { href: "/policies", label: "سياسات العمل", icon: Scale },
       { href: "/billing", label: "الاشتراك والباقات", icon: CreditCard },
