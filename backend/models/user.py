@@ -49,6 +49,24 @@ class User(Base):
         Boolean, default=True, server_default="true"
     )
     email_verified: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+
+    # Manual ManyChat agency onboarding. The admin completes setup in ManyChat
+    # after the client grants Page/Admin access from Meta Business tools.
+    manychat_setup_status: Mapped[str] = mapped_column(
+        String(30),
+        default="not_started",
+        server_default="not_started",
+        nullable=False,
+        index=True,
+    )
+    fb_page_link: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    ig_username: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    wa_number: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    manychat_admin_confirmed: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false"
+    )
+    manychat_setup_submitted_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    manychat_setup_completed_at: Mapped[datetime | None] = mapped_column(nullable=True)
     
     # Phase 1 Remediation: Password Reset token invalidation
     token_version: Mapped[int] = mapped_column(Integer, default=1, server_default="1")

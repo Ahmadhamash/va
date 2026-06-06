@@ -19,7 +19,9 @@ import {
   Eye,
   EyeOff,
   Building2,
-  RefreshCw
+  RefreshCw,
+  CheckCircle2,
+  Clock3
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
@@ -27,6 +29,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { useAuthStore } from "@/store/use-auth-store";
 import { GradientCard } from "@/components/gradient-card";
+
+type ManyChatSetupStatus = "not_started" | "pending_setup" | "completed";
 
 interface ClientData {
   id: string;
@@ -40,6 +44,13 @@ interface ClientData {
   item_count: number;
   session_count: number;
   style_sample_count: number;
+  manychat_setup_status: ManyChatSetupStatus;
+  fb_page_link: string | null;
+  ig_username: string | null;
+  wa_number: string | null;
+  manychat_admin_confirmed: boolean;
+  manychat_setup_submitted_at: string | null;
+  manychat_setup_completed_at: string | null;
 }
 
 interface PlatformStats {
@@ -58,6 +69,22 @@ interface PlatformSettings {
   key_source: string;
   ai_model: string;
   debounce_seconds: number;
+}
+
+function manyChatStatusLabel(status: ManyChatSetupStatus) {
+  if (status === "completed") return "مكتمل";
+  if (status === "pending_setup") return "قيد الإعداد";
+  return "لم يبدأ";
+}
+
+function manyChatStatusClass(status: ManyChatSetupStatus) {
+  if (status === "completed") {
+    return "bg-emeraldx-500/10 border border-emeraldx-500/20 text-emeraldx-400";
+  }
+  if (status === "pending_setup") {
+    return "bg-amber-500/10 border border-amber-500/20 text-amber-300";
+  }
+  return "bg-white/5 border border-white/10 text-white/35";
 }
 
 export default function AdminDashboardPage() {
@@ -139,6 +166,10 @@ export default function AdminDashboardPage() {
   useEffect(() => {
     loadAdminData();
   }, [token]);
+
+  const pendingManychatClients = clients.filter(
+    (client) => client.manychat_setup_status === "pending_setup"
+  );
 
   // Handle Client Search
   useEffect(() => {
@@ -292,6 +323,30 @@ export default function AdminDashboardPage() {
     }
   };
 
+  const handleUpdateManychatStatus = async (clientId: string, status: ManyChatSetupStatus) => {
+    if (!token) return;
+    try {
+      const res = await fetch(`/api/admin/clients/${clientId}/manychat-status`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ manychat_setup_status: status })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setClients(prev => prev.map(client => client.id === clientId ? { ...client, ...data } : client));
+        showNotice(status === "completed" ? "تم تعليم طلب ManyChat كمكتمل." : "تم تحديث حالة طلب ManyChat.");
+      } else {
+        showNotice(`فشل تحديث حالة ManyChat: ${data.detail || "خطأ غير معروف"}`, "error");
+      }
+    } catch (err) {
+      console.error(err);
+      showNotice("حدث خطأ أثناء تحديث حالة ManyChat.", "error");
+    }
+  };
+
   // Save Platform Config Settings
   const handleSaveSettings = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -397,6 +452,77 @@ export default function AdminDashboardPage() {
         <div className="grid gap-6 xl:grid-cols-[1fr_400px]">
           {/* Left / Main Panel: Client List & Management */}
           <div className="space-y-6">
+            <Card className="border-amber-400/20">
+              <CardHeader className="flex flex-col md:flex-row-reverse md:items-center md:justify-between gap-3">
+                <div className="text-right">
+                  <CardTitle className="flex items-center justify-end gap-2 text-right">
+                    <span>طلبات ربط ManyChat</span>
+                    <Clock3 className="h-5 w-5 text-amber-300" />
+                  </CardTitle>
+                  <CardDescription className="text-right">العملاء الذين أرسلوا بيانات الصفحة وينتظرون الإعداد اليدوي من حساب الوكالة.</CardDescription>
+                </div>
+                <span className="rounded-full border border-amber-400/20 bg-amber-500/10 px-3 py-1 text-xs font-bold text-amber-300">
+                  {pendingManychatClients.length} قيد الإعداد
+                </span>
+              </CardHeader>
+              <CardContent>
+                {pendingManychatClients.length === 0 ? (
+                  <div className="rounded-2xl border border-dashed border-white/10 py-8 text-center text-sm text-white/40">
+                    لا توجد طلبات ManyChat معلقة حالياً.
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {pendingManychatClients.map((client) => (
+                      <div key={client.id} className="rounded-2xl border border-white/10 bg-white/[0.025] p-4 text-right">
+                        <div className="flex flex-wrap items-start justify-between gap-4">
+                          <div className="flex flex-wrap gap-2">
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              className="text-xs"
+                              onClick={() => handleGenerateManychatWebhook(client.id)}
+                            >
+                              <Smartphone className="h-3.5 w-3.5" />
+                              نسخ Webhook
+                            </Button>
+                            <Button
+                              size="sm"
+                              className="text-xs"
+                              onClick={() => handleUpdateManychatStatus(client.id, "completed")}
+                            >
+                              <CheckCircle2 className="h-3.5 w-3.5" />
+                              تم الإعداد
+                            </Button>
+                          </div>
+                          <div>
+                            <div className="font-semibold text-white">{client.business_name || client.username}</div>
+                            <div className="mt-1 text-xs text-white/40">{client.email}</div>
+                          </div>
+                        </div>
+                        <div className="mt-3 grid gap-2 text-xs text-white/55 md:grid-cols-3">
+                          <a
+                            href={client.fb_page_link || "#"}
+                            target="_blank"
+                            rel="noreferrer"
+                            className={`rounded-xl bg-black/15 p-3 font-mono text-cyanx-300 ${!client.fb_page_link ? "pointer-events-none text-white/30" : ""}`}
+                            dir="ltr"
+                          >
+                            {client.fb_page_link || "no facebook link"}
+                          </a>
+                          <div className="rounded-xl bg-black/15 p-3 font-mono" dir="ltr">
+                            {client.ig_username ? `@${client.ig_username}` : "no instagram"}
+                          </div>
+                          <div className="rounded-xl bg-black/15 p-3 font-mono" dir="ltr">
+                            {client.wa_number || "no whatsapp"}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
             <Card>
               <CardHeader className="flex flex-col md:flex-row-reverse md:items-center md:justify-between gap-4">
                 <div className="text-right">
@@ -436,6 +562,7 @@ export default function AdminDashboardPage() {
                         <th className="p-4">البريد الإلكتروني</th>
                         <th className="p-4 text-center">المنتجات</th>
                         <th className="p-4 text-center">المحادثات</th>
+                        <th className="p-4 text-center">ManyChat</th>
                         <th className="p-4 text-center">الحالة</th>
                         <th className="p-4 text-left">التحكم</th>
                       </tr>
@@ -443,7 +570,7 @@ export default function AdminDashboardPage() {
                     <tbody className="divide-y divide-white/5 text-sm text-white/80">
                       {clients.length === 0 ? (
                         <tr>
-                          <td colSpan={6} className="p-8 text-center text-white/40">لا يوجد عملاء مطابقين للبحث.</td>
+                          <td colSpan={7} className="p-8 text-center text-white/40">لا يوجد عملاء مطابقين للبحث.</td>
                         </tr>
                       ) : (
                         clients.map((client) => (
@@ -455,6 +582,11 @@ export default function AdminDashboardPage() {
                             <td className="p-4 font-mono text-xs text-white/60">{client.email}</td>
                             <td className="p-4 text-center">{client.item_count}</td>
                             <td className="p-4 text-center">{client.session_count}</td>
+                            <td className="p-4 text-center">
+                              <span className={`inline-block rounded-full px-2.5 py-0.5 text-[10px] font-bold ${manyChatStatusClass(client.manychat_setup_status)}`}>
+                                {manyChatStatusLabel(client.manychat_setup_status)}
+                              </span>
+                            </td>
                             <td className="p-4 text-center">
                               <span className={`inline-block rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
                                 client.is_active ? "bg-emeraldx-500/10 border border-emeraldx-500/20 text-emeraldx-400" : "bg-red-500/10 border border-red-500/20 text-red-400"

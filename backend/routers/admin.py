@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, or_, select
@@ -19,6 +20,7 @@ from models import (
 )
 from schemas.chat import MessageOut, SessionOut
 from schemas.item import ItemOut
+from schemas.onboarding import ManyChatStatusUpdate
 from schemas.settings import SettingsOut, SettingsUpdate, StatsOut
 from schemas.user import (
     ActiveUpdate,
@@ -162,6 +164,36 @@ async def set_client_active(
     await db.commit()
     await db.refresh(client)
     return client
+
+
+@router.patch("/clients/{client_id}/manychat-status", response_model=ClientSummary)
+async def set_client_manychat_status(
+    client_id: uuid.UUID,
+    payload: ManyChatStatusUpdate,
+    _: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    client = await _get_client(client_id, db)
+    client.manychat_setup_status = payload.manychat_setup_status
+    if payload.manychat_setup_status == "completed":
+        client.manychat_setup_completed_at = datetime.utcnow()
+    else:
+        client.manychat_setup_completed_at = None
+    await db.commit()
+    await db.refresh(client)
+    summary = ClientSummary.model_validate(client)
+    summary.item_count = await db.scalar(
+        select(func.count()).select_from(Item).where(Item.user_id == client.id)
+    )
+    summary.session_count = await db.scalar(
+        select(func.count())
+        .select_from(ChatSession)
+        .where(ChatSession.user_id == client.id)
+    )
+    summary.style_sample_count = await db.scalar(
+        select(func.count()).select_from(StyleSample).where(StyleSample.user_id == client.id)
+    )
+    return summary
 
 
 @router.get("/clients/{client_id}/items", response_model=list[ItemOut])

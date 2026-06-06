@@ -55,6 +55,7 @@ class ClientSummary(BaseModel):
     username: str
     email: EmailStr
     business_name: str | None
+    business_type: str | None = None
     ai_persona: str | None
     role: str
     is_active: bool
@@ -62,6 +63,13 @@ class ClientSummary(BaseModel):
     item_count: int = 0
     session_count: int = 0
     style_sample_count: int = 0
+    manychat_setup_status: str = "not_started"
+    fb_page_link: str | None = None
+    ig_username: str | None = None
+    wa_number: str | None = None
+    manychat_admin_confirmed: bool = False
+    manychat_setup_submitted_at: datetime | None = None
+    manychat_setup_completed_at: datetime | None = None
 
 
 class ActiveUpdate(BaseModel):

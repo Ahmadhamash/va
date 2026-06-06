@@ -26,7 +26,7 @@ from asgi_correlation_id import CorrelationIdMiddleware, correlation_id
 from config import settings
 from database import get_db
 from models import User
-from routers import admin, auth, automation, billing, bookings, channels, chat, delivery, escalations, handoff, items, offers, policies, style, verification_logs, voice_settings, webhooks, workflows, catalog_import
+from routers import admin, auth, automation, billing, bookings, channels, chat, delivery, escalations, handoff, items, offers, onboarding, policies, style, verification_logs, voice_settings, webhooks, workflows, catalog_import
 from services.business_templates import list_business_types
 from services.auth_service import decode_access_token
 from services.ratelimit import limiter
@@ -122,6 +122,7 @@ api_router.include_router(delivery.router)
 api_router.include_router(escalations.router)
 api_router.include_router(policies.router)
 api_router.include_router(offers.router)
+api_router.include_router(onboarding.router)
 api_router.include_router(bookings.router)
 api_router.include_router(workflows.router)
 api_router.include_router(billing.router)
