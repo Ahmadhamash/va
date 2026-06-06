@@ -251,6 +251,26 @@ async def create_client_scenario(public_id: str, client_name: str, platform: str
     blueprint["flow"][0]["module"] = trigger_module
     blueprint["flow"][2]["module"] = action_module
 
+    # Add missing metadata property at root level of blueprint
+    blueprint["metadata"] = {
+        "instant": False,
+        "scenario": {
+            "round": 1,
+            "maxErrors": 3,
+            "autoCommit": True,
+            "autoCommitTriggerLast": True,
+            "sequential": False,
+            "confidential": False,
+            "dataloss": False,
+            "dlq": False,
+            "freshVariables": False
+        },
+        "designer": {
+            "orphans": []
+        },
+        "zone": "eu1.make.com"
+    }
+
     # If connection ID is available in env, apply it, else Make.com will prompt user
     if settings.MAKE_CONNECTION_ID:
         # We inject the connection ID into the parameters of modules 1 and 3
@@ -261,9 +281,7 @@ async def create_client_scenario(public_id: str, client_name: str, platform: str
         "name": f"VA Platform Integration - {client_name} ({platform})",
         "teamId": int(settings.MAKE_TEAM_ID) if settings.MAKE_TEAM_ID.isdigit() else settings.MAKE_TEAM_ID,
         "blueprint": json.dumps(blueprint),
-        "scheduling": {
-            "type": "independently"
-        }
+        "scheduling": json.dumps({"type": "independently"})
     }
 
     url = "https://eu1.make.com/api/v2/scenarios" # EU1 is the default Make API endpoint, may need adjusting based on zone (us1, eu1, eu2)
