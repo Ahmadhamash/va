@@ -130,10 +130,9 @@ async def agent_reply(
         integration = int_result.scalar_one_or_none()
         if integration:
             token = (integration.credentials or {}).get("page_access_token", "")
-            await send_meta_message(
+            sent = await send_meta_message(
                 token, session.external_user_id, payload.message, session.channel
             )
-            sent = True
 
     return {
         "status": "sent" if sent else "saved",

@@ -14,6 +14,7 @@ class Settings(BaseSettings):
 
     # Database
     DATABASE_URL: str = "postgresql+asyncpg://user:password@localhost:5432/ai_assistant_db"
+    DB_POOL_RECYCLE_SECONDS: int = 1800
 
     # OpenAI
     OPENAI_API_KEY: str = ""
@@ -48,6 +49,8 @@ class Settings(BaseSettings):
     APP_ENV: str = "development"
     CORS_ORIGINS: List[str] = ["http://localhost:3000"]
     SENTRY_DSN: str | None = None
+    SENTRY_TRACES_SAMPLE_RATE: float = 0.1
+    SENTRY_PROFILES_SAMPLE_RATE: float = 0.0
 
     # Public domain for constructing external URLs (e.g., audio URLs for Meta)
     DOMAIN: str = ""

@@ -157,16 +157,15 @@ export default function SettingsPage() {
 
     try {
       if (confirmAction === "logout") {
+        await apiClient.post("/auth/logout").catch(() => null);
         logout();
         toast("تم تسجيل الخروج بنجاح.", { icon: "ℹ️" });
       } else if (confirmAction === "disconnect") {
-        // Simulating backend action
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-        toast.success("🔌 تم فصل كافة قنوات الاتصال والرد الآلي بنجاح.");
+        const res = await apiClient.delete("/channels");
+        toast.success(`تم فصل ${res.data.deleted ?? 0} قناة اتصال بنجاح.`);
       } else if (confirmAction === "delete_chats") {
-        // Simulating backend action
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-        toast.success("🗑️ تم تنظيف كافة المحادثات والرسائل المؤرشفة بنجاح.");
+        const res = await apiClient.delete("/chat/sessions");
+        toast.success(`تم حذف ${res.data.deleted ?? 0} محادثة بنجاح.`);
       }
     } catch (err) {
       console.error(err);

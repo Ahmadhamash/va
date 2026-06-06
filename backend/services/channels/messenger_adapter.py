@@ -23,6 +23,7 @@ from services.channels.base import (
     MessageStatus,
     NormalizedIncomingMessage,
 )
+from services.file_service import signed_upload_url
 
 logger = logging.getLogger("channels.messenger")
 
@@ -212,7 +213,7 @@ class MessengerAdapter(ChannelAdapter):
             async with httpx.AsyncClient(timeout=5) as client:
                 await client.post(
                     f"{GRAPH_API}/me/messages",
-                    params={"access_token": token},
+                    headers={"Authorization": f"Bearer {token}"},
                     json={
                         "recipient": {"id": recipient_id},
                         "sender_action": "typing_on",
@@ -267,6 +268,8 @@ class MessengerAdapter(ChannelAdapter):
                 clean = f"api/{clean}"
             else:
                 clean = f"api/uploads/{clean}"
+        if clean.startswith("api/uploads/"):
+            clean = signed_upload_url(clean)
 
         return f"https://{domain}/{clean}"
 
@@ -281,7 +284,7 @@ class MessengerAdapter(ChannelAdapter):
                 async with httpx.AsyncClient(timeout=15) as client:
                     resp = await client.post(
                         f"{GRAPH_API}/me/messages",
-                        params={"access_token": token},
+                        headers={"Authorization": f"Bearer {token}"},
                         json=payload,
                     )
                     resp_data = resp.json() if resp.status_code < 500 else {}

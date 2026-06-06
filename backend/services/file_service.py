@@ -3,8 +3,11 @@ import os
 import re
 import time
 import uuid
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from urllib.parse import urlencode
 
+import jwt
 from fastapi import HTTPException, UploadFile, status
 
 from config import settings
@@ -220,6 +223,72 @@ def resolve_path(relative_path: str) -> Path:
     if not abs_path.is_file():
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")
     return abs_path
+
+
+def owner_id_from_path(relative_path: str) -> uuid.UUID | None:
+    """Extract the owning user id from uploads/{user_id}/... paths."""
+    try:
+        first = Path(relative_path).parts[0]
+        return uuid.UUID(first)
+    except (IndexError, TypeError, ValueError):
+        return None
+
+
+def create_media_access_token(
+    relative_path: str,
+    *,
+    expires_minutes: int = 120,
+) -> str:
+    now = datetime.now(timezone.utc)
+    payload = {
+        "typ": "media",
+        "path": relative_path,
+        "iat": now,
+        "exp": now + timedelta(minutes=expires_minutes),
+    }
+    return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+
+
+def verify_media_access_token(token: str | None, relative_path: str) -> bool:
+    if not token:
+        return False
+    try:
+        payload = jwt.decode(
+            token,
+            settings.SECRET_KEY,
+            algorithms=[settings.ALGORITHM],
+        )
+    except jwt.PyJWTError:
+        return False
+    return payload.get("typ") == "media" and payload.get("path") == relative_path
+
+
+def signed_upload_url(url_or_path: str, *, expires_minutes: int = 120) -> str:
+    """Append a short-lived media token to local upload URLs/paths."""
+    raw = (url_or_path or "").strip()
+    if raw.startswith(("http://", "https://")):
+        return raw
+
+    clean = raw.lstrip("/")
+    path_part, separator, existing_query = clean.partition("?")
+    if path_part.startswith("api/uploads/"):
+        relative_path = path_part.removeprefix("api/uploads/")
+        clean = path_part
+    elif path_part.startswith("uploads/"):
+        relative_path = path_part.removeprefix("uploads/")
+        clean = path_part
+    else:
+        relative_path = path_part
+        clean = f"api/uploads/{relative_path}"
+
+    token = create_media_access_token(
+        relative_path,
+        expires_minutes=expires_minutes,
+    )
+    token_query = urlencode({"media_token": token})
+    if separator and existing_query:
+        return f"{clean}?{existing_query}&{token_query}"
+    return f"{clean}?{token_query}"
 
 
 async def encode_image_base64(relative_path: str) -> tuple[str, str]:

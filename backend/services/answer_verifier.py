@@ -32,6 +32,7 @@ from openai import AsyncOpenAI
 from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger("answer_verifier")
+OPENAI_TIMEOUT_SECONDS = 30.0
 
 # ── Verdicts ─────────────────────────────────────────────────────────────
 SAFE_TO_SEND = "SAFE_TO_SEND"
@@ -193,7 +194,7 @@ class AnswerVerifier:
     """Verifies AI answers against retrieved data before sending."""
 
     def __init__(self, api_key: str):
-        self._client = AsyncOpenAI(api_key=api_key)
+        self._client = AsyncOpenAI(api_key=api_key, timeout=OPENAI_TIMEOUT_SECONDS)
 
     async def verify(
         self,
@@ -290,9 +291,10 @@ class AnswerVerifier:
             logger.exception("Answer verification failed")
             # On verifier failure → err on the side of caution
             return VerificationResult(
-                verdict=SAFE_TO_SEND,
-                risk_score=0.3,
-                reasons=["Verification service unavailable — passed with caution"],
+                verdict=HUMAN_HANDOFF_REQUIRED,
+                risk_score=0.8,
+                reasons=["Verification service unavailable"],
+                safe_response=SAFE_RESPONSES["handoff"],
             )
 
     def _pre_check(self, draft_answer: str) -> VerificationResult | None:
@@ -312,8 +314,12 @@ class AnswerVerifier:
 
         # Check for suspiciously vague price language
         vague_price_patterns = ["تقريباً", "حوالي", "approximately", "around", "roughly"]
+        price_context = re.search(
+            r"(سعر|بكم|دينار|دولار|ريال|درهم|price|cost|jod|usd|sar|aed|\$)",
+            lower,
+        )
         for pattern in vague_price_patterns:
-            if pattern in lower:
+            if price_context and pattern in lower:
                 return VerificationResult(
                     verdict=BLOCKED_UNGROUNDED,
                     risk_score=0.85,

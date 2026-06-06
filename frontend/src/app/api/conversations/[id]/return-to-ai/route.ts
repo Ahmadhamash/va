@@ -10,19 +10,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
 
   try {
-    const listRes = await backendFetch("/handoff", { token });
-    if (!listRes.ok) {
-      return NextResponse.json({ ok: false, error: `Failed to fetch handoff list: ${listRes.statusText}` }, { status: listRes.status });
-    }
-    const handoffs = await listRes.json();
-    const handoff = handoffs.find((h: any) => h.session_id === id);
-    if (!handoff) {
-      return NextResponse.json({ ok: false, error: "Active handoff session not found" }, { status: 404 });
-    }
-
-    const res = await backendFetch(`/handoff/${handoff.id}/resolve`, {
+    const res = await backendFetch(`/chat/sessions/${id}/return-to-ai`, {
       method: "POST",
-      body: { return_to_ai: true },
       token
     });
 

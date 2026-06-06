@@ -1,12 +1,21 @@
 import logging
+import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import APIRouter, FastAPI, Request
+from fastapi import APIRouter, Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi import Response, HTTPException
-from services.file_service import resolve_path, _AUDIO_MIME_BY_EXT, _IMAGE_MIME_BY_EXT
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from services.file_service import (
+    resolve_path,
+    owner_id_from_path,
+    verify_media_access_token,
+    _AUDIO_MIME_BY_EXT,
+    _IMAGE_MIME_BY_EXT,
+)
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
@@ -15,8 +24,11 @@ from pythonjsonlogger import jsonlogger
 from asgi_correlation_id import CorrelationIdMiddleware, correlation_id
 
 from config import settings
+from database import get_db
+from models import User
 from routers import admin, auth, automation, billing, bookings, channels, chat, delivery, escalations, handoff, items, offers, policies, style, verification_logs, voice_settings, webhooks, workflows, catalog_import
 from services.business_templates import list_business_types
+from services.auth_service import decode_access_token
 from services.ratelimit import limiter
 import sentry_sdk
 
@@ -24,8 +36,8 @@ if settings.SENTRY_DSN:
     sentry_sdk.init(
         dsn=settings.SENTRY_DSN,
         environment=settings.APP_ENV,
-        traces_sample_rate=1.0,
-        profiles_sample_rate=1.0,
+        traces_sample_rate=settings.SENTRY_TRACES_SAMPLE_RATE,
+        profiles_sample_rate=settings.SENTRY_PROFILES_SAMPLE_RATE,
     )
 
 logHandler = logging.StreamHandler()
@@ -133,9 +145,51 @@ async def business_types():
 app.include_router(api_router)
 
 
+async def _upload_access_allowed(
+    request: Request,
+    path: str,
+    db: AsyncSession,
+) -> bool:
+    media_token = request.query_params.get("media_token")
+    if verify_media_access_token(media_token, path):
+        return True
+
+    token = request.query_params.get("access_token")
+    auth_header = request.headers.get("authorization", "")
+    if auth_header.lower().startswith("bearer "):
+        token = auth_header.split(" ", 1)[1].strip()
+    if not token:
+        return False
+
+    payload = decode_access_token(token)
+    if not payload:
+        return False
+    try:
+        user_id = payload.get("sub")
+        user_uuid = owner_id_from_path(path)
+        current_user_id = uuid.UUID(user_id) if user_id else None
+    except (TypeError, ValueError):
+        return False
+
+    result = await db.execute(select(User).where(User.id == current_user_id))
+    user = result.scalar_one_or_none()
+    if user is None or not user.is_active:
+        return False
+    if payload.get("v") != user.token_version:
+        return False
+    if user.role in ("admin", "support_agent"):
+        return True
+    return user_uuid is not None and user_uuid == user.id
+
 
 @app.get("/api/uploads/{path:path}")
-async def serve_upload(path: str):
+async def serve_upload(
+    path: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    if not await _upload_access_allowed(request, path, db):
+        raise HTTPException(status_code=403, detail="Not authorized")
     try:
         data = resolve_path(path).read_bytes()
         ext = Path(path).suffix.lower()

@@ -1,14 +1,14 @@
 "use client";
 
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { Bot, Facebook, Instagram, MessageCircle, Pencil, RefreshCw, Send, StickyNote, UserCheck, XCircle, Webhook, Code, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { StatusBadge } from "@/components/status-badge";
 import type { ChannelProvider, Conversation, ConversationStatus, Message } from "@/lib/types";
 import { cn, formatTime } from "@/lib/utils";
 import { useAuthStore } from "@/store/use-auth-store";
 import { Textarea } from "@/components/ui/textarea";
+import { toast } from "react-hot-toast";
 
 const channelLabels: Record<string, string> = {
   WHATSAPP: "واتساب",
@@ -72,14 +72,13 @@ export function ChatWindow({
   const [status, setStatus] = useState<ConversationStatus>(conversation.status);
   const [messages, setMessages] = useState<Message[]>(conversation.messages);
   const [version, setVersion] = useState(0);
-  const [note, setNote] = useState(() => {
-    if (typeof window !== "undefined") {
-      return localStorage.getItem(`masarjo_note_${conversation.id}`) || "";
-    }
-    return "";
-  });
+  const [note, setNote] = useState("");
   const [isEditingNote, setIsEditingNote] = useState(false);
   const [noteDraft, setNoteDraft] = useState(note);
+  const [sending, setSending] = useState(false);
+  const [statusUpdating, setStatusUpdating] = useState(false);
+  const [savingNote, setSavingNote] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   // Sync props to state
   useEffect(() => {
@@ -91,11 +90,39 @@ export function ChatWindow({
   }, [conversation.status]);
 
   useEffect(() => {
-    const savedNote = localStorage.getItem(`masarjo_note_${conversation.id}`) || "";
-    setNote(savedNote);
-    setNoteDraft(savedNote);
+    messagesEndRef.current?.scrollIntoView({ block: "end" });
+  }, [messages, conversation.id]);
+
+  useEffect(() => {
+    let cancelled = false;
     setIsEditingNote(false);
-  }, [conversation.id]);
+    setNote("");
+    setNoteDraft("");
+    if (!token) return;
+
+    fetch(`/api/conversations/${conversation.id}/notes`, {
+      headers: {
+        Authorization: "Bearer " + token,
+      },
+    })
+      .then(async (res) => {
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || data.ok === false) {
+          throw new Error(data.error || "تعذر تحميل الملاحظات");
+        }
+        if (!cancelled) {
+          setNote(data.note || "");
+          setNoteDraft(data.note || "");
+        }
+      })
+      .catch((e) => {
+        console.error(e);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [conversation.id, token]);
 
   const suggestedReply = useMemo(() => {
     if (conversation.aiSuggestedReply) {
@@ -113,53 +140,128 @@ export function ChatWindow({
   }, [conversation.aiSuggestedReply, status, version]);
 
   async function addMessage(sender: Message["sender"], body: string) {
-    if (!body.trim()) return;
-    
-    // Construct new message
-    const tempId = `msg_${Date.now()}`;
-    const newMessage = {
-      id: tempId,
-      conversationId: conversation.id,
-      sender,
-      body,
-      createdAt: new Date().toISOString()
-    };
-
-    setMessages((items) => [...items, newMessage]);
-    onNewMessage?.(conversation.id, newMessage);
+    const clean = body.trim();
+    if (!clean || sending) return false;
 
     if (sender === "HUMAN" || sender === "AI") {
+      setSending(true);
       try {
-        await fetch(`/api/conversations/${conversation.id}/message`, {
+        const res = await fetch(`/api/conversations/${conversation.id}/message`, {
           method: "POST",
-          headers: { 
+          headers: {
             "Content-Type": "application/json",
             ...(token ? { Authorization: "Bearer " + token } : {})
           },
-          body: JSON.stringify({ message: body })
+          body: JSON.stringify({ message: clean })
         });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || data.ok === false) {
+          throw new Error(data.error || "تعذر إرسال الرسالة");
+        }
+
+        const saved = data.result || {};
+        const newMessage = {
+          id: saved.id || `msg_${Date.now()}`,
+          conversationId: conversation.id,
+          sender,
+          body: saved.content || clean,
+          createdAt: saved.created_at || new Date().toISOString()
+        };
+        setMessages((items) => [...items, newMessage]);
+        onNewMessage?.(conversation.id, newMessage);
+        return true;
       } catch (e) {
         console.error(e);
+        toast.error(e instanceof Error ? e.message : "تعذر إرسال الرسالة");
+        return false;
+      } finally {
+        setSending(false);
       }
     }
+
+    const newMessage = {
+      id: `msg_${Date.now()}`,
+      conversationId: conversation.id,
+      sender,
+      body: clean,
+      createdAt: new Date().toISOString()
+    };
+    setMessages((items) => [...items, newMessage]);
+    onNewMessage?.(conversation.id, newMessage);
+    return true;
   }
 
   async function updateStatus(newStatus: ConversationStatus, action: "takeover" | "return-to-ai" | "close") {
+    if (statusUpdating) return false;
+    const previousStatus = status;
+    setStatusUpdating(true);
     setStatus(newStatus);
     onStatusChange?.(conversation.id, newStatus);
     try {
-      await fetch(`/api/conversations/${conversation.id}/${action}`, {
+      const res = await fetch(`/api/conversations/${conversation.id}/${action}`, {
         method: "POST",
         headers: {
           ...(token ? { Authorization: "Bearer " + token } : {})
         }
       });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.ok === false) {
+        throw new Error(data.error || "تعذر تحديث حالة المحادثة");
+      }
+      return true;
     } catch (e) {
       console.error(e);
+      setStatus(previousStatus);
+      onStatusChange?.(conversation.id, previousStatus);
+      toast.error(e instanceof Error ? e.message : "تعذر تحديث حالة المحادثة");
+      return false;
+    } finally {
+      setStatusUpdating(false);
     }
   }
 
   const isAiHandling = status === "AI_HANDLING";
+  const isClosed = status === "CLOSED";
+  const isReplyLocked = isAiHandling || isClosed;
+
+  async function sendDraft() {
+    if (isReplyLocked || sending || statusUpdating || !draft.trim()) return;
+    const currentDraft = draft;
+    const claimed = await updateStatus("HUMAN_ACTIVE", "takeover");
+    if (!claimed) return;
+    const sent = await addMessage("HUMAN", currentDraft);
+    if (sent) {
+      setDraft("");
+    }
+  }
+
+  async function saveNote() {
+    if (!token || savingNote) return;
+    setSavingNote(true);
+    try {
+      const res = await fetch(`/api/conversations/${conversation.id}/notes`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer " + token,
+        },
+        body: JSON.stringify({ note: noteDraft }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.ok === false) {
+        throw new Error(data.error || "تعذر حفظ الملاحظة");
+      }
+      setNote(data.note || "");
+      setNoteDraft(data.note || "");
+      setIsEditingNote(false);
+      toast.success("تم حفظ الملاحظة");
+    } catch (e) {
+      console.error(e);
+      toast.error(e instanceof Error ? e.message : "تعذر حفظ الملاحظة");
+    } finally {
+      setSavingNote(false);
+    }
+  }
 
   return (
     <div className="grid h-full min-h-[680px] xl:min-h-0 gap-4 lg:grid-cols-[1fr_280px]">
@@ -177,7 +279,8 @@ export function ChatWindow({
             <Button
               size="sm"
               variant={status === "HUMAN_ACTIVE" ? "secondary" : "ghost"}
-              onClick={() => updateStatus("HUMAN_ACTIVE", "takeover")}
+              disabled={statusUpdating}
+              onClick={() => void updateStatus("HUMAN_ACTIVE", "takeover")}
             >
               <UserCheck className="h-4 w-4" />
               استلام
@@ -185,14 +288,16 @@ export function ChatWindow({
             <Button
               size="sm"
               variant={status === "AI_HANDLING" ? "secondary" : "ghost"}
-              onClick={() => updateStatus("AI_HANDLING", "return-to-ai")}
+              disabled={statusUpdating}
+              onClick={() => void updateStatus("AI_HANDLING", "return-to-ai")}
             >
               إرجاع للذكاء
             </Button>
             <Button
               size="sm"
               variant={status === "CLOSED" ? "secondary" : "ghost"}
-              onClick={() => updateStatus("CLOSED", "close")}
+              disabled={statusUpdating}
+              onClick={() => void updateStatus("CLOSED", "close")}
             >
               إغلاق
             </Button>
@@ -203,17 +308,18 @@ export function ChatWindow({
           {messages.map((message) => (
             <MessageBubble key={message.id} message={message} />
           ))}
+          <div ref={messagesEndRef} />
         </div>
 
         <div className="border-t border-white/10 p-4">
-          <div className={cn("mb-3 rounded-3xl border p-4 transition-opacity", isAiHandling ? "opacity-50 pointer-events-none border-white/10 bg-white/5" : "border-emeraldx-400/20 bg-emeraldx-500/10")}>
+          <div className={cn("mb-3 rounded-3xl border p-4 transition-opacity", isReplyLocked ? "opacity-50 pointer-events-none border-white/10 bg-white/5" : "border-emeraldx-400/20 bg-emeraldx-500/10")}>
             <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-2 text-sm font-semibold text-emeraldx-400">
                 <Bot className="h-4 w-4" />
                 رد مقترح
               </div>
               <div className="flex gap-2">
-                <Button size="sm" onClick={() => addMessage("AI", suggestedReply)}>إرسال</Button>
+                <Button size="sm" disabled={sending || statusUpdating} onClick={() => void addMessage("AI", suggestedReply)}>إرسال</Button>
                 <Button size="sm" variant="secondary" onClick={() => setDraft(suggestedReply)}>
                   <Pencil className="h-3.5 w-3.5" />
                   تعديل
@@ -228,19 +334,22 @@ export function ChatWindow({
             <p className="text-sm leading-6 text-white/68">{suggestedReply}</p>
           </div>
           <div className="flex gap-2">
-            <Input 
+            <Textarea
               value={draft} 
               onChange={(event) => setDraft(event.target.value)} 
-              placeholder={isAiHandling ? "لا يمكن الرد بينما الذكاء الاصطناعي مفعل..." : "اكتب رد الموظف..."} 
-              disabled={isAiHandling}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && !event.shiftKey) {
+                  event.preventDefault();
+                  void sendDraft();
+                }
+              }}
+              placeholder={isClosed ? "المحادثة مغلقة..." : isAiHandling ? "لا يمكن الرد بينما الذكاء الاصطناعي مفعل..." : "اكتب رد الموظف..."}
+              disabled={isReplyLocked || sending || statusUpdating}
+              className="min-h-11 max-h-32 flex-1 resize-none py-2.5"
             />
             <Button
-              disabled={isAiHandling || !draft.trim()}
-              onClick={() => {
-                addMessage("HUMAN", draft);
-                setDraft("");
-                setStatus("HUMAN_ACTIVE");
-              }}
+              disabled={isReplyLocked || !draft.trim() || sending || statusUpdating}
+              onClick={() => void sendDraft()}
             >
               <Send className="h-4 w-4" />
               إرسال
@@ -299,11 +408,8 @@ export function ChatWindow({
                 <Button
                   size="sm"
                   className="flex-1 bg-emeraldx-500 text-ink-950 hover:bg-emeraldx-400 text-xs"
-                  onClick={() => {
-                    localStorage.setItem(`masarjo_note_${conversation.id}`, noteDraft);
-                    setNote(noteDraft);
-                    setIsEditingNote(false);
-                  }}
+                  disabled={savingNote}
+                  onClick={() => void saveNote()}
                 >
                   <Check className="ml-1 h-3 w-3" />
                   حفظ

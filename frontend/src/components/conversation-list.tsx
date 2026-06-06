@@ -11,6 +11,7 @@ const filters: Array<{ label: string; value: "ALL" | ConversationStatus }> = [
   { label: "الكل", value: "ALL" },
   { label: "الذكاء يتابع", value: "AI_HANDLING" },
   { label: "يحتاج موظف", value: "NEEDS_HUMAN" },
+  { label: "مع الموظف", value: "HUMAN_ACTIVE" },
   { label: "مغلق", value: "CLOSED" }
 ];
 

@@ -1,6 +1,6 @@
 import logging
 import uuid
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from models import BusinessWorkflow, StyleSample, User
 
@@ -16,6 +16,7 @@ Your persona: {persona}
 2. If you don't know something, say you don't have that information — never guess.
 3. For non-business topics (politics, general knowledge), politely redirect.
 4. Style examples shape ONLY wording, never facts. Never copy them verbatim.
+5. Detect the customer's latest language and draft the answer in the same language unless the customer explicitly asks otherwise.
 
 ## STRICT FALLBACK RULE (منع الهلوسة):
 - إذا استدعيت أداة ولم تجد نتيجة مطابقة، لا تقم باختراع منتجات أو أسعار أو إجابات من عندك أبداً.
@@ -32,6 +33,7 @@ Your persona: {persona}
 - Do NOT repeat greetings if the conversation is ongoing.
 - NEVER end messages with "كيف يمكنني مساعدتك؟".
 - Keep numbers, prices, currency codes, English words, emails and URLs EXACTLY as returned (left-to-right, unchanged).
+- If the latest customer message is in English, draft in English. If it is Arabic, draft in Arabic.
 
 - For payment info, use this detail:
 {payment_info}
@@ -64,6 +66,7 @@ If the customer asks a broad catalog question such as "شو بتبيعوا؟",
 ## SUPPORT & POLICIES RULES:
 - **get_delivery_info**: Call this when the customer asks about delivery, shipping, fees, areas, or pickup.
 - **get_policies**: Call this when the customer asks about return policy, exchange, refund, warranties, or payment terms.
+- **get_business_info**: Call this when the customer asks about working hours, location, address, branches, contact details, or general FAQ/business information.
 - **escalate_to_human**: Call this when:
   • The customer is angry, frustrated, or using aggressive language
   • The customer wants to return, exchange, or cancel an order
@@ -234,7 +237,7 @@ async def get_style_samples(
     stmt = (
         select(StyleSample.sample)
         .where(StyleSample.user_id == user_id)
-        .order_by(func.random())
+        .order_by(StyleSample.created_at.desc(), StyleSample.id.desc())
         .limit(limit)
     )
     return [s for s in (await db.execute(stmt)).scalars().all() if s]

@@ -11,10 +11,10 @@ import logging
 from abc import ABC, abstractmethod
 from typing import Optional
 
-import httpx
 from openai import AsyncOpenAI
 
 logger = logging.getLogger("voice.stt")
+OPENAI_TIMEOUT_SECONDS = 30.0
 
 
 class STTProvider(ABC):
@@ -49,39 +49,16 @@ class STTProvider(ABC):
 
     async def _download(self, url: str) -> bytes:
         """Download from URL with SSRF protection."""
-        import socket
-        import ipaddress
-        from urllib.parse import urlparse
+        from services.ai_media import _download_bytes
 
-        parsed = urlparse(url)
-        if parsed.hostname:
-            try:
-                ip = socket.gethostbyname(parsed.hostname)
-                ip_obj = ipaddress.ip_address(ip)
-                if (
-                    ip_obj.is_private
-                    or ip_obj.is_loopback
-                    or ip_obj.is_link_local
-                    or ip_obj.is_multicast
-                ):
-                    raise ValueError(
-                        f"SSRF Protection: Blocked download from private IP {ip}"
-                    )
-            except (socket.gaierror, ValueError) as e:
-                logger.warning("SSRF check failed for %s: %s", url, e)
-                raise
-
-        async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
-            resp = await client.get(url)
-            resp.raise_for_status()
-            return resp.content
+        return await _download_bytes(url)
 
 
 class OpenAISTT(STTProvider):
     """OpenAI Whisper speech-to-text."""
 
     def __init__(self, api_key: str):
-        self._client = AsyncOpenAI(api_key=api_key)
+        self._client = AsyncOpenAI(api_key=api_key, timeout=OPENAI_TIMEOUT_SECONDS)
 
     @property
     def provider_name(self) -> str:

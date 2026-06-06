@@ -132,6 +132,18 @@ TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "get_business_info",
+            "description": (
+                "Get general business information and FAQ-like knowledge such as "
+                "location, working hours, contact details, branches, and other "
+                "general/custom policies configured by the business."
+            ),
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "get_available_slots",
             "description": (
                 "Get available booking/appointment slots. "
@@ -187,19 +199,24 @@ TOOLS = [
     },
 ]
 
-def get_tools_for_intent(intent: str) -> list[dict]:
+_INTENT_TOOL_NAMES = {
+    "sales": {"get_catalog", "get_offers", "get_packages", "get_payment_methods"},
+    "support": {"get_delivery_info", "get_policies", "get_business_info"},
+    "booking": {"get_available_slots", "create_booking"},
+    "general": set(),
+}
+
+
+def get_tools_for_intents(intents: list[str] | tuple[str, ...] | set[str]) -> list[dict]:
     base = [t for t in TOOLS if t["function"]["name"] == "escalate_to_human"]
-    
-    if intent == "sales":
-        allowed = {"get_catalog", "get_offers", "get_packages", "get_payment_methods"}
-    elif intent == "support":
-        allowed = {"get_delivery_info", "get_policies"}
-    elif intent == "booking":
-        allowed = {"get_available_slots", "create_booking"}
-    else: # general
-        allowed = set()
-        
+    allowed: set[str] = set()
+    for intent in intents:
+        allowed.update(_INTENT_TOOL_NAMES.get(intent, set()))
     return base + [t for t in TOOLS if t["function"]["name"] in allowed]
+
+
+def get_tools_for_intent(intent: str) -> list[dict]:
+    return get_tools_for_intents([intent])
 
 
 # ─── DB tools ────────────────────────────────────────────────────────────────
@@ -420,6 +437,7 @@ async def execute_db_function(
         "get_offers": lambda: _exec_get_offers(user_id, db),
         "get_packages": lambda: _exec_get_packages(user_id, db),
         "get_policies": lambda: _exec_get_policies(user_id, db),
+        "get_business_info": lambda: _exec_get_business_info(user_id, db),
         "get_available_slots": lambda: _exec_get_available_slots(func_args, user_id, db),
         "create_booking": lambda: _exec_create_booking(func_args, user_id, session_id, db),
         "get_payment_methods": lambda: _exec_get_payment_methods(user_id, db),
@@ -666,6 +684,40 @@ async def _exec_get_policies(user_id: uuid.UUID, db: AsyncSession) -> dict:
     if not policies:
         return {"policies": [], "note": "No policies configured"}
     return {"policies": policies}
+
+
+async def _exec_get_business_info(user_id: uuid.UUID, db: AsyncSession) -> dict:
+    user = await db.get(User, user_id)
+    result = await db.execute(
+        select(BusinessPolicy)
+        .where(
+            BusinessPolicy.user_id == user_id,
+            BusinessPolicy.is_active.is_(True),
+            BusinessPolicy.policy_type.in_(("general", "custom")),
+        )
+        .order_by(BusinessPolicy.created_at.desc())
+    )
+    policies = list(result.scalars().all())
+    return {
+        "business_info": {
+            "business_name": user.business_name if user else None,
+            "business_type": user.business_type if user else None,
+            "payment_methods_configured": bool(user and user.payment_methods),
+            "general_policies": [
+                {
+                    "type": p.policy_type,
+                    "title": p.title,
+                    "content": p.content,
+                }
+                for p in policies
+            ],
+        },
+        "note": (
+            "No general business info policies configured"
+            if not policies
+            else ""
+        ),
+    }
 
 
 async def _exec_get_available_slots(

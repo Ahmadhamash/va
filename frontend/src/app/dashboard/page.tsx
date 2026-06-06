@@ -16,7 +16,6 @@ import {
   Code
 } from "lucide-react";
 import Link from "next/link";
-import { useState, useEffect } from "react";
 import { AppShell } from "@/components/app-shell";
 import { ChannelConnectionCard } from "@/components/channel-connection-card";
 import { GradientCard } from "@/components/gradient-card";
@@ -33,7 +32,6 @@ import { toast } from "react-hot-toast";
 
 export default function DashboardPage() {
   const queryClient = useQueryClient();
-  const [aiPaused, setAiPaused] = useState(false);
   const { token } = useAuthStore();
 
   const { data: conversations = [], isLoading: loadingConversations } = useQuery({
@@ -73,6 +71,30 @@ export default function DashboardPage() {
     enabled: !!token,
   });
 
+  const { data: autoReply = { enabled: true }, isLoading: loadingAutoReply } = useQuery({
+    queryKey: ["autoReply"],
+    queryFn: async () => {
+      const res = await apiClient.get("/chat/auto-reply");
+      return { enabled: res.data.enabled !== false };
+    },
+    enabled: !!token,
+  });
+
+  const aiPaused = autoReply.enabled === false;
+
+  const toggleAutoReplyMutation = useMutation({
+    mutationFn: async (enabled: boolean) => {
+      return apiClient.put("/chat/auto-reply", { enabled });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["autoReply"] });
+      toast.success(aiPaused ? "تم تشغيل الرد الآلي." : "تم إيقاف الرد الآلي.");
+    },
+    onError: () => {
+      toast.error("تعذر تحديث حالة الرد الآلي.");
+    },
+  });
+
   const deleteChannelMutation = useMutation({
     mutationFn: async (channelId: string) => {
       return apiClient.delete(`/integrations/connect/${channelId}`);
@@ -94,7 +116,7 @@ export default function DashboardPage() {
   const activeChannelsCount = channels.filter((c: any) => c.status === "CONNECTED").length;
   const pendingHandoffs = conversations.filter((c: any) => c.status === "NEEDS_HUMAN").length;
   const activeHandoffs = conversations.filter((c: any) => c.status === "HUMAN_ACTIVE").length;
-  const loading = loadingConversations || loadingChannels;
+  const loading = loadingConversations || loadingChannels || loadingAutoReply;
 
   return (
     <AppShell title="الرئيسية" subtitle="مركز تحكم بسيط لكل قنوات خدمة العملاء الذكية.">
@@ -184,7 +206,12 @@ export default function DashboardPage() {
             <GradientCard>
               <h2 className="text-xl font-semibold text-white">إجراءات سريعة</h2>
               <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                <Button variant="secondary" className="w-full justify-start" onClick={() => setAiPaused((value) => !value)}>
+                <Button
+                  variant="secondary"
+                  className="w-full justify-start"
+                  disabled={toggleAutoReplyMutation.isPending}
+                  onClick={() => toggleAutoReplyMutation.mutate(aiPaused)}
+                >
                   <PauseCircle className="h-4 w-4" />
                   {aiPaused ? "تشغيل الذكاء" : "إيقاف الذكاء"}
                 </Button>

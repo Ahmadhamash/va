@@ -10,6 +10,7 @@ import uuid
 
 logger = logging.getLogger("ai_media")
 TRANSCRIBE_MODEL = "whisper-1"
+OPENAI_TIMEOUT_SECONDS = 30.0
 
 # We need the shared AsyncOpenAI client getter, maybe just define a private one here or move it.
 # Actually, let's keep it here or import it from ai_chat. But ai_chat imports ai_media.
@@ -21,7 +22,7 @@ def _client_for(api_key: str) -> AsyncOpenAI:
         raise RuntimeError("OPENAI_API_KEY is not configured")
     client = _clients.get(api_key)
     if client is None:
-        client = AsyncOpenAI(api_key=api_key)
+        client = AsyncOpenAI(api_key=api_key, timeout=OPENAI_TIMEOUT_SECONDS)
         _clients[api_key] = client
     return client
 

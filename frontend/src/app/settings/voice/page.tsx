@@ -7,6 +7,7 @@ import { GradientCard } from "@/components/gradient-card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { apiClient } from "@/lib/api-client";
+import { useAuthStore } from "@/store/use-auth-store";
 
 type Voice = {
   value: string;
@@ -25,14 +26,16 @@ const voiceModes = [
   { id: "always_voice", label: "صوت دائماً", hint: "كل رد يكون بصوت أيضاً" },
 ];
 
-function normalizeAudioUrl(url?: string) {
+function normalizeAudioUrl(url?: string, token?: string | null) {
   if (!url) return "";
-  if (url.startsWith("/uploads/")) return `/api${url}`;
-  if (!url.startsWith("http") && !url.startsWith("/")) return `/api/uploads/${url}`;
+  const suffix = token ? `?access_token=${encodeURIComponent(token)}` : "";
+  if (url.startsWith("/uploads/")) return `/api${url}${suffix}`;
+  if (!url.startsWith("http") && !url.startsWith("/")) return `/api/uploads/${url}${suffix}`;
   return url;
 }
 
 export default function VoiceSettingsPage() {
+  const token = useAuthStore((state) => state.token);
   const [settings, setSettings] = useState<any>({
     voice_mode: "off",
     preferred_voice: "alloy",
@@ -115,7 +118,7 @@ export default function VoiceSettingsPage() {
         text: voice?.sample_text || settings.voice_personality,
       });
       if (!res.data.success) throw new Error(res.data.error || "تعذر توليد المعاينة.");
-      setAudioUrl(normalizeAudioUrl(res.data.audio_url));
+      setAudioUrl(normalizeAudioUrl(res.data.audio_url, token));
     } catch (error: any) {
       let msg = error.message || "تعذر تشغيل المعاينة.";
       const detail = error?.response?.data?.detail;

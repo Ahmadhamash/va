@@ -45,6 +45,9 @@ class User(Base):
 
     # Phase 2: Reliability & Usage Tracking
     ai_credit_balance: Mapped[int] = mapped_column(Integer, default=1000, server_default="1000")
+    ai_auto_reply_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default="true"
+    )
     email_verified: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     
     # Phase 1 Remediation: Password Reset token invalidation

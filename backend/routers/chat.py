@@ -10,8 +10,9 @@ from fastapi import (
     UploadFile,
     status,
 )
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import delete, func, select
 from sse_starlette.sse import EventSourceResponse
 import json
 
@@ -28,6 +29,19 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 _AUDIO_FALLBACK = "Couldn't process audio, please type your message"
 
 
+class PreviewRequest(BaseModel):
+    message: str
+    persona: str
+
+
+class SessionNotesUpdate(BaseModel):
+    note: str = ""
+
+
+class AutoReplyUpdate(BaseModel):
+    enabled: bool
+
+
 async def _get_owned_session(
     session_id: uuid.UUID, user: User, db: AsyncSession
 ) -> ChatSession:
@@ -42,6 +56,51 @@ async def _get_owned_session(
             status_code=status.HTTP_404_NOT_FOUND, detail="Session not found"
         )
     return session
+
+
+async def _get_session_for_actor(
+    session_id: uuid.UUID, user: User, db: AsyncSession
+) -> ChatSession:
+    session = await db.get(ChatSession, session_id)
+    if session is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Session not found"
+        )
+    if user.role == "client" and session.user_id != user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized"
+        )
+    if user.role not in ("client", "admin", "support_agent"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized"
+        )
+    return session
+
+
+async def _set_session_status(
+    session: ChatSession,
+    db: AsyncSession,
+    *,
+    raw_status: str,
+) -> dict:
+    metadata = dict(session.metadata_ or {})
+    if raw_status == "assigned":
+        session.is_escalated = True
+        metadata["status"] = "human_active"
+    elif raw_status == "returned_to_ai":
+        session.is_escalated = False
+        metadata["status"] = "ai_handling"
+    elif raw_status == "resolved":
+        session.is_escalated = True
+        metadata["status"] = "closed"
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid status"
+        )
+    session.metadata_ = metadata
+    await db.commit()
+    await db.refresh(session)
+    return {"session_id": str(session.id), "raw_status": raw_status}
 
 
 @router.post("/send", response_model=ChatSendResponse)
@@ -99,11 +158,6 @@ async def send_message(
         reply=result["reply"],
         transcription=result.get("transcription"),
     )
-
-from pydantic import BaseModel
-class PreviewRequest(BaseModel):
-    message: str
-    persona: str
 
 @router.post("/preview")
 async def preview_message(
@@ -190,6 +244,24 @@ async def list_sessions(
     return list(result.scalars().all())
 
 
+@router.get("/auto-reply")
+async def get_auto_reply_status(
+    current_user: User = Depends(get_current_user),
+):
+    return {"enabled": getattr(current_user, "ai_auto_reply_enabled", True)}
+
+
+@router.put("/auto-reply")
+async def update_auto_reply_status(
+    payload: AutoReplyUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    current_user.ai_auto_reply_enabled = payload.enabled
+    await db.commit()
+    return {"enabled": current_user.ai_auto_reply_enabled}
+
+
 @router.get("/inbox-conversations")
 async def inbox_conversations(
     skip: int = Query(0, ge=0),
@@ -205,25 +277,77 @@ async def inbox_conversations(
         .offset(skip).limit(limit)
     )
     sessions = result.scalars().all()
+    session_ids = [s.id for s in sessions]
+
+    last_messages = {}
+    last_handoffs = {}
+    if session_ids:
+        msg_rank = (
+            select(
+                Message.session_id,
+                Message.content,
+                Message.created_at,
+                func.row_number()
+                .over(
+                    partition_by=Message.session_id,
+                    order_by=Message.created_at.desc(),
+                )
+                .label("rn"),
+            )
+            .where(
+                Message.session_id.in_(session_ids),
+                Message.content.isnot(None),
+            )
+            .subquery()
+        )
+        msg_rows = await db.execute(
+            select(msg_rank.c.session_id, msg_rank.c.content, msg_rank.c.created_at)
+            .where(msg_rank.c.rn == 1)
+        )
+        last_messages = {row.session_id: row for row in msg_rows}
+
+        handoff_rank = (
+            select(
+                HandoffSession.session_id,
+                HandoffSession.status,
+                HandoffSession.ai_suggested_reply,
+                func.row_number()
+                .over(
+                    partition_by=HandoffSession.session_id,
+                    order_by=HandoffSession.created_at.desc(),
+                )
+                .label("rn"),
+            )
+            .where(HandoffSession.session_id.in_(session_ids))
+            .subquery()
+        )
+        handoff_rows = await db.execute(
+            select(
+                handoff_rank.c.session_id,
+                handoff_rank.c.status,
+                handoff_rank.c.ai_suggested_reply,
+            ).where(handoff_rank.c.rn == 1)
+        )
+        last_handoffs = {row.session_id: row for row in handoff_rows}
     
     out = []
     for s in sessions:
-        msg_result = await db.execute(
-            select(Message).where(Message.session_id == s.id, Message.content.isnot(None)).order_by(Message.created_at.desc()).limit(1)
-        )
-        msg = msg_result.scalar_one_or_none()
-        
-        handoff_result = await db.execute(
-            select(HandoffSession).where(HandoffSession.session_id == s.id).order_by(HandoffSession.created_at.desc()).limit(1)
-        )
-        handoff = handoff_result.scalar_one_or_none()
+        msg = last_messages.get(s.id)
+        handoff = last_handoffs.get(s.id)
+        metadata_status = (s.metadata_ or {}).get("status")
+        if metadata_status == "closed":
+            raw_status = "resolved"
+        elif s.is_escalated:
+            raw_status = "assigned"
+        else:
+            raw_status = handoff.status if handoff else "returned_to_ai"
         
         out.append({
             "id": str(s.id),
             "customerName": s.title or "عميل",
             "customerPhone": s.external_user_id or "",
             "channel": s.channel.upper(),
-            "raw_status": handoff.status if handoff else "returned_to_ai",
+            "raw_status": raw_status,
             "lastMessage": msg.content if msg else "",
             "lastMessageAt": msg.created_at.isoformat() if msg else s.created_at.isoformat(),
             "aiSuggestedReply": handoff.ai_suggested_reply if handoff else None,
@@ -250,6 +374,61 @@ async def session_messages(
     return list(result.scalars().all())
 
 
+@router.get("/sessions/{session_id}/notes")
+async def session_notes(
+    session_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    session = await _get_session_for_actor(session_id, current_user, db)
+    return {"note": (session.metadata_ or {}).get("note", "")}
+
+
+@router.put("/sessions/{session_id}/notes")
+async def update_session_notes(
+    session_id: uuid.UUID,
+    payload: SessionNotesUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    session = await _get_session_for_actor(session_id, current_user, db)
+    metadata = dict(session.metadata_ or {})
+    metadata["note"] = (payload.note or "").strip()[:5000]
+    session.metadata_ = metadata
+    await db.commit()
+    return {"note": metadata["note"]}
+
+
+@router.post("/sessions/{session_id}/takeover")
+async def takeover_session(
+    session_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    session = await _get_session_for_actor(session_id, current_user, db)
+    return await _set_session_status(session, db, raw_status="assigned")
+
+
+@router.post("/sessions/{session_id}/return-to-ai")
+async def return_session_to_ai(
+    session_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    session = await _get_session_for_actor(session_id, current_user, db)
+    return await _set_session_status(session, db, raw_status="returned_to_ai")
+
+
+@router.post("/sessions/{session_id}/close")
+async def close_session(
+    session_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    session = await _get_session_for_actor(session_id, current_user, db)
+    return await _set_session_status(session, db, raw_status="resolved")
+
+
 @router.post("/sessions/{session_id}/agent-message", response_model=MessageOut)
 async def agent_send_message(
     session_id: uuid.UUID,
@@ -267,15 +446,14 @@ async def agent_send_message(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized"
         )
-        
-    msg = await save_message(
-        session_id=session.id,
-        role="agent",
-        content=message,
-        media_type="text",
-        media_url=None,
-        db=db,
-    )
+    message = (message or "").strip()
+    if not message:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Message is required",
+        )
+    if not session.is_escalated or (session.metadata_ or {}).get("status") != "human_active":
+        await _set_session_status(session, db, raw_status="assigned")
 
     # Dispatch to the external channel
     if session.channel in ("messenger", "instagram", "whatsapp") and session.external_user_id:
@@ -289,18 +467,58 @@ async def agent_send_message(
             )
         )
         integration = res.scalar_one_or_none()
-        if integration:
-            adapter = get_adapter(session.channel)
-            credentials = integration.credentials or {}
-            # In a real system, you'd want to handle delivery failures/retries,
-            # but for synchronous UI calls, fire-and-forget or await is fine.
-            try:
-                await adapter.send_text_message(session.external_user_id, message, credentials)
-            except Exception as e:
-                import logging
-                logging.getLogger("agent-send").exception(f"Failed to send message to {session.channel}: {e}")
+        if not integration:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"No active {session.channel} integration",
+            )
+        adapter = get_adapter(session.channel)
+        credentials = integration.credentials or {}
+        try:
+            delivery = await adapter.send_text_message(
+                session.external_user_id,
+                message,
+                credentials,
+            )
+        except Exception as e:
+            import logging
+
+            logging.getLogger("agent-send").exception(
+                "Failed to send message to %s", session.channel,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"Failed to send message to {session.channel}",
+            ) from e
+        if not delivery.success:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=delivery.error_message or f"Failed to send message to {session.channel}",
+            )
+
+    msg = await save_message(
+        session_id=session.id,
+        role="agent",
+        content=message,
+        media_type="text",
+        media_url=None,
+        db=db,
+    )
 
     return msg
+
+
+@router.delete("/sessions")
+async def delete_all_sessions(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        delete(ChatSession).where(ChatSession.user_id == current_user.id)
+    )
+    await db.commit()
+    return {"deleted": result.rowcount or 0}
+
 
 @router.delete("/sessions/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_session(

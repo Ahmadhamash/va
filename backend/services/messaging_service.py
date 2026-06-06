@@ -12,6 +12,7 @@ import logging
 import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import IntegrityError
 
 from models import ChannelIntegration, ChatSession, User
 from services.ai_chat import process_message, save_message
@@ -51,12 +52,13 @@ async def get_integration(
 async def _get_or_create_session(
     client: User, channel: str, external_user_id: str, db: AsyncSession
 ) -> ChatSession:
+    stmt = select(ChatSession).where(
+        ChatSession.user_id == client.id,
+        ChatSession.channel == channel,
+        ChatSession.external_user_id == external_user_id,
+    )
     result = await db.execute(
-        select(ChatSession).where(
-            ChatSession.user_id == client.id,
-            ChatSession.channel == channel,
-            ChatSession.external_user_id == external_user_id,
-        )
+        stmt
     )
     session = result.scalar_one_or_none()
     if session is None:
@@ -67,8 +69,13 @@ async def _get_or_create_session(
             title=f"{channel}:{external_user_id}",
         )
         db.add(session)
-        await db.commit()
-        await db.refresh(session)
+        try:
+            await db.commit()
+            await db.refresh(session)
+        except IntegrityError:
+            await db.rollback()
+            result = await db.execute(stmt)
+            session = result.scalar_one()
     return session
 
 
@@ -243,18 +250,13 @@ async def send_meta_message(
     text: str,
     platform: str = "messenger",
     audio_url: str | None = None,
-) -> None:
+) -> bool:
     if not page_access_token:
         logger.warning("No page_access_token; cannot send reply")
-        return
+        return False
 
     payloads = []
 
-    # Send text only if no audio, or maybe we send both?
-    # Let's send text first, then audio if present, because users usually want both.
-    # But wait, the user asked "why does it send text with it" -> let's send ONLY audio if audio_url is present,
-    # OR we can just send the audio attachment instead of text. Let's stick to sending both since text is useful,
-    # but I'll let them know it's a feature. Actually, I'll send only audio if they want.
     if audio_url:
         payloads.append(
             {
@@ -282,13 +284,16 @@ async def send_meta_message(
             for payload in payloads:
                 resp = await http.post(
                     f"{GRAPH_API}/me/messages",
-                    params={"access_token": page_access_token},
+                    headers={"Authorization": f"Bearer {page_access_token}"},
                     json=payload,
                 )
                 if resp.status_code >= 400:
                     logger.error(
                         "Meta send failed (%s): %s", resp.status_code, resp.text
                     )
+                    return False
+        return True
 
     except Exception:  # noqa: BLE001
         logger.exception("Meta send error")
+        return False

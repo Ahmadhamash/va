@@ -44,9 +44,13 @@ const emptyForm = {
   notes: "",
 };
 
-function imageSrc(url?: string) {
+function imageSrc(url?: string, token?: string | null) {
   if (!url) return "";
-  if (url.startsWith("/uploads/")) return `/api${url}`;
+  const suffix = token ? `?access_token=${encodeURIComponent(token)}` : "";
+  if (url.startsWith("/uploads/")) return `/api${url}${suffix}`;
+  if (!url.startsWith("http") && !url.startsWith("/")) {
+    return `/api/uploads/${url}${suffix}`;
+  }
   return url;
 }
 
@@ -492,7 +496,7 @@ export default function KnowledgeBasePage() {
                         <div className="h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-white/5">
                           {product.image_url ? (
                             // eslint-disable-next-line @next/next/no-img-element
-                            <img src={imageSrc(product.image_url)} alt="" className="h-full w-full object-cover transition duration-300 group-hover:scale-110" />
+                            <img src={imageSrc(product.image_url, token)} alt="" className="h-full w-full object-cover transition duration-300 group-hover:scale-110" />
                           ) : (
                             <div className="grid h-full w-full place-items-center text-white/20"><Package className="h-6 w-6" /></div>
                           )}
@@ -559,7 +563,7 @@ export default function KnowledgeBasePage() {
                       <div className="flex items-center gap-4">
                         {candidate.image_url ? (
                           // eslint-disable-next-line @next/next/no-img-element
-                          <img src={candidate.image_url} alt="" className="h-16 w-16 shrink-0 rounded-xl object-cover border border-white/10" />
+                          <img src={imageSrc(candidate.image_url, token)} alt="" className="h-16 w-16 shrink-0 rounded-xl object-cover border border-white/10" />
                         ) : (
                           <div className="grid h-16 w-16 shrink-0 place-items-center rounded-xl bg-white/5 text-white/20"><ImagePlus className="h-6 w-6" /></div>
                         )}

@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from services.settings_service import effective_openai_key
 
 logger = logging.getLogger("router")
+ROUTER_TIMEOUT_SECONDS = 15.0
 
 ROUTER_PROMPT = """
 You are a highly efficient message router for an e-commerce / service business chatbot.
@@ -29,7 +30,7 @@ def _client_for(api_key: str) -> AsyncOpenAI:
         raise RuntimeError("OPENAI_API_KEY is not configured")
     client = _clients.get(api_key)
     if client is None:
-        client = AsyncOpenAI(api_key=api_key)
+        client = AsyncOpenAI(api_key=api_key, timeout=ROUTER_TIMEOUT_SECONDS)
         _clients[api_key] = client
     return client
 
@@ -53,8 +54,13 @@ _SUPPORT_TERMS = (
     "\u0633\u064a\u0621", "\u063a\u0627\u0636\u0628", "\u062a\u0627\u062e\u064a\u0631",
     "\u062a\u0623\u062e\u064a\u0631", "\u0636\u0645\u0627\u0646", "\u0633\u064a\u0627\u0633\u0629",
     "\u0633\u064a\u0627\u0633\u0627\u062a", "\u0631\u0633\u0648\u0645 \u0627\u0644\u062a\u0648\u0635\u064a\u0644",
+    "\u0645\u0648\u0642\u0639", "\u0639\u0646\u0648\u0627\u0646", "\u0648\u064a\u0646", "\u0627\u064a\u0646",
+    "\u0633\u0627\u0639\u0627\u062a", "\u0633\u0627\u0639\u0629", "\u0627\u0644\u062f\u0648\u0627\u0645",
+    "\u062a\u0641\u062a\u062d", "\u062a\u0633\u0643\u0631", "\u0641\u0631\u0639", "\u0641\u0631\u0648\u0639",
+    "\u062a\u0648\u0627\u0635\u0644", "\u0631\u0642\u0645\u0643\u0645", "\u0627\u0644\u0647\u0627\u062a\u0641",
     "delivery", "shipping", "refund", "return", "exchange", "cancel",
-    "complaint", "problem", "warranty", "policy",
+    "complaint", "problem", "warranty", "policy", "location", "address",
+    "hours", "opening", "closing", "branch", "contact", "phone",
 )
 
 _SALES_TERMS = (
@@ -103,6 +109,22 @@ def heuristic_intent_for_message(customer_message: str) -> str | None:
     if _contains_any(text, _SALES_TERMS):
         return "sales"
     return None
+
+
+def heuristic_intents_for_message(customer_message: str) -> list[str]:
+    """Return all obvious deterministic intents in a message."""
+    text = _normalise_message(customer_message)
+    if not text:
+        return ["general"]
+
+    intents: list[str] = []
+    if _contains_any(text, _BOOKING_TERMS):
+        intents.append("booking")
+    if _contains_any(text, _SUPPORT_TERMS):
+        intents.append("support")
+    if _contains_any(text, _SALES_TERMS):
+        intents.append("sales")
+    return intents or ["general"]
 
 
 async def get_intent_for_message(customer_message: str, db: AsyncSession) -> str:

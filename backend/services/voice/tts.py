@@ -19,6 +19,7 @@ import httpx
 from openai import AsyncOpenAI
 
 logger = logging.getLogger("voice.tts")
+OPENAI_TIMEOUT_SECONDS = 30.0
 
 
 class TTSProvider(ABC):
@@ -165,7 +166,7 @@ class OpenAITTS(TTSProvider):
     }
 
     def __init__(self, api_key: str):
-        self._client = AsyncOpenAI(api_key=api_key)
+        self._client = AsyncOpenAI(api_key=api_key, timeout=OPENAI_TIMEOUT_SECONDS)
 
     @property
     def provider_name(self) -> str:

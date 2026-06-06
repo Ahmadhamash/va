@@ -31,6 +31,7 @@ from services.channels.base import (
     MessageStatus,
     NormalizedIncomingMessage,
 )
+from services.file_service import signed_upload_url
 
 logger = logging.getLogger("channels.whatsapp")
 
@@ -461,33 +462,9 @@ class WhatsAppAdapter(ChannelAdapter):
                 clean = f"api/{clean}"
             else:
                 clean = f"api/uploads/{clean}"
+        if clean.startswith("api/uploads/"):
+            clean = signed_upload_url(clean)
         return f"https://{domain}/{clean}"
-
-    async def download_media(self, media_id: str, credentials: dict) -> tuple[bytes, str]:
-        """Download media bytes and return (bytes, mime_type)."""
-        token = credentials.get("access_token") or credentials.get(
-            "page_access_token", ""
-        )
-        if not token:
-            raise ValueError("No access token for WhatsApp")
-
-        async with httpx.AsyncClient(timeout=30) as client:
-            # 1. Get media URL
-            resp = await client.get(
-                f"{GRAPH_API}/{media_id}",
-                headers={"Authorization": f"Bearer {token}"},
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            url = data.get("url")
-            mime = data.get("mime_type", "")
-            if not url:
-                raise ValueError(f"Could not retrieve URL for media_id {media_id}")
-
-            # 2. Download bytes
-            resp = await client.get(url, headers={"Authorization": f"Bearer {token}"})
-            resp.raise_for_status()
-            return resp.content, mime
 
     async def _upload_media(
         self,

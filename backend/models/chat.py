@@ -10,9 +10,6 @@ from database import Base
 
 class ChatSession(Base):
     __tablename__ = "chat_sessions"
-    __table_args__ = (
-        Index("idx_chat_session_user_channel", "user_id", "channel"),
-    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -34,9 +31,27 @@ class ChatSession(Base):
     external_user_id: Mapped[str | None] = mapped_column(
         String(255), nullable=True, index=True
     )
+    __table_args__ = (
+        Index("idx_chat_session_user_channel", "user_id", "channel"),
+        Index(
+            "uq_chat_session_external_identity",
+            "user_id",
+            "channel",
+            "external_user_id",
+            unique=True,
+            postgresql_where=external_user_id.isnot(None),
+        ),
+    )
     # True when a human agent is handling this conversation (AI paused)
     is_escalated: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="false"
+    )
+    metadata_: Mapped[dict] = mapped_column(
+        "metadata",
+        JSONB,
+        default=dict,
+        server_default="{}",
+        nullable=False,
     )
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 

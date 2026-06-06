@@ -8,7 +8,7 @@ import httpx
 import jwt
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import RedirectResponse
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import settings
@@ -200,6 +200,19 @@ async def list_channels(
         .offset(skip).limit(limit)
     )
     return [_to_out(c) for c in rows.scalars().all()]
+
+
+@router.delete("")
+async def delete_all_channels(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    _client_only(current_user)
+    result = await db.execute(
+        delete(ChannelIntegration).where(ChannelIntegration.user_id == current_user.id)
+    )
+    await db.commit()
+    return {"deleted": result.rowcount or 0}
 
 
 @router.get("/meta/oauth/start")
