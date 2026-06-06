@@ -17,8 +17,8 @@ SCENARIO_BLUEPRINT = {
     "flow": [
         {
             "id": 1,
-            "module": "facebook-messenger:watchEvents",
-            "version": 1,
+            "module": "facebook-messenger:watchMessages",
+            "version": 2,
             "parameters": {},
             "mapper": {},
             "metadata": {
@@ -177,7 +177,7 @@ SCENARIO_BLUEPRINT = {
         {
             "id": 3,
             "module": "facebook-messenger:sendMessage",
-            "version": 1,
+            "version": 2,
             "parameters": {},
             "mapper": {
                 "recipientId": "{{1.sender.id}}",
@@ -230,14 +230,14 @@ async def create_client_scenario(public_id: str, client_name: str, platform: str
     webhook_url = f"{scheme}://{domain}/api/webhooks/generic/{public_id}"
 
     # Determine module names based on platform
-    trigger_module = "facebook-messenger:watchEvents"
+    trigger_module = "facebook-messenger:watchMessages"
     action_module = "facebook-messenger:sendMessage"
     
     if platform == "instagram":
-        trigger_module = "instagram-business:watchEvents"
+        trigger_module = "instagram-business:watchMessages"
         action_module = "instagram-business:sendMessage"
     elif platform == "whatsapp":
-        trigger_module = "whatsapp-business-cloud:watchEvents"
+        trigger_module = "whatsapp-business-cloud:watchMessages"
         action_module = "whatsapp-business-cloud:sendMessage"
 
     # Prepare blueprint JSON
