@@ -266,6 +266,34 @@ export default function AdminDashboardPage() {
     }
   };
 
+  // Generate Make.com Scenario
+  const handleGenerateMakeScenario = async (clientId: string, platform: "messenger" | "instagram" | "whatsapp") => {
+    if (!token) return;
+    
+    showNotice(`⏳ جاري إنشاء سيناريو Make.com لمنصة ${platform}...`);
+
+    try {
+      const res = await fetch(`/api/admin/clients/${clientId}/make-scenario?platform=${platform}`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+      const data = await res.json();
+      if (res.ok) {
+        showNotice("✅ تم إنشاء السيناريو بنجاح! جاري توجيهك إلى منصة Make...");
+        if (data.scenario_url) {
+          window.open(data.scenario_url, "_blank");
+        }
+      } else {
+        showNotice(`❌ فشل إنشاء السيناريو: ${data.detail || "خطأ غير معروف"}`, "error");
+      }
+    } catch (err) {
+      console.error(err);
+      showNotice("❌ حدث خطأ أثناء الاتصال بالخادم.", "error");
+    }
+  };
+
   // Save Platform Config Settings
   const handleSaveSettings = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -446,6 +474,36 @@ export default function AdminDashboardPage() {
                                 <Key className="h-3.5 w-3.5" />
                                 <span>كلمة المرور</span>
                               </Button>
+                              <div className="flex bg-blue-400/5 rounded-md p-1 gap-1 items-center border border-blue-500/10">
+                                <span className="text-[9px] text-blue-300/50 px-1 font-bold">MAKE:</span>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="text-blue-400 hover:bg-blue-400/10 py-1 h-auto text-[10px] px-2"
+                                  title="ربط ماسنجر"
+                                  onClick={() => handleGenerateMakeScenario(client.id, "messenger")}
+                                >
+                                  Messenger
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="text-pink-400 hover:bg-pink-400/10 py-1 h-auto text-[10px] px-2"
+                                  title="ربط انستغرام"
+                                  onClick={() => handleGenerateMakeScenario(client.id, "instagram")}
+                                >
+                                  Instagram
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="text-emerald-400 hover:bg-emerald-400/10 py-1 h-auto text-[10px] px-2"
+                                  title="ربط واتساب"
+                                  onClick={() => handleGenerateMakeScenario(client.id, "whatsapp")}
+                                >
+                                  WhatsApp
+                                </Button>
+                              </div>
                               <Button 
                                 size="sm" 
                                 variant={client.is_active ? "danger" : "secondary"}

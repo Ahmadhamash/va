@@ -69,6 +69,10 @@ class Settings(BaseSettings):
     # WhatsApp Cloud API (disabled until credentials are added)
     WHATSAPP_VERIFY_TOKEN: str = ""
 
+    # Make.com API
+    MAKE_API_TOKEN: str = ""
+    MAKE_TEAM_ID: str = ""
+    MAKE_CONNECTION_ID: str = ""
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
     def _parse_cors(cls, v):

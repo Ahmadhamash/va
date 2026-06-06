@@ -381,3 +381,49 @@ async def update_platform_settings(
         ai_model=row.ai_model,
         debounce_seconds=row.debounce_seconds,
     )
+
+
+# ─── Make.com Automation ─────────────────────────────────────────────────────
+@router.post("/clients/{client_id}/make-scenario")
+async def generate_make_scenario(
+    client_id: uuid.UUID,
+    platform: str = Query("messenger", description="messenger, instagram, or whatsapp"),
+    _: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    import secrets
+    from services.make_service import create_client_scenario
+
+    client = await _get_client(client_id, db)
+
+    # Find or create a generic webhook for this client
+    result = await db.execute(
+        select(ChannelIntegration).where(
+            ChannelIntegration.user_id == client.id,
+            ChannelIntegration.platform == "webhook"
+        )
+    )
+    integration = result.scalar_one_or_none()
+
+    if not integration:
+        integration = ChannelIntegration(
+            user_id=client.id,
+            platform="webhook",
+            public_id=secrets.token_urlsafe(24),
+            credentials={"webhook_secret": secrets.token_urlsafe(24)},
+            is_active=True
+        )
+        db.add(integration)
+        await db.commit()
+        await db.refresh(integration)
+
+    # Create the scenario via Make API
+    scenario_result = await create_client_scenario(integration.public_id, client.business_name or client.username, platform)
+
+    if not scenario_result:
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to create Make.com scenario. Please check Make API Token, Team ID in your .env variables."
+        )
+
+    return {"message": "Scenario created successfully", "scenario_url": scenario_result.get("url")}
