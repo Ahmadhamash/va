@@ -15,7 +15,9 @@ from services.answer_verifier import (
     SAFE_TO_SEND,
     BLOCKED_UNGROUNDED,
     HUMAN_HANDOFF_REQUIRED,
+    NEEDS_MORE_DATA,
     ASK_CLARIFICATION,
+    TOOL_RESULT_REQUIRED,
     SAFE_RESPONSES,
 )
 
@@ -23,6 +25,8 @@ from .ai_tools import TOOLS, execute_db_function, get_tools_for_intent
 from .ai_prompts import build_system_prompt, get_style_samples
 from .ai_media import transcribe_audio, TranscriptionError, _encode_image_from_url, _transcribe_from_url
 from .humanizer import HumanizerAgent
+from .fact_guard import check_humanizer_preserved_facts
+from .retrieval_plan import supplemental_tool_plan
 
 logger = logging.getLogger("ai_chat")
 HISTORY_LIMIT = 20
@@ -86,14 +90,44 @@ async def save_message(
     return msg
 
 
+def _tool_names(tools: list[dict] | None) -> list[str]:
+    return [t["function"]["name"] for t in (tools or []) if t.get("function")]
+
+
+def _summarize_tool_result(result: dict) -> dict:
+    if not isinstance(result, dict):
+        return {"type": type(result).__name__}
+
+    summary: dict = {}
+    for key in (
+        "matched", "overview_only", "count", "note", "escalated",
+        "booked", "date", "day",
+    ):
+        if key in result:
+            summary[key] = result[key]
+
+    for key in (
+        "items", "categories", "offers", "packages", "policies",
+        "delivery_zones", "available_slots", "payment_methods",
+    ):
+        if key in result:
+            value = result[key]
+            summary[f"{key}_count"] = len(value) if hasattr(value, "__len__") else None
+
+    if "error" in result:
+        summary["error"] = result["error"]
+    return summary
+
+
 # ─── Core model loop ─────────────────────────────────────────────────────────
 async def _generate_reply(
     user: User, session_id: uuid.UUID, content, db: AsyncSession
-) -> tuple[str, dict]:
-    """Run the tool-calling loop and return (assistant_text, retrieved_data).
+) -> tuple[str, dict, dict]:
+    """Run the tool-calling loop and return (assistant_text, data, trace).
 
     retrieved_data is a dict of tool results collected during the loop,
-    used by the Answer Verifier for grounding checks.
+    used by the Answer Verifier for grounding checks. trace is a compact audit
+    record for dashboards and debugging.
     """
     api_key = await effective_openai_key(db)
     model = await effective_model(db)
@@ -122,6 +156,14 @@ async def _generate_reply(
     
     intent = await get_intent_for_message(text_content, db)
     allowed_tools = get_tools_for_intent(intent)
+    trace: dict = {
+        "intent": intent,
+        "router_text": text_content[:500],
+        "allowed_tools": _tool_names(allowed_tools),
+        "tool_calls": [],
+        "tool_rounds": 0,
+        "max_tool_rounds": MAX_TOOL_ROUNDS,
+    }
     
     if settings.LOCAL_LLM_ENABLED and intent in ("support", "general"):
         model = settings.LOCAL_LLM_MODEL
@@ -129,6 +171,10 @@ async def _generate_reply(
             base_url=settings.LOCAL_LLM_BASE_URL,
             api_key=settings.LOCAL_LLM_API_KEY or "dummy",
         )
+        trace["local_llm_enabled"] = True
+    else:
+        trace["local_llm_enabled"] = False
+    trace["model"] = model
 
     messages: list[dict] = [
         {"role": "system", "content": build_system_prompt(user, style_samples, workflows, intent=intent)},
@@ -170,6 +216,14 @@ async def _generate_reply(
             # Store tool result for verification grounding
             tool_key = f"{tool_call.function.name}:{json.dumps(func_args, ensure_ascii=False)}"
             retrieved_data[tool_key] = result
+            trace["tool_calls"].append(
+                {
+                    "round": rounds,
+                    "name": tool_call.function.name,
+                    "args": func_args,
+                    "result_summary": _summarize_tool_result(result),
+                }
+            )
 
             messages.append(
                 {
@@ -188,7 +242,10 @@ async def _generate_reply(
         )
 
     draft = response.choices[0].message.content or "I don't have that information."
-    return draft, retrieved_data
+    trace["tool_rounds"] = rounds
+    trace["finish_reason"] = response.choices[0].finish_reason
+    trace["retrieved_keys"] = list(retrieved_data.keys())
+    return draft, retrieved_data, trace
 
 async def generate_preview_reply(
     persona_text: str, message: str, db: AsyncSession
@@ -224,6 +281,96 @@ async def generate_preview_reply(
         return f"Error: {e}"
 
 
+async def _retrieve_supplemental_data(
+    customer_message: str,
+    user: User,
+    session_id: uuid.UUID,
+    db: AsyncSession,
+    existing_data: dict,
+) -> dict:
+    """Run one deterministic repair pass when the verifier asks for data."""
+    from services.router import get_intent_for_message
+
+    intent = await get_intent_for_message(customer_message, db)
+    calls = supplemental_tool_plan(customer_message, intent)
+    supplemental: dict = {}
+
+    for call in calls:
+        key = (
+            f"supplemental:{call.name}:"
+            f"{json.dumps(call.args, ensure_ascii=False, sort_keys=True)}"
+        )
+        if key in existing_data:
+            continue
+        result = await execute_db_function(
+            call.name,
+            call.args,
+            user.id,
+            db,
+            session_id=session_id,
+        )
+        supplemental[key] = result
+
+    return supplemental
+
+
+async def _generate_grounded_retry_reply(
+    customer_message: str,
+    user: User,
+    retrieved_data: dict,
+    db: AsyncSession,
+) -> str | None:
+    """Write a concise answer from retrieved data only, with no tool calls."""
+    if not retrieved_data:
+        return None
+
+    api_key = await effective_openai_key(db)
+    model = await effective_model(db)
+    client = _client_for(api_key)
+
+    data_json = json.dumps(retrieved_data, ensure_ascii=False)
+    if len(data_json) > 12000:
+        data_json = data_json[:12000] + "...[truncated]"
+
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "You are a grounded retry writer for a business customer-support "
+                "chatbot. Answer the customer ONLY from the provided JSON data. "
+                "If the data does not contain the answer, say you do not have "
+                "that information or ask for clarification. If catalog data says "
+                "no item matched, do not mention unrelated products. Keep the "
+                "answer to 1-2 short sentences, no markdown, no bullet points, "
+                "and use the same language as the customer."
+            ),
+        },
+        {
+            "role": "user",
+            "content": json.dumps(
+                {
+                    "business_name": user.business_name,
+                    "customer_message": customer_message,
+                    "retrieved_data": data_json,
+                },
+                ensure_ascii=False,
+            ),
+        },
+    ]
+
+    try:
+        response = await client.chat.completions.create(
+            model=model,
+            messages=messages,
+            temperature=0.1,
+            max_tokens=350,
+        )
+        return (response.choices[0].message.content or "").strip() or None
+    except Exception:
+        logger.exception("Grounded retry generation failed")
+        return None
+
+
 # ─── Answer Verification ─────────────────────────────────────────────────────
 async def _verify_and_finalize(
     draft_answer: str,
@@ -233,6 +380,7 @@ async def _verify_and_finalize(
     session_id: uuid.UUID,
     db: AsyncSession,
     message_id: uuid.UUID | None = None,
+    ai_trace: dict | None = None,
 ) -> tuple[str, str]:
     """Verify the AI's draft answer and return (final_reply, action).
 
@@ -240,6 +388,10 @@ async def _verify_and_finalize(
     """
     user_id = user.id
     api_key = await effective_openai_key(db)
+    ai_trace = dict(ai_trace or {})
+    ai_trace.setdefault("verification", {})
+    ai_trace.setdefault("fact_guard", {})
+    ai_trace.setdefault("repair", {"attempted": False})
     
     # 1. Fetch Style Samples and Voice Settings for the Humanizer
     style_samples = await get_style_samples(user_id, db)
@@ -265,7 +417,36 @@ async def _verify_and_finalize(
     )
     logger.info("Humanized draft: %s", humanized_draft)
 
-    # 3. Security check with AnswerVerifier on the humanized draft
+    # 3. Deterministic fact guard before the LLM verifier. If the Humanizer
+    # changed a protected fact, discard the rewrite and verify the logic draft.
+    fact_guard_triggered = False
+    fact_guard = check_humanizer_preserved_facts(
+        draft_answer,
+        humanized_draft,
+        retrieved_data,
+    )
+    ai_trace["fact_guard"] = {
+        "triggered": not fact_guard.safe,
+        "reasons": fact_guard.reasons,
+        "missing_numbers": fact_guard.missing_numbers,
+        "added_numbers": fact_guard.added_numbers,
+        "missing_products": fact_guard.missing_products,
+        "added_products": fact_guard.added_products,
+    }
+    if not fact_guard.safe:
+        fact_guard_triggered = True
+        logger.warning(
+            "Humanizer fact guard failed; using logic draft. reasons=%s "
+            "missing_numbers=%s added_numbers=%s missing_products=%s added_products=%s",
+            fact_guard.reasons,
+            fact_guard.missing_numbers,
+            fact_guard.added_numbers,
+            fact_guard.missing_products,
+            fact_guard.added_products,
+        )
+        humanized_draft = draft_answer
+
+    # 4. Security check with AnswerVerifier on the guarded draft
     verifier = AnswerVerifier(api_key=api_key)
 
     try:
@@ -278,13 +459,115 @@ async def _verify_and_finalize(
         "Verification: verdict=%s risk=%.2f reasons=%s",
         result.verdict, result.risk_score, result.reasons,
     )
+    ai_trace["verification"]["initial"] = {
+        "verdict": result.verdict,
+        "risk_score": result.risk_score,
+        "reasons": result.reasons,
+        "flagged_claims": result.flagged_claims,
+    }
+
+    draft_answer_for_log = draft_answer
+    more_data_repaired = False
+    if result.verdict in (NEEDS_MORE_DATA, TOOL_RESULT_REQUIRED):
+        ai_trace["repair"] = {
+            "attempted": True,
+            "trigger_verdict": result.verdict,
+            "supplemental_tools": [],
+            "supplemental_keys": [],
+            "retry_generated": False,
+        }
+        supplemental = await _retrieve_supplemental_data(
+            customer_message,
+            user,
+            session_id,
+            db,
+            retrieved_data,
+        )
+        ai_trace["repair"]["supplemental_keys"] = list(supplemental.keys())
+        for key, value in supplemental.items():
+            try:
+                _, name, args_json = key.split(":", 2)
+                args = json.loads(args_json)
+            except Exception:
+                name = key
+                args = {}
+            ai_trace["repair"]["supplemental_tools"].append(
+                {
+                    "name": name,
+                    "args": args,
+                    "result_summary": _summarize_tool_result(value),
+                }
+            )
+        if supplemental:
+            merged_data = {**retrieved_data, **supplemental}
+            retry_draft = await _generate_grounded_retry_reply(
+                customer_message,
+                user,
+                merged_data,
+                db,
+            )
+            if retry_draft:
+                ai_trace["repair"]["retry_generated"] = True
+                retry_humanized = await humanizer.rewrite(
+                    logic_draft=retry_draft,
+                    style_samples=style_samples,
+                    voice_settings=voice_settings,
+                )
+                retry_guard = check_humanizer_preserved_facts(
+                    retry_draft,
+                    retry_humanized,
+                    merged_data,
+                )
+                if not retry_guard.safe:
+                    fact_guard_triggered = True
+                    ai_trace["repair"]["retry_fact_guard"] = {
+                        "triggered": True,
+                        "reasons": retry_guard.reasons,
+                    }
+                    logger.warning(
+                        "Retry humanization failed fact guard; using retry draft. reasons=%s",
+                        retry_guard.reasons,
+                    )
+                    retry_humanized = retry_draft
+                else:
+                    ai_trace["repair"]["retry_fact_guard"] = {
+                        "triggered": False,
+                        "reasons": [],
+                    }
+
+                try:
+                    retry_result = await verifier.verify(
+                        customer_message,
+                        merged_data,
+                        retry_humanized,
+                    )
+                    logger.info(
+                        "Verification after supplemental data: verdict=%s "
+                        "risk=%.2f reasons=%s",
+                        retry_result.verdict,
+                        retry_result.risk_score,
+                        retry_result.reasons,
+                    )
+                    result = retry_result
+                    ai_trace["verification"]["after_repair"] = {
+                        "verdict": retry_result.verdict,
+                        "risk_score": retry_result.risk_score,
+                        "reasons": retry_result.reasons,
+                        "flagged_claims": retry_result.flagged_claims,
+                    }
+                    humanized_draft = retry_humanized
+                    retrieved_data = merged_data
+                    draft_answer_for_log = retry_draft
+                    more_data_repaired = result.verdict == SAFE_TO_SEND
+                except Exception:
+                    logger.exception("Verification after supplemental data failed")
 
     final_reply = humanized_draft
     action = "sent"
 
     if result.verdict == SAFE_TO_SEND:
         final_reply = humanized_draft
-        action = "sent"
+        action = "modified" if fact_guard_triggered or more_data_repaired else "sent"
 
     elif result.verdict == ASK_CLARIFICATION:
         # Use the verifier's suggested clarification or a natural Jordanian one
@@ -293,8 +576,8 @@ async def _verify_and_finalize(
         )
         action = "clarification"
 
-    elif result.verdict == "NEEDS_MORE_DATA":
-        # Could try to fetch more data, but for now ask the customer
+    elif result.verdict in (NEEDS_MORE_DATA, TOOL_RESULT_REQUIRED):
+        # The bounded repair pass above did not produce a safe answer.
         final_reply = result.safe_response or (
             "خليني أتأكد من المعلومة وأرجعلك."
         )
@@ -310,7 +593,7 @@ async def _verify_and_finalize(
                 reason="AI verifier: " + "; ".join(result.reasons[:2]),
                 db=db,
                 priority="high" if result.risk_score > 0.8 else "normal",
-                ai_summary=f"Customer: {customer_message[:200]}\nDraft: {draft_answer[:200]}",
+                ai_summary=f"Customer: {customer_message[:200]}\nDraft: {draft_answer_for_log[:200]}",
                 ai_suggested_reply=result.safe_response,
             )
         except Exception:
@@ -337,14 +620,36 @@ async def _verify_and_finalize(
         logger.warning("Unknown verifier verdict: %s", result.verdict)
         action = "sent"
 
-    # 4. If the verifier blocked the humanized draft and fell back to a formal safe_response, humanize the fallback!
+    # 5. If the verifier blocked the guarded draft and fell back to a formal
+    # safe_response, humanize the fallback, but keep the original fallback if
+    # the rewrite changes protected facts.
     if result.verdict != SAFE_TO_SEND and final_reply:
         logger.info("Humanizing the verifier's fallback response: %s", final_reply)
-        final_reply = await humanizer.rewrite(
+        fallback_logic = final_reply
+        rewritten_fallback = await humanizer.rewrite(
             logic_draft=final_reply,
             style_samples=style_samples,
             voice_settings=voice_settings
         )
+        fallback_guard = check_humanizer_preserved_facts(
+            fallback_logic,
+            rewritten_fallback,
+            retrieved_data,
+        )
+        if fallback_guard.safe:
+            final_reply = rewritten_fallback
+        else:
+            logger.warning(
+                "Fallback humanization failed fact guard; keeping fallback. reasons=%s",
+                fallback_guard.reasons,
+            )
+
+    ai_trace["final"] = {
+        "action": action,
+        "verdict": result.verdict,
+        "risk_score": result.risk_score,
+        "answer_length": len(final_reply or ""),
+    }
 
     # Log the verification decision
     try:
@@ -352,13 +657,14 @@ async def _verify_and_finalize(
             result=result,
             customer_message=customer_message,
             retrieved_data=retrieved_data,
-            draft_answer=draft_answer,
+            draft_answer=draft_answer_for_log,
             final_action=action,
             final_answer=final_reply,
             session_id=session_id,
             user_id=user_id,
             message_id=message_id,
             db=db,
+            ai_trace=ai_trace,
         )
     except Exception:
         await db.rollback()
@@ -511,7 +817,7 @@ async def process_message(
         }
 
     try:
-        draft_reply, retrieved_data = await _generate_reply(user, session_id, content, db)
+        draft_reply, retrieved_data, ai_trace = await _generate_reply(user, session_id, content, db)
     except APIError:
         logger.exception("OpenAI API error")
         return {
@@ -530,6 +836,7 @@ async def process_message(
     reply, action = await _verify_and_finalize(
         draft_reply, customer_text, retrieved_data,
         user, session_id, db,
+        ai_trace=ai_trace,
     )
 
     # Deduct AI credit
@@ -690,13 +997,14 @@ async def process_pending(session_id: uuid.UUID, db: AsyncSession) -> dict | Non
         reply = "I'm sorry, but I cannot process that request."
     else:
         try:
-            draft_reply, retrieved_data = await _generate_reply(user, session_id, content, db)
+            draft_reply, retrieved_data, ai_trace = await _generate_reply(user, session_id, content, db)
 
             # ── Answer Verification (anti-hallucination) ──
             customer_text = combined_text or str(content)
             reply, action = await _verify_and_finalize(
                 draft_reply, customer_text, retrieved_data,
                 user, session_id, db,
+                ai_trace=ai_trace,
             )
         except APIError:
             logger.exception("OpenAI API error (worker)")

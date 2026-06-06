@@ -375,6 +375,7 @@ class AnswerVerifier:
         user_id: uuid.UUID,
         message_id: uuid.UUID | None,
         db: AsyncSession,
+        ai_trace: dict | None = None,
     ) -> None:
         """Persist verification result to the database."""
         from models import AIVerificationLog
@@ -391,6 +392,7 @@ class AnswerVerifier:
             reasons=result.reasons,
             flagged_claims=result.flagged_claims,
             grounding_data_used=result.grounding_data_used,
+            ai_trace=ai_trace or {},
             final_action=final_action,
             final_answer=final_answer,
         )

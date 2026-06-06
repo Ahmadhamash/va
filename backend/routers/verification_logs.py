@@ -28,6 +28,7 @@ def _serialize_log(log: AIVerificationLog) -> dict:
         "reasons": log.reasons or [],
         "flagged_claims": log.flagged_claims or [],
         "grounding_data_used": log.grounding_data_used or [],
+        "ai_trace": log.ai_trace or {},
         "final_action": log.final_action,
         "final_answer": log.final_answer,
         "created_at": log.created_at.isoformat() if log.created_at else None,

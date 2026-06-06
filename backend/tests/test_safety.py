@@ -11,6 +11,7 @@ import asyncio
 import pytest
 from unittest.mock import patch, MagicMock, AsyncMock
 from datetime import datetime, timezone
+from types import SimpleNamespace
 
 # Mock DB engine before any imports
 os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://x:x@localhost/test")
@@ -34,8 +35,18 @@ from services.channels.whatsapp_adapter import WhatsAppAdapter
 from services.voice.voice_service import VoiceService
 from services.voice.tts import ElevenLabsTTS, OpenAITTS
 from services.automation_engine import AutomationEngine, AutomationContext, TRIGGERS
+from services.ai_tools import (
+    _item_match_score,
+    _rank_catalog_rows,
+    _tokens,
+    get_tools_for_intent,
+)
+from services.router import heuristic_intent_for_message
+from services.fact_guard import check_humanizer_preserved_facts
+from services.retrieval_plan import supplemental_tool_plan
 from models import (
     HandoffSession, PlatformSupportAgent, ChatSession, User, VoiceSettings,
+    AIVerificationLog,
 )
 
 
@@ -139,6 +150,173 @@ class TestSmalltalkVerifier:
 # ═══════════════════════════════════════════════════════════════════════
 # 3. UNKNOWN PRODUCT DOES NOT HALLUCINATE
 # ═══════════════════════════════════════════════════════════════════════
+class TestRouterGuardrails:
+    def test_price_question_routes_to_sales_without_llm(self):
+        assert heuristic_intent_for_message("\u0645\u0631\u062d\u0628\u0627 \u0643\u0645 \u0633\u0639\u0631 \u0627\u0644\u0633\u0645\u0627\u0639\u0629\u061f") == "sales"
+
+    def test_delivery_question_routes_to_support_without_llm(self):
+        assert heuristic_intent_for_message("\u0643\u0645 \u0631\u0633\u0648\u0645 \u0627\u0644\u062a\u0648\u0635\u064a\u0644\u061f") == "support"
+
+    def test_booking_question_routes_to_booking_without_llm(self):
+        assert heuristic_intent_for_message("\u0628\u062f\u064a \u0627\u062d\u062c\u0632 \u0645\u0648\u0639\u062f \u0628\u0643\u0631\u0627") == "booking"
+
+    def test_plain_greeting_can_still_use_llm_or_general(self):
+        assert heuristic_intent_for_message("\u0645\u0631\u062d\u0628\u0627") is None
+
+    def test_sales_intent_exposes_catalog_tool(self):
+        tool_names = {t["function"]["name"] for t in get_tools_for_intent("sales")}
+        assert "get_catalog" in tool_names
+        assert "escalate_to_human" in tool_names
+
+    def test_catalog_no_match_does_not_fall_back_to_full_catalog(self):
+        path = os.path.join(os.path.dirname(__file__), "..", "services", "ai_tools.py")
+        with open(path, encoding="utf-8") as f:
+            code = f.read()
+        assert "showing full catalog" not in code
+        assert "do not mention unrelated catalog items" in code
+
+
+class TestCatalogHybridSearch:
+    def test_headphone_synonym_expands_to_arabic_speaker_terms(self):
+        tokens = _tokens("headphone")
+        assert "\u0633\u0645\u0627\u0639\u0647" in tokens
+        assert "\u0633\u0645\u0627\u0639\u0629" in tokens
+
+    def test_price_stopwords_do_not_hide_product_token(self):
+        tokens = _tokens("\u0643\u0645 \u0633\u0639\u0631 \u0627\u0644\u0633\u0645\u0627\u0639\u0629\u061f")
+        assert "\u0633\u0645\u0627\u0639\u0647" in tokens
+        assert "\u0633\u0639\u0631" not in tokens
+
+    def test_synonym_score_matches_arabic_catalog_item(self):
+        item = SimpleNamespace(
+            name="\u0633\u0645\u0627\u0639\u0629 \u0628\u0644\u0648\u062a\u0648\u062b Pro",
+            category="\u0627\u0643\u0633\u0633\u0648\u0627\u0631\u0627\u062a",
+            description="",
+            item_metadata={},
+        )
+        score = _item_match_score(item, "headphone", _tokens("headphone"))
+        assert score >= 2.0
+
+    def test_unrelated_item_is_filtered_out(self):
+        speaker = SimpleNamespace(
+            name="\u0633\u0645\u0627\u0639\u0629 \u0628\u0644\u0648\u062a\u0648\u062b",
+            category="\u0627\u0643\u0633\u0633\u0648\u0627\u0631\u0627\u062a",
+            description="",
+            item_metadata={},
+        )
+        perfume = SimpleNamespace(
+            name="\u0639\u0637\u0631 \u0648\u0631\u062f",
+            category="\u0639\u0637\u0648\u0631",
+            description="",
+            item_metadata={},
+        )
+        ranked = _rank_catalog_rows("headphone", [perfume, speaker], _tokens("headphone"))
+        assert ranked == [speaker]
+
+
+class TestSupplementalRetrievalPlan:
+    def test_sales_price_question_gets_catalog(self):
+        calls = supplemental_tool_plan(
+            "\u0643\u0645 \u0633\u0639\u0631 \u0627\u0644\u0633\u0645\u0627\u0639\u0629\u061f",
+            "sales",
+        )
+        assert calls[0].name == "get_catalog"
+        assert calls[0].args["query"]
+
+    def test_broad_catalog_question_uses_overview_query(self):
+        calls = supplemental_tool_plan("\u0634\u0648 \u0639\u0646\u062f\u0643\u0645\u061f", "sales")
+        assert calls[0].name == "get_catalog"
+        assert calls[0].args["query"] == ""
+
+    def test_offer_question_fetches_catalog_and_offers(self):
+        calls = supplemental_tool_plan(
+            "\u0641\u064a \u062e\u0635\u0645 \u0639\u0644\u0649 \u0627\u0644\u0633\u0645\u0627\u0639\u0629\u061f",
+            "sales",
+        )
+        assert {call.name for call in calls} >= {"get_catalog", "get_offers"}
+
+    def test_refund_question_fetches_policies(self):
+        calls = supplemental_tool_plan(
+            "\u0628\u062f\u064a \u0627\u0633\u062a\u0631\u062c\u0627\u0639 \u0627\u0644\u0637\u0644\u0628",
+            "support",
+        )
+        assert [call.name for call in calls] == ["get_policies"]
+
+    def test_delivery_question_fetches_delivery_info(self):
+        calls = supplemental_tool_plan(
+            "\u0643\u0645 \u0631\u0633\u0648\u0645 \u0627\u0644\u062a\u0648\u0635\u064a\u0644\u061f",
+            "support",
+        )
+        assert [call.name for call in calls] == ["get_delivery_info"]
+
+    def test_booking_question_preserves_iso_date(self):
+        calls = supplemental_tool_plan(
+            "\u0628\u062f\u064a \u0627\u062d\u062c\u0632 \u0645\u0648\u0639\u062f 2026-06-12",
+            "booking",
+        )
+        assert calls[0].name == "get_available_slots"
+        assert calls[0].args["target_date"] == "2026-06-12"
+
+
+class TestAITraceLogging:
+    def test_verification_log_has_ai_trace_column(self):
+        cols = [c.name for c in AIVerificationLog.__table__.columns]
+        assert "ai_trace" in cols
+
+
+class TestHumanizerFactGuard:
+    def setup_method(self):
+        self.retrieved = {
+            "get_catalog:{}": {
+                "items": [
+                    {
+                        "name": "\u0633\u0645\u0627\u0639\u0629 \u0628\u0644\u0648\u062a\u0648\u062b Pro",
+                        "price": 50,
+                        "currency": "JOD",
+                        "available": True,
+                        "category": "\u0627\u0643\u0633\u0633\u0648\u0627\u0631\u0627\u062a",
+                    }
+                ]
+            }
+        }
+
+    def test_allows_style_only_rewrite(self):
+        result = check_humanizer_preserved_facts(
+            "\u0633\u0645\u0627\u0639\u0629 \u0628\u0644\u0648\u062a\u0648\u062b Pro \u0633\u0639\u0631\u0647\u0627 50 JOD",
+            "\u0627\u0647 \u0633\u0645\u0627\u0639\u0629 \u0628\u0644\u0648\u062a\u0648\u062b Pro \u0633\u0639\u0631\u0647\u0627 50 \u062f\u064a\u0646\u0627\u0631",
+            self.retrieved,
+        )
+        assert result.safe
+
+    def test_blocks_changed_price(self):
+        result = check_humanizer_preserved_facts(
+            "\u0633\u0645\u0627\u0639\u0629 \u0628\u0644\u0648\u062a\u0648\u062b Pro \u0633\u0639\u0631\u0647\u0627 50 JOD",
+            "\u0633\u0645\u0627\u0639\u0629 \u0628\u0644\u0648\u062a\u0648\u062b Pro \u0633\u0639\u0631\u0647\u0627 55 \u062f\u064a\u0646\u0627\u0631",
+            self.retrieved,
+        )
+        assert not result.safe
+        assert "50" in result.missing_numbers
+        assert "55" in result.added_numbers
+
+    def test_blocks_added_number(self):
+        result = check_humanizer_preserved_facts(
+            "\u0627\u0644\u0645\u0646\u062a\u062c \u0645\u062a\u0648\u0641\u0631",
+            "\u0627\u0644\u0645\u0646\u062a\u062c \u0645\u062a\u0648\u0641\u0631 \u0648\u0627\u0644\u062a\u0648\u0635\u064a\u0644 2 \u064a\u0648\u0645",
+            self.retrieved,
+        )
+        assert not result.safe
+        assert "2" in result.added_numbers
+
+    def test_blocks_missing_product_name(self):
+        result = check_humanizer_preserved_facts(
+            "\u0633\u0645\u0627\u0639\u0629 \u0628\u0644\u0648\u062a\u0648\u062b Pro \u0645\u062a\u0648\u0641\u0631\u0629",
+            "\u0627\u0647 \u0645\u062a\u0648\u0641\u0631\u0629",
+            self.retrieved,
+        )
+        assert not result.safe
+        assert "\u0633\u0645\u0627\u0639\u0629 \u0628\u0644\u0648\u062a\u0648\u062b Pro" in result.missing_products
+
+
 class TestUnknownProductNoHallucination:
     def setup_method(self):
         self.verifier = AnswerVerifier(api_key="sk-test")

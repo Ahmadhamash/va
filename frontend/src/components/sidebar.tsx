@@ -6,6 +6,7 @@ import { useEffect, useRef } from "react";
 import {
   BarChart3,
   Bot,
+  BrainCircuit,
   Calendar,
   CreditCard,
   Home,
@@ -37,6 +38,7 @@ const clientNavGroups = [
     title: "الذكاء الاصطناعي",
     items: [
       { href: "/agent", label: "الوكيل الذكي", icon: Bot },
+      { href: "/ai-monitor", label: "مراقبة الذكاء", icon: BrainCircuit },
       { href: "/knowledge", label: "قاعدة المعرفة", icon: WalletCards },
       { href: "/workflows", label: "الأتمتة والردود", icon: Zap },
     ],

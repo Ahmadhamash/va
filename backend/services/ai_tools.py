@@ -1,6 +1,7 @@
 import logging
 import re
 import uuid
+from difflib import SequenceMatcher
 from decimal import Decimal
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -243,21 +244,169 @@ def _serialize_item(item: Item) -> dict:
     return data
 
 
-def _tokens(query: str) -> list[str]:
-    """Normalize an Arabic/Latin query into match tokens.
+_ARABIC_DIACRITICS_RE = re.compile(r"[\u064b-\u065f\u0670\u0640]")
+_TOKEN_SPLIT_RE = re.compile(r"[\s,\u060c/\\|+\-_.:;\u061f?!()]+")
 
-    Strips the Arabic definite article 'ال' and short noise so 'السماعة'
-    still matches an item named 'سماعة بلوتوث Pro'.
-    """
-    raw = re.split(r"[\s,،/]+", (query or "").strip().lower())
+_SEARCH_STOPWORDS = {
+    "\u0633\u0639\u0631", "\u0627\u0644\u0633\u0639\u0631", "\u0628\u0643\u0645",
+    "\u0643\u0645", "\u0643\u0627\u0645", "\u0642\u062f\u064a\u0634",
+    "\u0628\u0642\u062f\u064a\u0634", "\u062d\u0642\u0647", "\u062d\u0642\u0647\u0627",
+    "\u0645\u062a\u0648\u0641\u0631", "\u0645\u062a\u0648\u0641\u0631\u0647",
+    "\u0645\u0648\u062c\u0648\u062f", "\u0645\u0648\u062c\u0648\u062f\u0647",
+    "\u0639\u0646\u062f\u0643\u0645", "\u0628\u062f\u064a", "\u0627\u0631\u064a\u062f",
+    "\u0627\u0628\u063a\u0649", "\u0639\u0627\u064a\u0632", "\u0645\u0646\u062a\u062c",
+    "\u0645\u0646\u062a\u062c\u0627\u062a",
+    "price", "cost", "available", "availability", "stock", "product",
+    "products", "do", "you", "have", "is", "the", "a", "an", "for",
+}
+
+_SEARCH_SYNONYM_GROUPS = (
+    (
+        "headphone", "headphones", "headset", "earphone", "earphones",
+        "earbud", "earbuds", "airpods", "\u0647\u064a\u062f\u0641\u0648\u0646",
+        "\u0633\u0645\u0627\u0639\u0647", "\u0633\u0645\u0627\u0639\u0627\u062a",
+        "\u0627\u064a\u0631\u0628\u0648\u062f\u0632",
+    ),
+    (
+        "charger", "chargers", "adapter", "adaptor", "\u0634\u0627\u062d\u0646",
+        "\u0634\u0648\u0627\u062d\u0646", "\u0627\u062f\u0627\u0628\u062a\u0631",
+    ),
+    (
+        "cable", "wire", "usb", "\u0643\u0627\u0628\u0644", "\u0648\u0635\u0644\u0647",
+        "\u0633\u0644\u0643",
+    ),
+    (
+        "case", "cover", "\u0643\u0641\u0631", "\u062c\u0631\u0627\u0628",
+        "\u063a\u0637\u0627\u0621", "\u0643\u0648\u0641\u0631",
+    ),
+    (
+        "phone", "mobile", "smartphone", "\u0647\u0627\u062a\u0641",
+        "\u0645\u0648\u0628\u0627\u064a\u0644", "\u062c\u0648\u0627\u0644",
+        "\u062a\u0644\u0641\u0648\u0646",
+    ),
+    ("watch", "smartwatch", "\u0633\u0627\u0639\u0647", "\u0633\u0627\u0639\u0627\u062a"),
+    ("speaker", "speakers", "\u0633\u0628\u064a\u0643\u0631", "\u0645\u0643\u0628\u0631"),
+    ("perfume", "fragrance", "\u0639\u0637\u0631", "\u0639\u0637\u0648\u0631"),
+    ("bag", "purse", "\u062d\u0642\u064a\u0628\u0647", "\u0634\u0646\u0637\u0647"),
+    (
+        "shoe", "shoes", "sneaker", "sneakers", "\u062d\u0630\u0627\u0621",
+        "\u0643\u0646\u062f\u0631\u0647", "\u062c\u0632\u0645\u0647",
+    ),
+    ("shirt", "tshirt", "t-shirt", "\u0642\u0645\u064a\u0635", "\u062a\u064a\u0634\u064a\u0631\u062a"),
+    ("dress", "\u0641\u0633\u062a\u0627\u0646", "\u0641\u0633\u0627\u062a\u064a\u0646"),
+    ("pants", "jeans", "\u0628\u0646\u0637\u0644\u0648\u0646", "\u062c\u064a\u0646\u0632"),
+    ("laptop", "notebook", "\u0644\u0627\u0628\u062a\u0648\u0628", "\u0644\u0627\u0628", "\u0643\u0645\u0628\u064a\u0648\u062a\u0631"),
+    ("keyboard", "\u0643\u064a\u0628\u0648\u0631\u062f", "\u0644\u0648\u062d\u0647 \u0645\u0641\u0627\u062a\u064a\u062d"),
+    ("mouse", "\u0645\u0627\u0648\u0633", "\u0641\u0627\u0631\u0647"),
+    ("camera", "\u0643\u0627\u0645\u064a\u0631\u0627"),
+)
+
+
+def _normalise_search_text(text: str | None) -> str:
+    text = (text or "").strip().lower()
+    text = _ARABIC_DIACRITICS_RE.sub("", text)
+    for src, dst in {
+        "\u0623": "\u0627",
+        "\u0625": "\u0627",
+        "\u0622": "\u0627",
+        "\u0649": "\u064a",
+        "\u0629": "\u0647",
+    }.items():
+        text = text.replace(src, dst)
+    return text
+
+
+def _strip_arabic_article(token: str) -> str:
+    if token.startswith("\u0627\u0644") and len(token) > 4:
+        return token[2:]
+    return token
+
+
+def _spelling_variants(token: str) -> set[str]:
+    variants = {token}
+    if token.endswith("\u0647") and len(token) > 2:
+        variants.add(token[:-1] + "\u0629")
+    if "\u064a" in token:
+        variants.add(token.replace("\u064a", "\u0649"))
+    return {v for v in variants if len(v) >= 2}
+
+
+def _expand_tokens(tokens: list[str]) -> list[str]:
+    expanded = set(tokens)
+    token_set = {_normalise_search_text(t) for t in tokens}
+    for group in _SEARCH_SYNONYM_GROUPS:
+        normalised_group = {_normalise_search_text(t) for t in group}
+        if token_set & normalised_group:
+            expanded.update(normalised_group)
+
+    with_variants: set[str] = set()
+    for token in expanded:
+        with_variants.update(_spelling_variants(token))
+    return sorted(with_variants)
+
+
+def _tokens(query: str) -> list[str]:
+    raw = _TOKEN_SPLIT_RE.split((query or "").strip().lower())
     out: list[str] = []
-    for t in raw:
-        t = t.strip("؟?!.")
-        if t.startswith("ال") and len(t) > 4:
-            t = t[2:]
-        if len(t) >= 2:
-            out.append(t)
-    return out
+    for token in raw:
+        normalised = _strip_arabic_article(_normalise_search_text(token))
+        if len(normalised) < 2 or normalised in _SEARCH_STOPWORDS:
+            continue
+        out.append(normalised)
+    return _expand_tokens(out)
+
+
+def _item_search_text(item: Item) -> tuple[str, str, str]:
+    name = _normalise_search_text(getattr(item, "name", "") or "")
+    category = _normalise_search_text(getattr(item, "category", "") or "")
+    description = _normalise_search_text(getattr(item, "description", "") or "")
+    metadata = getattr(item, "item_metadata", None) or {}
+    if isinstance(metadata, dict):
+        metadata_text = " ".join(str(v) for v in metadata.values() if v is not None)
+        description = f"{description} {_normalise_search_text(metadata_text)}"
+    return name, category, description
+
+
+def _item_match_score(item: Item, query: str, tokens: list[str]) -> float:
+    name, category, description = _item_search_text(item)
+    full_text = f"{name} {category} {description}".strip()
+    normalised_query = _normalise_search_text(query)
+    score = 0.0
+
+    if normalised_query and normalised_query in full_text:
+        score += 3.0
+
+    item_words = set(_TOKEN_SPLIT_RE.split(full_text))
+    item_words.discard("")
+    for token in tokens:
+        if token in name:
+            score += 4.0
+        elif token in category:
+            score += 3.0
+        elif token in description:
+            score += 1.5
+
+        if token in item_words:
+            score += 1.0
+            continue
+
+        best_ratio = max(
+            (SequenceMatcher(None, token, word).ratio() for word in item_words),
+            default=0.0,
+        )
+        if best_ratio >= 0.88:
+            score += 2.0
+        elif best_ratio >= 0.78:
+            score += 1.0
+
+    return score
+
+
+def _rank_catalog_rows(query: str, rows: list[Item], tokens: list[str]) -> list[Item]:
+    scored = [(_item_match_score(item, query, tokens), item) for item in rows]
+    scored = [(score, item) for score, item in scored if score >= 2.0]
+    scored.sort(key=lambda pair: pair[0], reverse=True)
+    return [item for _, item in scored]
 
 
 async def execute_db_function(
@@ -293,7 +442,7 @@ async def _exec_get_catalog(func_args: dict, user_id: uuid.UUID, db: AsyncSessio
     query = (func_args.get("query") or "").strip()
     tokens = _tokens(query)
 
-    if tokens:
+    if query and tokens:
         conds = []
         for tok in tokens:
             like = f"%{tok}%"
@@ -302,11 +451,17 @@ async def _exec_get_catalog(func_args: dict, user_id: uuid.UUID, db: AsyncSessio
             conds.append(Item.category.ilike(like))
         stmt = base.where(or_(*conds))
         rows = list((await db.execute(stmt)).scalars().unique().all())
+        if rows:
+            rows = _rank_catalog_rows(query, rows, tokens)
         if not rows:
-            rows = list((await db.execute(base)).scalars().unique().all())
-            matched = False
-        else:
-            matched = True
+            candidates = list(
+                (await db.execute(base.limit(500))).scalars().unique().all()
+            )
+            rows = _rank_catalog_rows(query, candidates, tokens)
+        matched = bool(rows)
+    elif query:
+        rows = []
+        matched = False
     else:
         rows = list((await db.execute(base)).scalars().unique().all())
         matched = True
@@ -354,11 +509,19 @@ async def _exec_get_catalog(func_args: dict, user_id: uuid.UUID, db: AsyncSessio
         "items": [_serialize_item(i) for i in rows] if rows else [],
         "categories": cats,
         "note": (
-            "no item matched the query; showing full catalog (capped at 50)"
+            "no item matched the query; do not mention unrelated catalog items"
             if not matched
             else ("no items in catalog" if not rows else (
                 "showing top 50 matches" if capped else ""
             ))
+        ),
+        "instruction": (
+            "No product matched this specific query. Do not answer with any "
+            "other products, prices, stock, warranty, variants, or availability. "
+            "Say the item was not found and ask for a clearer name/photo, or "
+            "escalate if the customer needs a human."
+            if not matched
+            else ""
         ),
     }
 

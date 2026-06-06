@@ -63,6 +63,9 @@ class AIVerificationLog(Base):
     grounding_data_used: Mapped[dict] = mapped_column(
         JSONB, default=list, server_default="[]"
     )
+    ai_trace: Mapped[dict] = mapped_column(
+        JSONB, default=dict, server_default="{}"
+    )
 
     # sent | modified | blocked | handoff | clarification
     final_action: Mapped[str] = mapped_column(String(30), nullable=False)

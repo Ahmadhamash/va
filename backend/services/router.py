@@ -1,5 +1,5 @@
 import logging
-import json
+import re
 from openai import AsyncOpenAI
 from sqlalchemy.ext.asyncio import AsyncSession
 from services.settings_service import effective_openai_key
@@ -33,6 +33,78 @@ def _client_for(api_key: str) -> AsyncOpenAI:
         _clients[api_key] = client
     return client
 
+
+_ARABIC_DIACRITICS_RE = re.compile(r"[\u064b-\u065f\u0670\u0640]")
+
+_BOOKING_TERMS = (
+    "\u062d\u062c\u0632", "\u0627\u062d\u062c\u0632", "\u0623\u062d\u062c\u0632",
+    "\u0645\u0648\u0639\u062f", "\u0645\u0648\u0627\u0639\u064a\u062f",
+    "\u0631\u064a\u0632\u0631\u0641", "\u0627\u062d\u062c\u0632\u0644\u064a",
+    "book", "booking", "appointment", "reservation", "reserve",
+)
+
+_SUPPORT_TERMS = (
+    "\u062a\u0648\u0635\u064a\u0644", "\u062f\u064a\u0644\u064a\u0641\u0631\u064a",
+    "\u0634\u062d\u0646", "\u0627\u0631\u062c\u0627\u0639", "\u0625\u0631\u062c\u0627\u0639",
+    "\u0627\u0631\u062c\u0639", "\u0623\u0631\u062c\u0639",
+    "\u062a\u0631\u062c\u064a\u0639", "\u0627\u0633\u062a\u0631\u062c\u0627\u0639",
+    "\u0627\u0633\u062a\u0628\u062f\u0627\u0644", "\u0627\u0644\u063a\u0627\u0621",
+    "\u0625\u0644\u063a\u0627\u0621", "\u0634\u0643\u0648\u0649", "\u0645\u0634\u0643\u0644\u0629",
+    "\u0633\u064a\u0621", "\u063a\u0627\u0636\u0628", "\u062a\u0627\u062e\u064a\u0631",
+    "\u062a\u0623\u062e\u064a\u0631", "\u0636\u0645\u0627\u0646", "\u0633\u064a\u0627\u0633\u0629",
+    "\u0633\u064a\u0627\u0633\u0627\u062a", "\u0631\u0633\u0648\u0645 \u0627\u0644\u062a\u0648\u0635\u064a\u0644",
+    "delivery", "shipping", "refund", "return", "exchange", "cancel",
+    "complaint", "problem", "warranty", "policy",
+)
+
+_SALES_TERMS = (
+    "\u0633\u0639\u0631", "\u0627\u0644\u0633\u0639\u0631", "\u0628\u0643\u0645",
+    "\u0643\u0645 \u0633\u0639\u0631", "\u0643\u0627\u0645 \u0633\u0639\u0631",
+    "\u0642\u062f\u064a\u0634", "\u0628\u0642\u062f\u064a\u0634",
+    "\u062d\u0642\u0647", "\u062d\u0642\u0647\u0627", "\u0645\u062a\u0648\u0641\u0631",
+    "\u0645\u062a\u0648\u0641\u0631\u0647", "\u0645\u0648\u062c\u0648\u062f",
+    "\u0645\u0648\u062c\u0648\u062f\u0629", "\u0639\u0646\u062f\u0643\u0645",
+    "\u0628\u062a\u0628\u064a\u0639\u0648", "\u0628\u062a\u0628\u064a\u0639\u0648\u0627",
+    "\u0643\u062a\u0627\u0644\u0648\u062c", "\u0645\u0646\u062a\u062c",
+    "\u0645\u0646\u062a\u062c\u0627\u062a", "\u0628\u0636\u0627\u0639\u0629",
+    "\u0639\u0631\u0648\u0636", "\u0639\u0631\u0636", "\u062e\u0635\u0645",
+    "\u062e\u0635\u0648\u0645\u0627\u062a", "\u0644\u0648\u0646", "\u0645\u0642\u0627\u0633",
+    "\u0642\u064a\u0627\u0633", "\u0633\u062a\u0648\u0643", "\u0645\u062e\u0632\u0648\u0646",
+    "\u0627\u0648\u0631\u062f\u0631", "\u0623\u0648\u0631\u062f\u0631",
+    "price", "cost", "available", "stock", "catalog", "product",
+    "products", "offer", "discount", "deal", "size", "color",
+)
+
+
+def _normalise_message(text: str) -> str:
+    text = (text or "").strip().lower()
+    text = _ARABIC_DIACRITICS_RE.sub("", text)
+    return text.replace("\u0623", "\u0627").replace("\u0625", "\u0627").replace("\u0622", "\u0627")
+
+
+def _contains_any(text: str, terms: tuple[str, ...]) -> bool:
+    return any(term in text for term in terms)
+
+
+def heuristic_intent_for_message(customer_message: str) -> str | None:
+    """Deterministic guardrail before the LLM router.
+
+    The LLM router is useful for fuzzy language, but product/price/support
+    words should never fall through to general chat just because routing failed.
+    """
+    text = _normalise_message(customer_message)
+    if not text:
+        return "general"
+
+    if _contains_any(text, _BOOKING_TERMS):
+        return "booking"
+    if _contains_any(text, _SUPPORT_TERMS):
+        return "support"
+    if _contains_any(text, _SALES_TERMS):
+        return "sales"
+    return None
+
+
 async def get_intent_for_message(customer_message: str, db: AsyncSession) -> str:
     """
     Classifies the user message into an intent.
@@ -40,6 +112,10 @@ async def get_intent_for_message(customer_message: str, db: AsyncSession) -> str
     """
     if not customer_message or not customer_message.strip():
         return "general"
+
+    heuristic_intent = heuristic_intent_for_message(customer_message)
+    if heuristic_intent is not None:
+        return heuristic_intent
 
     try:
         api_key = await effective_openai_key(db)
