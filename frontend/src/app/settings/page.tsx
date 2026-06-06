@@ -88,7 +88,10 @@ export default function SettingsPage() {
         const res = await apiClient.get("/billing/subscription");
         setActiveSub(res.data);
       } catch (err) {
-        console.error("Error loading subscription:", err);
+        const status = (err as { response?: { status?: number } }).response?.status;
+        if (status !== 404) {
+          console.error("Error loading subscription:", err);
+        }
         setActiveSub(null);
       } finally {
         setLoadingSub(false);

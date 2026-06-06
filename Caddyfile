@@ -4,6 +4,7 @@
 
 {$DOMAIN} {
     encode zstd gzip
+    header Permissions-Policy "geolocation=(), microphone=(), camera=()"
 
     # Backend API routes that the FastAPI backend owns
     @backendApi path /api/auth/* /api/items* /api/chat/* /api/admin/* /api/style/* /api/channels* /api/delivery* /api/escalations* /api/policies* /api/offers* /api/bookings* /api/workflows* /api/billing* /api/webhooks/* /api/handoff* /api/verification-logs* /api/voice-settings* /api/automation* /api/health /api/business-types /api/uploads/*

@@ -10,7 +10,7 @@ export async function GET(request: Request) {
     const res = await backendFetch("/billing/subscription", { token });
     if (!res.ok) {
       if (res.status === 404) {
-        return NextResponse.json(null, { status: 404 });
+        return NextResponse.json(null);
       }
       return NextResponse.json({ detail: "Failed to fetch subscription" }, { status: res.status });
     }

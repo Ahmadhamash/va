@@ -63,6 +63,11 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
         activeUser = await fetchMe(activeToken);
       }
 
+      if (!activeUser && publicPath && !activeToken) {
+        setLoading(false);
+        return;
+      }
+
       if (!activeUser) {
         activeToken = await refreshToken();
         if (activeToken) {

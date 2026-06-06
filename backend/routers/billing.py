@@ -57,7 +57,7 @@ async def list_tiers(db: AsyncSession = Depends(get_db)):
         
     return tiers
 
-@router.get("/subscription", response_model=UserSubscriptionWithTierOut)
+@router.get("/subscription", response_model=UserSubscriptionWithTierOut | None)
 async def get_subscription(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -69,12 +69,9 @@ async def get_subscription(
         .where(UserSubscription.user_id == current_user.id, UserSubscription.status == "active")
     )
     subscription = result.scalar_one_or_none()
-    
+
     if not subscription:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="No active subscription found",
-        )
+        return None
     return subscription
 
 @router.post("/upgrade", response_model=UserSubscriptionWithTierOut)
