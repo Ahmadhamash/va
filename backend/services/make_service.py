@@ -281,7 +281,7 @@ async def create_client_scenario(public_id: str, client_name: str, platform: str
         "name": f"VA Platform Integration - {client_name} ({platform})",
         "teamId": int(settings.MAKE_TEAM_ID) if settings.MAKE_TEAM_ID.isdigit() else settings.MAKE_TEAM_ID,
         "blueprint": json.dumps(blueprint),
-        "scheduling": json.dumps({"type": "independently"})
+        "scheduling": json.dumps({"type": "immediately"})
     }
 
     url = "https://eu1.make.com/api/v2/scenarios" # EU1 is the default Make API endpoint, may need adjusting based on zone (us1, eu1, eu2)
