@@ -230,15 +230,15 @@ async def create_client_scenario(public_id: str, client_name: str, platform: str
     webhook_url = f"{scheme}://{domain}/api/webhooks/generic/{public_id}"
 
     # Determine module names based on platform
-    trigger_module = "facebook-messenger:watchEvents"
-    action_module = "facebook-messenger:sendMessage"
+    trigger_module = "facebook-messenger:watchMessages"
+    action_module = "facebook-messenger:sendAMessage"
     
     if platform == "instagram":
-        trigger_module = "instagram-business:watchEvents"
-        action_module = "instagram-business:sendMessage"
+        trigger_module = "instagram-business:watchMessages"
+        action_module = "instagram-business:sendAMessage"
     elif platform == "whatsapp":
-        trigger_module = "whatsapp-business-cloud:watchEvents"
-        action_module = "whatsapp-business-cloud:sendMessage"
+        trigger_module = "whatsapp-business-cloud:watchMessages"
+        action_module = "whatsapp-business-cloud:sendAMessage"
 
     # Prepare blueprint JSON
     blueprint_json = json.dumps(SCENARIO_BLUEPRINT)
