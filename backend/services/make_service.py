@@ -306,8 +306,12 @@ async def create_client_scenario(public_id: str, client_name: str, platform: str
             scenario_id = data.get("scenario", {}).get("id")
             team_id = data.get("scenario", {}).get("teamId", settings.MAKE_TEAM_ID)
             
-            # Use a more generic URL that redirects to the correct organization edit page
-            scenario_url = f"https://eu1.make.com/scenarios/{scenario_id}/edit"
+            # Direct the user to the team scenarios dashboard, where they can click on the scenario
+            org_id = data.get("scenario", {}).get("organizationId", "")
+            if org_id and team_id:
+                scenario_url = f"https://eu1.make.com/organization/{org_id}/team/{team_id}/scenarios"
+            else:
+                scenario_url = "https://eu1.make.com/scenarios"
             
             return {
                 "scenario_id": scenario_id,
