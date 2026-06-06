@@ -12,7 +12,7 @@ from sqlalchemy.dialects import postgresql
 
 
 revision: str = "0019_encrypt_voice_settings_configs"
-down_revision: Union[str, None] = "0018_user_ai_auto_reply_enabled"
+down_revision: Union[str, None] = "0018"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
