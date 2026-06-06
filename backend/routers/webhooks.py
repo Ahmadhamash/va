@@ -223,6 +223,53 @@ async def generic_inbound(
     return {"reply": reply}
 
 
+# ─── Manychat Webhook (synchronous) ──────────────────────────────────────────
+@router.post("/webhooks/manychat/{public_id}")
+@limiter.limit("60/minute")
+async def manychat_inbound(
+    public_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db)
+):
+    integration = await get_integration(public_id, db)
+    if integration is None or integration.platform != "webhook":
+        raise HTTPException(status_code=404, detail="Unknown webhook")
+
+    try:
+        body = await request.json()
+    except Exception:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+
+    # Manychat will send 'text' and 'subscriber_id' configured in the External Request
+    text = str(body.get("text") or body.get("message") or "").strip()
+    sender_id = str(body.get("subscriber_id") or body.get("sender_id") or body.get("from") or "anonymous")
+    
+    if not text:
+        # If Manychat sends a ping or empty text, just return empty response to not break their flow
+        return {
+            "version": "v2",
+            "content": {
+                "messages": []
+            }
+        }
+
+    # Process via AI
+    reply = await sync_reply(integration, sender_id, text, db)
+    
+    # Format response strictly as Manychat expects
+    return {
+        "version": "v2",
+        "content": {
+            "messages": [
+                {
+                    "type": "text",
+                    "text": reply
+                }
+            ]
+        }
+    }
+
+
 # ─── Embeddable web widget (debounced + polling) ─────────────────────────────
 def _verify_widget_token(token: str) -> str | None:
     import jwt

@@ -383,16 +383,15 @@ async def update_platform_settings(
     )
 
 
-# ─── Make.com Automation ─────────────────────────────────────────────────────
-@router.post("/clients/{client_id}/make-scenario")
-async def generate_make_scenario(
+# ─── Manychat Webhook Generation ───────────────────────────────────────────────
+@router.post("/clients/{client_id}/manychat-webhook")
+async def generate_manychat_webhook(
     client_id: uuid.UUID,
-    platform: str = Query("messenger", description="messenger, instagram, or whatsapp"),
     _: User = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
 ):
     import secrets
-    from services.make_service import create_client_scenario
+    from config import settings
 
     client = await _get_client(client_id, db)
 
@@ -417,19 +416,12 @@ async def generate_make_scenario(
         await db.commit()
         await db.refresh(integration)
 
-    # Create the scenario via Make API
-    scenario_result = await create_client_scenario(integration.public_id, client.business_name or client.username, platform)
+    # Construct the webhook URL dynamically based on domain or config
+    domain = settings.DOMAIN or "localhost:8000"
+    scheme = "https" if "localhost" not in domain else "http"
+    webhook_url = f"{scheme}://{domain}/api/webhooks/manychat/{integration.public_id}"
 
-    if not scenario_result:
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to create Make.com scenario. Please check Make API Token, Team ID in your .env variables."
-        )
-        
-    if "error" in scenario_result:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Make API Error: {scenario_result['error']}"
-        )
-
-    return {"message": "Scenario created successfully", "scenario_url": scenario_result.get("url")}
+    return {
+        "message": "Webhook generated successfully", 
+        "webhook_url": webhook_url
+    }
