@@ -234,10 +234,10 @@ async def create_client_scenario(public_id: str, client_name: str, platform: str
     action_module = "facebook-messenger:sendMessage"
     
     if platform == "instagram":
-        trigger_module = "instagram-business:watchMessages"
+        trigger_module = "instagram-business:watchEvents"
         action_module = "instagram-business:sendMessage"
     elif platform == "whatsapp":
-        trigger_module = "whatsapp-business-cloud:watchMessages"
+        trigger_module = "whatsapp-business-cloud:watchEvents"
         action_module = "whatsapp-business-cloud:sendMessage"
 
     # Prepare blueprint JSON
