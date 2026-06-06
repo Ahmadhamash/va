@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { AppShell } from "@/components/app-shell";
 import { GradientCard } from "@/components/gradient-card";
 import { useAuthStore } from "@/store/use-auth-store";
 
@@ -285,18 +286,11 @@ export default function OnboardingPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="text-right">
-        <span className="inline-flex items-center gap-2 rounded-full bg-emeraldx-500/10 px-3 py-1 text-xs font-semibold text-emeraldx-400">
-          <CheckCircle2 className="h-3.5 w-3.5" />
-          ربط القنوات
-        </span>
-        <h1 className="mt-3 text-3xl font-semibold text-white">جهز قناة العميل</h1>
-        <p className="mt-2 text-sm text-white/50">
-          الربط المباشر لـ Messenger و Instagram يحتاج مفاتيح Meta وصلاحيات التطبيق. الربط اليدوي موجود دائماً.
-        </p>
-      </div>
-
+    <AppShell
+      title="ربط القنوات"
+      subtitle="جهز ManyChat أو اربط قناة مباشرة من Meta وواتساب والويبهوك."
+    >
+      <div className="space-y-6">
       {notice && (
         <div
           className={`flex items-start gap-3 rounded-2xl border px-4 py-3 text-sm ${
@@ -584,6 +578,7 @@ export default function OnboardingPage() {
           </div>
         )}
       </GradientCard>
-    </div>
+      </div>
+    </AppShell>
   );
 }
