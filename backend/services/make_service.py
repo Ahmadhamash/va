@@ -295,9 +295,15 @@ async def create_client_scenario(public_id: str, client_name: str, platform: str
             response = await client.post(url, json=payload, headers=headers)
             response.raise_for_status()
             data = response.json()
+            scenario_id = data.get("scenario", {}).get("id")
+            team_id = data.get("scenario", {}).get("teamId", settings.MAKE_TEAM_ID)
+            
+            # Use a more generic URL that redirects to the correct organization edit page
+            scenario_url = f"https://eu1.make.com/scenarios/{scenario_id}/edit"
+            
             return {
-                "scenario_id": data.get("scenario", {}).get("id"),
-                "url": f"https://eu1.make.com/scenario/{data.get('scenario', {}).get('id')}"
+                "scenario_id": scenario_id,
+                "url": scenario_url
             }
     except httpx.HTTPStatusError as e:
         logger.error(f"Make API error: {e.response.text}")
