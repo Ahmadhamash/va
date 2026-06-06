@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, timezone
 
 from fastapi import (
     APIRouter,
@@ -18,7 +19,7 @@ import json
 
 from database import get_db
 from middleware.auth_middleware import get_current_user
-from models import ChatSession, Message, User
+from models import ChatSession, Message, MessageDeliveryLog, User
 from schemas.chat import ChatSendResponse, MessageOut, SessionOut
 from services.ai_media import TranscriptionError
 from services.ai_chat import process_message, save_message, generate_preview_reply
@@ -40,6 +41,22 @@ class SessionNotesUpdate(BaseModel):
 
 class AutoReplyUpdate(BaseModel):
     enabled: bool
+
+
+def _utcnow_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _parse_metadata_time(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is not None:
+        parsed = parsed.astimezone(timezone.utc).replace(tzinfo=None)
+    return parsed
 
 
 async def _get_owned_session(
@@ -281,6 +298,8 @@ async def inbox_conversations(
 
     last_messages = {}
     last_handoffs = {}
+    unread_counts: dict[uuid.UUID, int] = {}
+    last_delivery_status: dict[uuid.UUID, str] = {}
     if session_ids:
         msg_rank = (
             select(
@@ -329,6 +348,45 @@ async def inbox_conversations(
             ).where(handoff_rank.c.rn == 1)
         )
         last_handoffs = {row.session_id: row for row in handoff_rows}
+
+        user_msg_rows = await db.execute(
+            select(Message.session_id, Message.created_at)
+            .where(
+                Message.session_id.in_(session_ids),
+                Message.role == "user",
+            )
+        )
+        last_viewed = {
+            s.id: _parse_metadata_time((s.metadata_ or {}).get("last_viewed_at"))
+            for s in sessions
+        }
+        for row in user_msg_rows:
+            viewed_at = last_viewed.get(row.session_id)
+            created_at = row.created_at
+            if created_at and created_at.tzinfo is not None:
+                created_at = created_at.astimezone(timezone.utc).replace(tzinfo=None)
+            if viewed_at is None or (created_at and created_at > viewed_at):
+                unread_counts[row.session_id] = unread_counts.get(row.session_id, 0) + 1
+
+        delivery_rank = (
+            select(
+                MessageDeliveryLog.session_id,
+                MessageDeliveryLog.status,
+                func.row_number()
+                .over(
+                    partition_by=MessageDeliveryLog.session_id,
+                    order_by=MessageDeliveryLog.created_at.desc(),
+                )
+                .label("rn"),
+            )
+            .where(MessageDeliveryLog.session_id.in_(session_ids))
+            .subquery()
+        )
+        delivery_rows = await db.execute(
+            select(delivery_rank.c.session_id, delivery_rank.c.status)
+            .where(delivery_rank.c.rn == 1)
+        )
+        last_delivery_status = {row.session_id: row.status for row in delivery_rows}
     
     out = []
     for s in sessions:
@@ -351,6 +409,8 @@ async def inbox_conversations(
             "lastMessage": msg.content if msg else "",
             "lastMessageAt": msg.created_at.isoformat() if msg else s.created_at.isoformat(),
             "aiSuggestedReply": handoff.ai_suggested_reply if handoff else None,
+            "unreadCount": unread_counts.get(s.id, 0),
+            "deliveryStatus": last_delivery_status.get(s.id),
         })
     return out
 
@@ -364,14 +424,19 @@ async def session_messages(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    await _get_owned_session(session_id, current_user, db)
+    session = await _get_owned_session(session_id, current_user, db)
     result = await db.execute(
         select(Message)
         .where(Message.session_id == session_id)
         .order_by(Message.created_at.asc())
         .offset(skip).limit(limit)
     )
-    return list(result.scalars().all())
+    rows = list(result.scalars().all())
+    metadata = dict(session.metadata_ or {})
+    metadata["last_viewed_at"] = _utcnow_iso()
+    session.metadata_ = metadata
+    await db.commit()
+    return rows
 
 
 @router.get("/sessions/{session_id}/notes")
@@ -432,7 +497,8 @@ async def close_session(
 @router.post("/sessions/{session_id}/agent-message", response_model=MessageOut)
 async def agent_send_message(
     session_id: uuid.UUID,
-    message: str = Form(...),
+    message: str = Form(default=""),
+    file: UploadFile | None = File(default=None),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -447,10 +513,15 @@ async def agent_send_message(
             status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized"
         )
     message = (message or "").strip()
-    if not message:
+    media_type = "text"
+    media_url: str | None = None
+    if file is not None and file.filename:
+        media_url, media_type = await save_upload(file, session.user_id)
+
+    if not message and media_type == "text":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Message is required",
+            detail="Message or file is required",
         )
     if not session.is_escalated or (session.metadata_ or {}).get("status") != "human_active":
         await _set_session_status(session, db, raw_status="assigned")
@@ -475,11 +546,43 @@ async def agent_send_message(
         adapter = get_adapter(session.channel)
         credentials = integration.credentials or {}
         try:
-            delivery = await adapter.send_text_message(
-                session.external_user_id,
-                message,
-                credentials,
-            )
+            if media_type == "image" and media_url:
+                delivery = await adapter.send_image_message(
+                    session.external_user_id,
+                    media_url,
+                    credentials,
+                )
+                if delivery.success and message:
+                    delivery = await adapter.send_text_message(
+                        session.external_user_id,
+                        message,
+                        credentials,
+                    )
+            elif media_type == "audio" and media_url:
+                delivery = await adapter.send_audio_message(
+                    session.external_user_id,
+                    media_url,
+                    credentials,
+                )
+                if delivery.success and message:
+                    delivery = await adapter.send_text_message(
+                        session.external_user_id,
+                        message,
+                        credentials,
+                    )
+            elif media_type != "text":
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"{media_type} sending is not supported for {session.channel}",
+                )
+            else:
+                delivery = await adapter.send_text_message(
+                    session.external_user_id,
+                    message,
+                    credentials,
+                )
+        except HTTPException:
+            raise
         except Exception as e:
             import logging
 
@@ -499,9 +602,9 @@ async def agent_send_message(
     msg = await save_message(
         session_id=session.id,
         role="agent",
-        content=message,
-        media_type="text",
-        media_url=None,
+        content=message or (file.filename if file else ""),
+        media_type=media_type,
+        media_url=media_url,
         db=db,
     )
 

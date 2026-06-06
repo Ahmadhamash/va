@@ -1,7 +1,7 @@
 "use client";
 
 import { create } from "zustand";
-import { persist, createJSONStorage } from "zustand/middleware";
+import { persist, createJSONStorage, type StateStorage } from "zustand/middleware";
 
 interface User {
   id: string;
@@ -21,6 +21,28 @@ interface AuthState {
   logout: () => void;
   setLoading: (loading: boolean) => void;
 }
+
+const authStorage: StateStorage = {
+  getItem: (name) => {
+    const current = localStorage.getItem(name);
+    if (current) return current;
+    if (name === "chatter_auth") {
+      const legacy = localStorage.getItem("masarjo_auth");
+      if (legacy) {
+        localStorage.setItem(name, legacy);
+        localStorage.removeItem("masarjo_auth");
+        return legacy;
+      }
+    }
+    return null;
+  },
+  setItem: (name, value) => {
+    localStorage.setItem(name, value);
+  },
+  removeItem: (name) => {
+    localStorage.removeItem(name);
+  },
+};
 
 export const useAuthStore = create<AuthState>()(
   persist(
@@ -42,8 +64,8 @@ export const useAuthStore = create<AuthState>()(
       setLoading: (loading) => set({ loading }),
     }),
     {
-      name: "masarjo_auth",
-      storage: createJSONStorage(() => localStorage),
+      name: "chatter_auth",
+      storage: createJSONStorage(() => authStorage),
     }
   )
 );

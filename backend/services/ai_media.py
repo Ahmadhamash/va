@@ -3,28 +3,16 @@ import io
 import logging
 import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
-from openai import AsyncOpenAI
 from services.settings_service import effective_openai_key
-from services.file_service import resolve_path, save_file_bytes
-import uuid
+from services.file_service import resolve_path
+from services.openai_client import get_openai_client
 
 logger = logging.getLogger("ai_media")
 TRANSCRIBE_MODEL = "whisper-1"
 OPENAI_TIMEOUT_SECONDS = 30.0
 
-# We need the shared AsyncOpenAI client getter, maybe just define a private one here or move it.
-# Actually, let's keep it here or import it from ai_chat. But ai_chat imports ai_media.
-# Let's put _client_for in a shared place or just duplicate the openai client fetch here.
-
-_clients: dict[str, AsyncOpenAI] = {}
-def _client_for(api_key: str) -> AsyncOpenAI:
-    if not api_key:
-        raise RuntimeError("OPENAI_API_KEY is not configured")
-    client = _clients.get(api_key)
-    if client is None:
-        client = AsyncOpenAI(api_key=api_key, timeout=OPENAI_TIMEOUT_SECONDS)
-        _clients[api_key] = client
-    return client
+def _client_for(api_key: str):
+    return get_openai_client(api_key, timeout=OPENAI_TIMEOUT_SECONDS)
 
 # ─── Audio ───────────────────────────────────────────────────────────────────
 class TranscriptionError(Exception):
@@ -41,26 +29,6 @@ async def transcribe_audio(media_url: str, db: AsyncSession) -> str:
     return transcript if isinstance(transcript, str) else getattr(
         transcript, "text", ""
     )
-
-
-async def generate_tts(text: str, voice: str, user_id: uuid.UUID, db: AsyncSession) -> str:
-    key = await effective_openai_key(db)
-    client = _client_for(key)
-    
-    # Generate speech audio
-    response = await client.audio.speech.create(
-        model="tts-1",
-        voice=voice,
-        input=text
-    )
-    
-    # response is an HttpxBinaryResponseContent, we can get bytes using read()
-    audio_bytes = response.read()
-    
-    # Save using the new save_file_bytes
-    # OpenAI tts-1 defaults to mp3
-    media_url, _ = await save_file_bytes(audio_bytes, ".mp3", user_id)
-    return media_url
 
 
 # ─── External media helpers (Facebook CDN etc.) ─────────────────────────────

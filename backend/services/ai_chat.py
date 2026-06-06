@@ -3,7 +3,8 @@ import logging
 import os
 import re
 import uuid
-from openai import APIError, AsyncOpenAI
+from time import monotonic
+from openai import APIError
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -28,6 +29,7 @@ from .ai_media import transcribe_audio, TranscriptionError, _encode_image_from_u
 from .humanizer import HumanizerAgent
 from .fact_guard import check_humanizer_preserved_facts
 from .retrieval_plan import supplemental_tool_plan
+from .openai_client import get_openai_client
 
 logger = logging.getLogger("ai_chat")
 HISTORY_LIMIT = 20
@@ -38,16 +40,85 @@ SERVICE_UNAVAILABLE_REPLY = "الخدمة مش متاحة حاليا، حاول 
 RETRIEVAL_ERROR_REPLY = "ما قدرت أجيب المعلومة حاليا، خليني أراجعها وأرجعلك."
 PROMPT_INJECTION_REPLY = "ما فهمت عليك، ممكن توضحلي شو بالضبط تحتاج؟"
 AI_PAUSED_REPLY = "الرد الآلي متوقف حاليا، رح يرجعلك أحد من الفريق بأقرب وقت."
+RESPONSE_CACHE_TTL_SECONDS = 300
+_response_cache: dict[tuple[str, str], tuple[float, str]] = {}
+_CACHEABLE_TOOL_PREFIXES = (
+    "get_business_info:",
+    "get_policies:",
+    "get_delivery_info:",
+    "get_payment_methods:",
+)
+_UNCACHEABLE_TOOL_PREFIXES = (
+    "get_catalog:",
+    "get_offers:",
+    "get_packages:",
+    "get_available_slots:",
+    "create_booking:",
+    "get_order_status:",
+    "escalate_to_human:",
+)
+_CONTEXTUAL_TERMS = (
+    "هذا", "هاذا", "هاد", "هاي", "هي", "هو", "سعره", "سعرها",
+    "it", "this", "that", "its", "them",
+)
 
-_clients: dict[str, AsyncOpenAI] = {}
-def _client_for(api_key: str) -> AsyncOpenAI:
-    if not api_key:
-        raise RuntimeError("OPENAI_API_KEY is not configured")
-    client = _clients.get(api_key)
-    if client is None:
-        client = AsyncOpenAI(api_key=api_key, timeout=OPENAI_TIMEOUT_SECONDS)
-        _clients[api_key] = client
-    return client
+def _client_for(api_key: str):
+    return get_openai_client(api_key, timeout=OPENAI_TIMEOUT_SECONDS)
+
+
+def _max_tokens_for_intent(intent: str, *, after_tools: bool = False) -> int:
+    if intent == "general":
+        return 280
+    if intent == "booking":
+        return 520 if after_tools else 420
+    if intent in {"sales", "support"}:
+        return 650 if after_tools else 520
+    return 500
+
+
+def _normalise_cache_text(text: str | None) -> str | None:
+    clean = re.sub(r"\s+", " ", (text or "").strip().lower())
+    if not clean or len(clean) > 300:
+        return None
+    words = clean.split()
+    if len(words) < 4 and "?" not in clean and "؟" not in clean:
+        return None
+    if any(term in clean for term in _CONTEXTUAL_TERMS):
+        return None
+    return clean
+
+
+def _get_cached_reply(user_id: uuid.UUID, text: str | None) -> str | None:
+    key_text = _normalise_cache_text(text)
+    if not key_text:
+        return None
+    key = (str(user_id), key_text)
+    cached = _response_cache.get(key)
+    if cached is None:
+        return None
+    ts, reply = cached
+    if monotonic() - ts > RESPONSE_CACHE_TTL_SECONDS:
+        _response_cache.pop(key, None)
+        return None
+    return reply
+
+
+def _store_cached_reply(
+    user_id: uuid.UUID,
+    text: str | None,
+    reply: str,
+    retrieved_data: dict,
+    action: str,
+) -> None:
+    key_text = _normalise_cache_text(text)
+    if not key_text or not reply or action not in {"sent", "modified"}:
+        return
+    keys = tuple(retrieved_data.keys())
+    if any(key.startswith(_UNCACHEABLE_TOOL_PREFIXES) for key in keys):
+        return
+    if keys and not all(key.startswith(_CACHEABLE_TOOL_PREFIXES) for key in keys):
+        return
+    _response_cache[(str(user_id), key_text)] = (monotonic(), reply)
 
 async def get_session_history(
     session_id: uuid.UUID, db: AsyncSession, limit: int = HISTORY_LIMIT
@@ -129,6 +200,7 @@ def _summarize_tool_result(result: dict) -> dict:
     for key in (
         "items", "categories", "offers", "packages", "policies",
         "delivery_zones", "available_slots", "payment_methods", "business_info",
+        "order_status",
     ):
         if key in result:
             value = result[key]
@@ -174,7 +246,7 @@ async def _generate_reply(
     from services.router import get_intent_for_message, heuristic_intents_for_message
     from config import settings
     
-    intent = await get_intent_for_message(text_content, db)
+    intent = await get_intent_for_message(text_content, db, history=history)
     intents = heuristic_intents_for_message(text_content)
     if intent not in intents:
         intents.insert(0, intent)
@@ -191,9 +263,9 @@ async def _generate_reply(
     
     if settings.LOCAL_LLM_ENABLED and intent in ("support", "general"):
         model = settings.LOCAL_LLM_MODEL
-        client = AsyncOpenAI(
+        client = get_openai_client(
+            settings.LOCAL_LLM_API_KEY or "dummy",
             base_url=settings.LOCAL_LLM_BASE_URL,
-            api_key=settings.LOCAL_LLM_API_KEY or "dummy",
             timeout=OPENAI_TIMEOUT_SECONDS,
         )
         trace["local_llm_enabled"] = True
@@ -216,7 +288,7 @@ async def _generate_reply(
         tools=allowed_tools if allowed_tools else None,
         tool_choice="auto" if allowed_tools else "none",
         temperature=dynamic_temp,
-        max_tokens=1000,
+        max_tokens=_max_tokens_for_intent(intent),
     )
 
     # Collect all tool results for the verifier
@@ -263,7 +335,7 @@ async def _generate_reply(
             tools=allowed_tools if allowed_tools else None,
             tool_choice="auto" if allowed_tools else "none",
             temperature=0.3, # Slightly higher after tools to naturalize the data
-            max_tokens=1000,
+            max_tokens=_max_tokens_for_intent(intent, after_tools=True),
         )
 
     draft = response.choices[0].message.content or "I don't have that information."
@@ -892,6 +964,23 @@ async def process_message(
             "transcription": transcription,
         }
 
+    if media_type == "text":
+        cached_reply = _get_cached_reply(user_id, user_message)
+        if cached_reply:
+            await save_message(session_id, "user", user_message, media_type, media_url, db)
+            await db.execute(
+                update(User)
+                .where(User.id == user_id, User.ai_credit_balance > 0)
+                .values(ai_credit_balance=User.ai_credit_balance - 1)
+            )
+            await save_message(session_id, "assistant", cached_reply, "text", None, db)
+            await db.commit()
+            return {
+                "reply": cached_reply,
+                "transcription": transcription,
+                "action": "cached",
+            }
+
     inbound_msg = await save_message(
         session_id,
         "user",
@@ -928,6 +1017,7 @@ async def process_message(
         user, session_id, db,
         ai_trace=ai_trace,
     )
+    _store_cached_reply(user_id, customer_text, reply, retrieved_data, action)
 
     # Deduct AI credit
     await db.execute(
@@ -1112,6 +1202,11 @@ async def process_pending(session_id: uuid.UUID, db: AsyncSession) -> dict | Non
     action = "sent"
     if combined_text and is_prompt_injection(combined_text):
         reply = PROMPT_INJECTION_REPLY
+    elif not image_urls and incoming_media_type == "text" and (
+        cached_reply := _get_cached_reply(user_id, combined_text)
+    ):
+        reply = cached_reply
+        action = "cached"
     else:
         try:
             draft_reply, retrieved_data, ai_trace = await _generate_reply(user, session_id, content, db)
@@ -1123,6 +1218,7 @@ async def process_pending(session_id: uuid.UUID, db: AsyncSession) -> dict | Non
                 user, session_id, db,
                 ai_trace=ai_trace,
             )
+            _store_cached_reply(user_id, customer_text, reply, retrieved_data, action)
         except APIError:
             logger.exception("OpenAI API error (worker)")
             reply = SERVICE_UNAVAILABLE_REPLY

@@ -8,8 +8,10 @@ export function ThemeToggle() {
   const [theme, setTheme] = useState<"dark" | "light">("dark");
 
   useEffect(() => {
-    const stored = window.localStorage.getItem("masar-theme");
+    const stored = window.localStorage.getItem("chatter-theme") || window.localStorage.getItem("masar-theme");
     const initial = stored === "light" ? "light" : "dark";
+    window.localStorage.setItem("chatter-theme", initial);
+    window.localStorage.removeItem("masar-theme");
     setTheme(initial);
     document.documentElement.classList.toggle("light", initial === "light");
     document.documentElement.classList.toggle("dark", initial === "dark");
@@ -18,7 +20,7 @@ export function ThemeToggle() {
   function toggleTheme() {
     const next = theme === "dark" ? "light" : "dark";
     setTheme(next);
-    window.localStorage.setItem("masar-theme", next);
+    window.localStorage.setItem("chatter-theme", next);
     document.documentElement.classList.toggle("light", next === "light");
     document.documentElement.classList.toggle("dark", next === "dark");
   }

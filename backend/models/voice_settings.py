@@ -2,10 +2,11 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import Boolean, Float, ForeignKey, Integer, String, func
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from database import Base
+from crypto import EncryptedJSONB
 
 
 class VoiceSettings(Base):
@@ -53,8 +54,8 @@ class VoiceSettings(Base):
         String(30), default="friendly", server_default="friendly"
     )
     # Provider-specific settings (API keys, voice IDs, etc.)
-    stt_config: Mapped[dict] = mapped_column(JSONB, default=dict, server_default="{}")
-    tts_config: Mapped[dict] = mapped_column(JSONB, default=dict, server_default="{}")
+    stt_config: Mapped[dict] = mapped_column(EncryptedJSONB, default=dict, server_default="{}")
+    tts_config: Mapped[dict] = mapped_column(EncryptedJSONB, default=dict, server_default="{}")
 
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

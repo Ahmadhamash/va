@@ -11,7 +11,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-from datetime import datetime
 from typing import Any, Optional
 
 import httpx
@@ -22,6 +21,7 @@ from services.channels.base import (
     DeliveryResult,
     MessageStatus,
     NormalizedIncomingMessage,
+    utc_now,
 )
 from services.file_service import signed_upload_url
 
@@ -113,7 +113,7 @@ class MessengerAdapter(ChannelAdapter):
             media_url=media_url,
             media_id=media_id,
             mime_type=mime_type,
-            timestamp=datetime.utcnow(),
+            timestamp=utc_now(),
             raw_payload=event,
         )
 

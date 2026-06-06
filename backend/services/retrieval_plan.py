@@ -46,6 +46,12 @@ _DELIVERY_TERMS = (
     "\u0634\u062d\u0646", "\u0627\u0633\u062a\u0644\u0627\u0645", "delivery",
     "shipping", "pickup",
 )
+_ORDER_TERMS = (
+    "\u0637\u0644\u0628\u064a", "\u0627\u0644\u0637\u0644\u0628", "\u0627\u0648\u0631\u062f\u0631",
+    "\u0623\u0648\u0631\u062f\u0631", "\u062a\u062a\u0628\u0639", "\u062a\u0627\u0628\u0639",
+    "\u062d\u0627\u0644\u0629 \u0627\u0644\u0637\u0644\u0628",
+    "order", "track", "tracking", "order status",
+)
 _POLICY_TERMS = (
     "\u0627\u0631\u062c\u0627\u0639", "\u0625\u0631\u062c\u0627\u0639", "\u0627\u0631\u062c\u0639",
     "\u062a\u0631\u062c\u064a\u0639", "\u0627\u0633\u062a\u0631\u062c\u0627\u0639",
@@ -86,6 +92,11 @@ def _booking_args(customer_message: str) -> dict:
     return {"target_date": match.group(0)} if match else {}
 
 
+def _order_args(customer_message: str) -> dict:
+    match = re.search(r"\b[A-Z0-9][A-Z0-9_-]{3,32}\b", customer_message or "", re.I)
+    return {"order_reference": match.group(0)} if match else {}
+
+
 def _dedupe(calls: list[ToolCallPlan]) -> list[ToolCallPlan]:
     seen: set[tuple[str, str]] = set()
     deduped: list[ToolCallPlan] = []
@@ -107,6 +118,8 @@ def supplemental_tool_plan(customer_message: str, intent: str) -> list[ToolCallP
         return calls
 
     if intent == "support":
+        if _has_any(text, _ORDER_TERMS):
+            calls.append(ToolCallPlan("get_order_status", _order_args(customer_message)))
         if _has_any(text, _DELIVERY_TERMS) or not _has_any(text, _POLICY_TERMS):
             calls.append(ToolCallPlan("get_delivery_info", {}))
         if _has_any(text, _POLICY_TERMS) or not _has_any(text, _DELIVERY_TERMS):

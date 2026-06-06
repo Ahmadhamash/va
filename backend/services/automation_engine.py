@@ -323,9 +323,20 @@ class AutomationEngine:
 
         elif rule.trigger_type == "session_idle":
             idle_minutes = config.get("idle_minutes", 30)
-            # In practice, this trigger would be fired by a cron job
-            # Here we just check if the config is present
-            return True
+            last_message_at = context.extra.get("last_message_at")
+            if isinstance(last_message_at, str):
+                try:
+                    last_message_at = datetime.fromisoformat(
+                        last_message_at.replace("Z", "+00:00")
+                    )
+                except ValueError:
+                    last_message_at = None
+            if not isinstance(last_message_at, datetime):
+                return False
+            if last_message_at.tzinfo is None:
+                last_message_at = last_message_at.replace(tzinfo=timezone.utc)
+            idle_seconds = (context.current_time - last_message_at).total_seconds()
+            return idle_seconds >= float(idle_minutes) * 60
 
         elif rule.trigger_type == "intent_match":
             intents = config.get("intents", [])
@@ -439,13 +450,13 @@ class AutomationEngine:
                     # Store tag in session metadata
                     if context.session_id:
                         session = await db.get(ChatSession, context.session_id)
-                        if session and session.metadata_:
-                            tags = session.metadata_.get("tags", [])
+                        if session:
+                            metadata = dict(session.metadata_ or {})
+                            tags = list(metadata.get("tags", []))
                             if tag not in tags:
                                 tags.append(tag)
-                                session.metadata_["tags"] = tags
-                        elif session:
-                            session.metadata_ = {"tags": [tag]}
+                            metadata["tags"] = tags
+                            session.metadata_ = metadata
 
             elif action_type == "set_variable":
                 key = config.get("key", "")
@@ -454,12 +465,24 @@ class AutomationEngine:
                 result["variable_set"] = {key: value}
 
             elif action_type == "send_notification":
-                # Log for now, real notification (email, Slack, etc.) TBD
-                logger.info(
-                    "Automation notification: channel=%s to=%s",
-                    config.get("channel"), config.get("to"),
+                text = context.substitute_variables(
+                    config.get("message") or config.get("text") or "Automation notification"
                 )
-                result["notification_queued"] = True
+                logger.info(
+                    "Automation notification: channel=%s to=%s text=%s",
+                    config.get("channel"), config.get("to"), text[:300],
+                )
+                if context.session_id:
+                    from services.ai_chat import save_message
+                    await save_message(
+                        context.session_id,
+                        "system",
+                        text,
+                        "text",
+                        None,
+                        db,
+                    )
+                result["notification_logged"] = True
 
             elif action_type == "pause_ai":
                 duration = config.get("duration_minutes", 30)

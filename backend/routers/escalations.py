@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
@@ -14,6 +14,10 @@ from services.ai_chat import save_message
 from services.messaging_service import send_meta_message
 
 router = APIRouter(prefix="/escalations", tags=["escalations"])
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 class AgentReplyPayload(BaseModel):
@@ -73,7 +77,7 @@ async def handle_escalation(
         )
     esc.status = payload.status
     esc.handler_notes = payload.handler_notes
-    esc.handled_at = datetime.utcnow()
+    esc.handled_at = _utcnow()
 
     # When dismissing or handling, also release the session back to AI
     if payload.status in ("handled", "dismissed"):
@@ -161,7 +165,7 @@ async def release_to_ai(
 
     # Mark escalation as handled
     esc.status = "handled"
-    esc.handled_at = datetime.utcnow()
+    esc.handled_at = _utcnow()
 
     # Release session back to AI
     session = await db.get(ChatSession, esc.session_id)

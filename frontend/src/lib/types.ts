@@ -27,6 +27,9 @@ export type Message = {
   sender: MessageSender;
   body: string;
   createdAt: string;
+  mediaType?: "text" | "image" | "audio" | "file" | string | null;
+  mediaUrl?: string | null;
+  deliveryStatus?: "pending" | "sent" | "delivered" | "read" | "failed" | string | null;
 };
 
 export type Conversation = {
@@ -39,6 +42,8 @@ export type Conversation = {
   lastMessageAt: string;
   messages: Message[];
   aiSuggestedReply?: string | null;
+  unreadCount?: number;
+  deliveryStatus?: string | null;
 };
 
 export type Product = {

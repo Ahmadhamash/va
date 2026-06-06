@@ -28,8 +28,8 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Optional
 
-from openai import AsyncOpenAI
 from sqlalchemy.ext.asyncio import AsyncSession
+from services.openai_client import get_openai_client
 
 logger = logging.getLogger("answer_verifier")
 OPENAI_TIMEOUT_SECONDS = 30.0
@@ -111,13 +111,13 @@ BANNED_PHRASES_EN = [
 
 # ── Safe fallback responses ──────────────────────────────────────────────
 SAFE_RESPONSES = {
-    "product_not_found": "للأسف ما لقيت هالمنتج عندنا حالياً. بس خليني أحولك لزميلي يقدر يساعدك أكثر! 😊",
-    "product_unavailable": "للأسف هالمنتج مش متوفر حالياً.",
-    "price_unknown": "ما عندي معلومات عن سعر هالمنتج حالياً. خليني أحولك لحدا يقدر يفيدك.",
-    "uncertain": "ما بقدر أأكدلك هالمعلومة. خليني أحولك لزميلي ليساعدك بشكل أفضل.",
-    "hallucination_blocked": "لحظة من فضلك، خليني أتأكد من المعلومة وأرجعلك.",
-    "handoff": "لحظة من فضلك، رح أحولك لزميلي ليقدر يساعدك بشكل أفضل.",
-    "off_topic": "أنا هون عشان أساعدك بمنتجاتنا وخدماتنا. كيف بقدر أساعدك؟",
+    "product_not_found": "لم أجد هذا المنتج لدينا حالياً. سأحوّلك إلى أحد الزملاء ليساعدك بدقة.",
+    "product_unavailable": "هذا المنتج غير متوفر حالياً.",
+    "price_unknown": "لا توجد لدي معلومة مؤكدة عن السعر حالياً. سأحوّلك إلى أحد الزملاء ليفيدك.",
+    "uncertain": "لا أقدر أن أؤكد هذه المعلومة الآن. سأحوّلك إلى أحد الزملاء ليساعدك بشكل أفضل.",
+    "hallucination_blocked": "لحظة من فضلك، سأتأكد من المعلومة وأعود لك.",
+    "handoff": "لحظة من فضلك، سأحوّلك إلى أحد الزملاء ليساعدك بشكل أفضل.",
+    "off_topic": "أنا هنا لمساعدتك بمنتجاتنا وخدماتنا.",
 }
 
 
@@ -194,7 +194,7 @@ class AnswerVerifier:
     """Verifies AI answers against retrieved data before sending."""
 
     def __init__(self, api_key: str):
-        self._client = AsyncOpenAI(api_key=api_key, timeout=OPENAI_TIMEOUT_SECONDS)
+        self._client = get_openai_client(api_key, timeout=OPENAI_TIMEOUT_SECONDS)
 
     async def verify(
         self,

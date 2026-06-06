@@ -9,7 +9,14 @@ export async function GET(request: Request) {
   }
 
   try {
-    const res = await backendFetch("/chat/inbox-conversations", { token });
+    const { searchParams } = new URL(request.url);
+    const params = new URLSearchParams();
+    for (const key of ["skip", "limit"]) {
+      const value = searchParams.get(key);
+      if (value) params.set(key, value);
+    }
+    const suffix = params.toString() ? `?${params.toString()}` : "";
+    const res = await backendFetch(`/chat/inbox-conversations${suffix}`, { token });
 
     if (!res.ok) {
       return NextResponse.json({ ok: false, error: "Failed to fetch conversations" }, { status: res.status });
@@ -39,6 +46,8 @@ export async function GET(request: Request) {
         lastMessage: h.lastMessage || "",
         lastMessageAt: h.lastMessageAt || new Date().toISOString(),
         aiSuggestedReply: h.aiSuggestedReply || null,
+        unreadCount: h.unreadCount || 0,
+        deliveryStatus: h.deliveryStatus || null,
         messages: [],
       };
     });

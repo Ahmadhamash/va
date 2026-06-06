@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime
+from decimal import Decimal
 
 from sqlalchemy import Boolean, String, Text, func, ForeignKey, Numeric
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -17,7 +18,7 @@ class SubscriptionTier(Base):
     )
     name: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    price_monthly: Mapped[float] = mapped_column(Numeric(10, 2), default=0.0, server_default="0.0")
+    price_monthly: Mapped[Decimal] = mapped_column(Numeric(10, 2), default=Decimal("0.00"), server_default="0.0")
     features: Mapped[list | dict] = mapped_column(JSONB, default=list, server_default="[]")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())

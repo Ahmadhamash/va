@@ -1,7 +1,7 @@
 from functools import lru_cache
 from typing import List
 
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -100,6 +100,16 @@ class Settings(BaseSettings):
         if len(v) < 32:
             raise ValueError("SECRET_KEY must be at least 32 characters long")
         return v
+
+    @model_validator(mode="after")
+    def _validate_production_cors(self):
+        if self.APP_ENV.lower() == "production":
+            origins = [origin.strip() for origin in self.CORS_ORIGINS if origin.strip()]
+            if not origins:
+                raise ValueError("CORS_ORIGINS must not be empty in production")
+            if "*" in origins:
+                raise ValueError("CORS_ORIGINS must not include '*' in production")
+        return self
 
 
 @lru_cache

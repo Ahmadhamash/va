@@ -306,7 +306,10 @@ async def widget_poll(
     if integration is None or integration.platform != "widget":
         return JSONResponse({"detail": "Unknown widget"}, status_code=404, headers=_CORS)
 
+    auth_header = request.headers.get("authorization", "")
     token = request.query_params.get("token")
+    if auth_header.lower().startswith("bearer "):
+        token = auth_header.split(" ", 1)[1].strip()
     visitor = _verify_widget_token(token)
     
     if not visitor:
@@ -364,12 +367,12 @@ _WIDGET_JS = """(function(){
   var MSG=BASE+"/webhooks/widget/"+PID+"/message";
   var POLL=BASE+"/webhooks/widget/"+PID+"/poll";
   var INIT=BASE+"/webhooks/widget/"+PID+"/init";
-  var token=localStorage.getItem("ai_widget_token");
+  var token=null;
   
   function initToken(cb){
     if(token) return cb();
     fetch(INIT,{method:"POST"}).then(function(r){return r.json();}).then(function(d){
-      token=d.token; localStorage.setItem("ai_widget_token", token); cb();
+      token=d.token; cb();
     }).catch(function(){});
   }
 
@@ -385,7 +388,7 @@ _WIDGET_JS = """(function(){
   btn.onclick=function(){open=!open;panel.style.display=open?"flex":"none";if(open){initToken(poll);}};
   function log(){return panel.querySelector("#aiw-log");}
   function add(t,me,id){if(id){if(seen[id])return;seen[id]=1;}var d=document.createElement("div");d.dir="auto";d.style.cssText="margin:6px 0;padding:9px 12px;border-radius:12px;max-width:82%;white-space:pre-wrap;word-break:break-word;"+(me?"background:#2f56d6;color:#fff;margin-left:auto":"background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.1)");d.textContent=t;log().appendChild(d);log().scrollTop=log().scrollHeight;}
-  function poll(){if(!token)return;fetch(POLL+"?token="+encodeURIComponent(token)).then(function(r){return r.json();}).then(function(d){(d.messages||[]).forEach(function(m){add(m.content,m.role==="user",m.id);});}).catch(function(){});}
+  function poll(){if(!token)return;fetch(POLL,{headers:{"Authorization":"Bearer "+token}}).then(function(r){return r.json();}).then(function(d){(d.messages||[]).forEach(function(m){add(m.content,m.role==="user",m.id);});}).catch(function(){});}
   function send(){
     var i=panel.querySelector("#aiw-in");var v=i.value.trim();if(!v)return;
     initToken(function(){

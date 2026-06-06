@@ -1,8 +1,15 @@
+"use client";
+
 import Link from "next/link";
 import { Bell, MessageCircle, Search, Menu } from "lucide-react";
+import { useMemo, useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { apiClient } from "@/lib/api-client";
+import { useAuthStore } from "@/store/use-auth-store";
 
 export function Topbar({
   title,
@@ -15,6 +22,29 @@ export function Topbar({
   actionLabel?: string;
   onMenuToggle?: () => void;
 }) {
+  const [query, setQuery] = useState("");
+  const router = useRouter();
+  const { token } = useAuthStore();
+  const { data: conversations = [] } = useQuery({
+    queryKey: ["topbar-conversations"],
+    queryFn: async () => {
+      const res = await apiClient.get("/conversations?limit=100");
+      return res.data.conversations || [];
+    },
+    enabled: !!token,
+    refetchInterval: 15000,
+  });
+  const notificationCount = useMemo(() => {
+    return conversations.filter((item: any) => item.status === "NEEDS_HUMAN").length
+      + conversations.reduce((sum: number, item: any) => sum + (item.unreadCount || 0), 0);
+  }, [conversations]);
+
+  function submitSearch(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const clean = query.trim();
+    router.push(clean ? `/inbox?q=${encodeURIComponent(clean)}` : "/inbox");
+  }
+
   return (
     <header className="sticky top-0 z-20 border-b border-white/10 bg-ink-950/70 backdrop-blur-2xl">
       <div className="flex min-h-20 items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
@@ -33,14 +63,21 @@ export function Topbar({
           </div>
         </div>
         <div className="hidden min-w-80 items-center gap-3 md:flex">
-          <div className="relative flex-1">
+          <form className="relative flex-1" onSubmit={submitSearch}>
             <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/30" />
-            <Input className="pr-9" placeholder="ابحث عن عميل أو منتج..." />
-          </div>
+            <Input className="pr-9" placeholder="ابحث عن عميل أو محادثة..." value={query} onChange={(event) => setQuery(event.target.value)} />
+          </form>
           <ThemeToggle />
-          <Button variant="secondary" size="sm" aria-label="Notifications">
-            <Bell className="h-4 w-4" />
-          </Button>
+          <Link href="/inbox?status=NEEDS_HUMAN" aria-label="Notifications">
+            <Button variant="secondary" size="sm" className="relative">
+              <Bell className="h-4 w-4" />
+              {notificationCount > 0 ? (
+                <span className="absolute -left-1 -top-1 min-w-4 rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+                  {notificationCount > 99 ? "99+" : notificationCount}
+                </span>
+              ) : null}
+            </Button>
+          </Link>
           <Link href="/onboarding">
             <Button size="sm">
               <MessageCircle className="h-4 w-4" />

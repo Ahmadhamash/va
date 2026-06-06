@@ -1,8 +1,8 @@
 import logging
 import re
-from openai import AsyncOpenAI
 from sqlalchemy.ext.asyncio import AsyncSession
 from services.settings_service import effective_openai_key
+from services.openai_client import get_openai_client
 
 logger = logging.getLogger("router")
 ROUTER_TIMEOUT_SECONDS = 15.0
@@ -23,16 +23,8 @@ Your ONLY job is to read the customer's message and classify their intent into e
 Output ONLY the category name in lowercase (sales, support, booking, general) and nothing else. No punctuation, no explanation.
 """
 
-# Keep an internal cache of clients to match ai_chat.py
-_clients: dict[str, AsyncOpenAI] = {}
-def _client_for(api_key: str) -> AsyncOpenAI:
-    if not api_key:
-        raise RuntimeError("OPENAI_API_KEY is not configured")
-    client = _clients.get(api_key)
-    if client is None:
-        client = AsyncOpenAI(api_key=api_key, timeout=ROUTER_TIMEOUT_SECONDS)
-        _clients[api_key] = client
-    return client
+def _client_for(api_key: str):
+    return get_openai_client(api_key, timeout=ROUTER_TIMEOUT_SECONDS)
 
 
 _ARABIC_DIACRITICS_RE = re.compile(r"[\u064b-\u065f\u0670\u0640]")
@@ -58,9 +50,12 @@ _SUPPORT_TERMS = (
     "\u0633\u0627\u0639\u0627\u062a", "\u0633\u0627\u0639\u0629", "\u0627\u0644\u062f\u0648\u0627\u0645",
     "\u062a\u0641\u062a\u062d", "\u062a\u0633\u0643\u0631", "\u0641\u0631\u0639", "\u0641\u0631\u0648\u0639",
     "\u062a\u0648\u0627\u0635\u0644", "\u0631\u0642\u0645\u0643\u0645", "\u0627\u0644\u0647\u0627\u062a\u0641",
+    "\u062a\u062a\u0628\u0639", "\u062a\u0627\u0628\u0639", "\u062d\u0627\u0644\u0629 \u0627\u0644\u0637\u0644\u0628",
+    "\u0648\u064a\u0646 \u0627\u0644\u0637\u0644\u0628", "\u0648\u0635\u0644 \u0637\u0644\u0628\u064a",
     "delivery", "shipping", "refund", "return", "exchange", "cancel",
     "complaint", "problem", "warranty", "policy", "location", "address",
     "hours", "opening", "closing", "branch", "contact", "phone",
+    "track order", "tracking", "order status",
 )
 
 _SALES_TERMS = (
@@ -79,6 +74,12 @@ _SALES_TERMS = (
     "\u0627\u0648\u0631\u062f\u0631", "\u0623\u0648\u0631\u062f\u0631",
     "price", "cost", "available", "stock", "catalog", "product",
     "products", "offer", "discount", "deal", "size", "color",
+)
+
+_FOLLOWUP_TERMS = (
+    "\u0637\u064a\u0628", "\u0648\u0643\u064a\u0641", "\u0643\u0645\u0627\u0646",
+    "\u0628\u0631\u0636\u0648", "\u0648\u0627\u064a\u0634", "\u0648\u0634\u0648",
+    "and", "what about", "also", "how about",
 )
 
 
@@ -127,7 +128,34 @@ def heuristic_intents_for_message(customer_message: str) -> list[str]:
     return intents or ["general"]
 
 
-async def get_intent_for_message(customer_message: str, db: AsyncSession) -> str:
+def _intent_from_history(history: list[dict] | None) -> str | None:
+    if not history:
+        return None
+    for item in reversed(history[-8:]):
+        content = item.get("content") if isinstance(item, dict) else None
+        if not content:
+            continue
+        intent = heuristic_intent_for_message(str(content))
+        if intent in {"sales", "support", "booking"}:
+            return intent
+    return None
+
+
+def _is_followup(customer_message: str) -> bool:
+    text = _normalise_message(customer_message)
+    if not text:
+        return False
+    if len(text.split()) <= 4:
+        return True
+    return _contains_any(text, _FOLLOWUP_TERMS)
+
+
+async def get_intent_for_message(
+    customer_message: str,
+    db: AsyncSession,
+    *,
+    history: list[dict] | None = None,
+) -> str:
     """
     Classifies the user message into an intent.
     Uses gpt-4o-mini as a fast, cheap router.
@@ -138,6 +166,11 @@ async def get_intent_for_message(customer_message: str, db: AsyncSession) -> str
     heuristic_intent = heuristic_intent_for_message(customer_message)
     if heuristic_intent is not None:
         return heuristic_intent
+
+    if _is_followup(customer_message):
+        history_intent = _intent_from_history(history)
+        if history_intent is not None:
+            return history_intent
 
     try:
         api_key = await effective_openai_key(db)

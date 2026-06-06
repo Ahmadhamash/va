@@ -144,6 +144,27 @@ TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "get_order_status",
+            "description": (
+                "Look up order or delivery status when the customer asks to "
+                "track an order, asks where their order is, or provides an "
+                "order number/reference. If no order tracking data exists, "
+                "return that clearly and escalate instead of guessing."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "order_reference": {
+                        "type": "string",
+                        "description": "Order number/reference mentioned by the customer, if any",
+                    },
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "get_available_slots",
             "description": (
                 "Get available booking/appointment slots. "
@@ -201,7 +222,7 @@ TOOLS = [
 
 _INTENT_TOOL_NAMES = {
     "sales": {"get_catalog", "get_offers", "get_packages", "get_payment_methods"},
-    "support": {"get_delivery_info", "get_policies", "get_business_info"},
+    "support": {"get_delivery_info", "get_policies", "get_business_info", "get_order_status"},
     "booking": {"get_available_slots", "create_booking"},
     "general": set(),
 }
@@ -438,6 +459,9 @@ async def execute_db_function(
         "get_packages": lambda: _exec_get_packages(user_id, db),
         "get_policies": lambda: _exec_get_policies(user_id, db),
         "get_business_info": lambda: _exec_get_business_info(user_id, db),
+        "get_order_status": lambda: _exec_get_order_status(
+            func_args, user_id, session_id, db
+        ),
         "get_available_slots": lambda: _exec_get_available_slots(func_args, user_id, db),
         "create_booking": lambda: _exec_create_booking(func_args, user_id, session_id, db),
         "get_payment_methods": lambda: _exec_get_payment_methods(user_id, db),
@@ -716,6 +740,62 @@ async def _exec_get_business_info(user_id: uuid.UUID, db: AsyncSession) -> dict:
             "No general business info policies configured"
             if not policies
             else ""
+        ),
+    }
+
+
+async def _exec_get_order_status(
+    func_args: dict,
+    user_id: uuid.UUID,
+    session_id: uuid.UUID | None,
+    db: AsyncSession,
+) -> dict:
+    reference = str(func_args.get("order_reference") or "").strip()
+    session = await db.get(ChatSession, session_id) if session_id else None
+    metadata = session.metadata_ if session and isinstance(session.metadata_, dict) else {}
+    order_sources = [
+        metadata.get("orders"),
+        metadata.get("order_statuses"),
+        metadata.get("order_tracking"),
+    ]
+
+    for source in order_sources:
+        if isinstance(source, dict):
+            orders = list(source.values())
+        elif isinstance(source, list):
+            orders = source
+        else:
+            orders = []
+
+        for order in orders:
+            if not isinstance(order, dict):
+                continue
+            identifiers = {
+                str(order.get("id") or ""),
+                str(order.get("order_id") or ""),
+                str(order.get("reference") or ""),
+                str(order.get("tracking_number") or ""),
+            }
+            if reference and reference in identifiers:
+                return {
+                    "matched": True,
+                    "order_reference": reference,
+                    "order_status": order,
+                    "instruction": "Answer only from this order_status object.",
+                }
+
+    return {
+        "matched": False,
+        "order_reference": reference,
+        "order_status": None,
+        "note": (
+            "No order tracking integration or matching order data is configured "
+            "for this conversation."
+        ),
+        "instruction": (
+            "Do not invent an order status, delivery ETA, carrier, or tracking "
+            "number. Say you cannot see the order status and escalate to a "
+            "human if the customer needs follow-up."
         ),
     }
 

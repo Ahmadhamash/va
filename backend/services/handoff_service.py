@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from sqlalchemy import func, select
@@ -59,7 +59,7 @@ def _append_full_reason(
 
 
 def _utcnow() -> datetime:
-    return datetime.utcnow()
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 async def create_handoff(
@@ -155,8 +155,13 @@ async def assign_handoff(
     )
     db.add(assignment)
     handoff.status = "assigned"
-    await db.commit()
-    await db.refresh(assignment)
+    try:
+        await db.commit()
+        await db.refresh(assignment)
+    except Exception:
+        await db.rollback()
+        logger.exception("Failed to assign handoff %s to agent %s", handoff_id, agent_id)
+        raise
 
     logger.info(
         "Handoff %s assigned to agent %s via %s",
@@ -195,21 +200,21 @@ async def auto_assign_handoff(
         return None
 
     if method == "least_active":
-        # Count active assignments per agent
+        counts_stmt = (
+            select(HandoffAssignment.agent_id, func.count(HandoffAssignment.id))
+            .join(HandoffSession)
+            .where(
+                HandoffAssignment.resolved_at.is_(None),
+                HandoffSession.status.in_(["assigned", "waiting_customer", "waiting_agent"]),
+            )
+            .group_by(HandoffAssignment.agent_id)
+        )
+        active_counts = dict((await db.execute(counts_stmt)).all())
+
         best_agent = None
         min_count = float("inf")
         for agent in agents:
-            count_stmt = (
-                select(func.count())
-                .select_from(HandoffAssignment)
-                .join(HandoffSession)
-                .where(
-                    HandoffAssignment.agent_id == agent.id,
-                    HandoffAssignment.resolved_at.is_(None),
-                    HandoffSession.status.in_(["assigned", "waiting_customer", "waiting_agent"]),
-                )
-            )
-            count = (await db.execute(count_stmt)).scalar() or 0
+            count = active_counts.get(agent.id, 0)
             if count < min_count and count < agent.max_concurrent_handoffs:
                 min_count = count
                 best_agent = agent
@@ -220,17 +225,14 @@ async def auto_assign_handoff(
             )
 
     elif method == "round_robin":
-        # Pick the agent who was assigned least recently
+        counts_stmt = (
+            select(HandoffAssignment.agent_id, func.count(HandoffAssignment.id))
+            .where(HandoffAssignment.resolved_at.is_(None))
+            .group_by(HandoffAssignment.agent_id)
+        )
+        active_counts = dict((await db.execute(counts_stmt)).all())
         for agent in agents:
-            count_stmt = (
-                select(func.count())
-                .select_from(HandoffAssignment)
-                .where(
-                    HandoffAssignment.agent_id == agent.id,
-                    HandoffAssignment.resolved_at.is_(None),
-                )
-            )
-            count = (await db.execute(count_stmt)).scalar() or 0
+            count = active_counts.get(agent.id, 0)
             if count < agent.max_concurrent_handoffs:
                 return await assign_handoff(
                     handoff_id, agent.id, db, method=method

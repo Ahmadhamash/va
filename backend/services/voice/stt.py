@@ -11,7 +11,7 @@ import logging
 from abc import ABC, abstractmethod
 from typing import Optional
 
-from openai import AsyncOpenAI
+from services.openai_client import get_openai_client
 
 logger = logging.getLogger("voice.stt")
 OPENAI_TIMEOUT_SECONDS = 30.0
@@ -58,7 +58,7 @@ class OpenAISTT(STTProvider):
     """OpenAI Whisper speech-to-text."""
 
     def __init__(self, api_key: str):
-        self._client = AsyncOpenAI(api_key=api_key, timeout=OPENAI_TIMEOUT_SECONDS)
+        self._client = get_openai_client(api_key, timeout=OPENAI_TIMEOUT_SECONDS)
 
     @property
     def provider_name(self) -> str:

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useEffect, useRef } from "react";
-import { Bot, Facebook, Instagram, MessageCircle, Pencil, RefreshCw, Send, StickyNote, UserCheck, XCircle, Webhook, Code, Check } from "lucide-react";
+import { Bot, Facebook, Instagram, MessageCircle, Paperclip, Pencil, RefreshCw, Send, StickyNote, UserCheck, XCircle, Webhook, Code, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/status-badge";
 import type { ChannelProvider, Conversation, ConversationStatus, Message } from "@/lib/types";
@@ -35,7 +35,59 @@ function ChannelIcon({ channel }: { channel: ChannelProvider }) {
   return <Icon className="h-4 w-4 text-emeraldx-400" />;
 }
 
-function MessageBubble({ message }: { message: Message }) {
+function MediaAttachment({ message, token }: { message: Message; token: string | null }) {
+  const [objectUrl, setObjectUrl] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+  const mediaUrl = message.mediaUrl;
+
+  useEffect(() => {
+    if (!mediaUrl || !mediaUrl.startsWith("/api/uploads")) {
+      setObjectUrl(null);
+      setFailed(false);
+      return;
+    }
+    let cancelled = false;
+    let url: string | null = null;
+    fetch(mediaUrl, {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error("media fetch failed");
+        return res.blob();
+      })
+      .then((blob) => {
+        if (cancelled) return;
+        url = URL.createObjectURL(blob);
+        setObjectUrl(url);
+      })
+      .catch(() => {
+        if (!cancelled) setFailed(true);
+      });
+    return () => {
+      cancelled = true;
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [mediaUrl, token]);
+
+  if (!mediaUrl) return null;
+  const src = mediaUrl.startsWith("/api/uploads") ? objectUrl : mediaUrl;
+  if (!src || failed) {
+    return <div className="mb-2 rounded-xl bg-black/10 px-3 py-2 text-xs opacity-70">مرفق محفوظ</div>;
+  }
+  if (message.mediaType === "image") {
+    return <img src={src} alt="" className="mb-2 max-h-72 rounded-2xl object-contain" />;
+  }
+  if (message.mediaType === "audio") {
+    return <audio src={src} controls className="mb-2 w-full" />;
+  }
+  return (
+    <a href={src} target="_blank" rel="noreferrer" className="mb-2 block rounded-xl bg-black/10 px-3 py-2 text-xs underline">
+      فتح المرفق
+    </a>
+  );
+}
+
+function MessageBubble({ message, token }: { message: Message; token: string | null }) {
   const fromCustomer = message.sender === "CUSTOMER";
   const fromSystem = message.sender === "SYSTEM";
   return (
@@ -49,8 +101,10 @@ function MessageBubble({ message }: { message: Message }) {
           fromSystem && "mx-auto max-w-[86%] rounded-2xl border border-white/10 bg-white/[0.04] text-center text-white/45"
         )}
       >
+        <MediaAttachment message={message} token={token} />
         <div className="break-words whitespace-pre-wrap">{message.body}</div>
-        <div className={cn("mt-1.5 text-[10px] text-right font-medium tracking-tight", message.sender === "AI" ? "text-ink-950/50" : "text-white/30")}>
+        <div className={cn("mt-1.5 flex items-center justify-end gap-1 text-[10px] font-medium tracking-tight", message.sender === "AI" ? "text-ink-950/50" : "text-white/30")}>
+          {message.sender === "HUMAN" && message.deliveryStatus ? <span>{message.deliveryStatus}</span> : null}
           {formatTime(message.createdAt)}
         </div>
       </div>
@@ -78,7 +132,9 @@ export function ChatWindow({
   const [sending, setSending] = useState(false);
   const [statusUpdating, setStatusUpdating] = useState(false);
   const [savingNote, setSavingNote] = useState(false);
+  const [attachment, setAttachment] = useState<File | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Sync props to state
   useEffect(() => {
@@ -139,20 +195,25 @@ export function ChatWindow({
     return variants[version % variants.length];
   }, [conversation.aiSuggestedReply, status, version]);
 
-  async function addMessage(sender: Message["sender"], body: string) {
+  async function addMessage(sender: Message["sender"], body: string, file?: File | null) {
     const clean = body.trim();
-    if (!clean || sending) return false;
+    if ((!clean && !file) || sending) return false;
 
     if (sender === "HUMAN" || sender === "AI") {
       setSending(true);
       try {
+        const bodyPayload = file ? new FormData() : JSON.stringify({ message: clean });
+        if (file && bodyPayload instanceof FormData) {
+          bodyPayload.append("message", clean);
+          bodyPayload.append("file", file);
+        }
         const res = await fetch(`/api/conversations/${conversation.id}/message`, {
           method: "POST",
           headers: {
-            "Content-Type": "application/json",
+            ...(!file ? { "Content-Type": "application/json" } : {}),
             ...(token ? { Authorization: "Bearer " + token } : {})
           },
-          body: JSON.stringify({ message: clean })
+          body: bodyPayload
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok || data.ok === false) {
@@ -165,7 +226,10 @@ export function ChatWindow({
           conversationId: conversation.id,
           sender,
           body: saved.content || clean,
-          createdAt: saved.created_at || new Date().toISOString()
+          createdAt: saved.created_at || new Date().toISOString(),
+          mediaType: saved.media_type || null,
+          mediaUrl: saved.media_url || null,
+          deliveryStatus: "sent"
         };
         setMessages((items) => [...items, newMessage]);
         onNewMessage?.(conversation.id, newMessage);
@@ -225,13 +289,16 @@ export function ChatWindow({
   const isReplyLocked = isAiHandling || isClosed;
 
   async function sendDraft() {
-    if (isReplyLocked || sending || statusUpdating || !draft.trim()) return;
+    if (isReplyLocked || sending || statusUpdating || (!draft.trim() && !attachment)) return;
     const currentDraft = draft;
+    const currentAttachment = attachment;
     const claimed = await updateStatus("HUMAN_ACTIVE", "takeover");
     if (!claimed) return;
-    const sent = await addMessage("HUMAN", currentDraft);
+    const sent = await addMessage("HUMAN", currentDraft, currentAttachment);
     if (sent) {
       setDraft("");
+      setAttachment(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
     }
   }
 
@@ -306,7 +373,7 @@ export function ChatWindow({
 
         <div className="flex-1 space-y-4 overflow-y-auto p-5 custom-scrollbar">
           {messages.map((message) => (
-            <MessageBubble key={message.id} message={message} />
+            <MessageBubble key={message.id} message={message} token={token} />
           ))}
           <div ref={messagesEndRef} />
         </div>
@@ -333,7 +400,39 @@ export function ChatWindow({
             </div>
             <p className="text-sm leading-6 text-white/68">{suggestedReply}</p>
           </div>
+          {sending ? <div className="mb-2 text-xs text-emeraldx-300">جاري الإرسال...</div> : null}
+          {attachment ? (
+            <div className="mb-2 flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/60">
+              <span className="truncate">{attachment.name}</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setAttachment(null);
+                  if (fileInputRef.current) fileInputRef.current.value = "";
+                }}
+                className="text-white/40 hover:text-white"
+              >
+                إزالة
+              </button>
+            </div>
+          ) : null}
           <div className="flex gap-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              className="hidden"
+              accept="image/*,audio/*,.pdf,.doc,.docx"
+              onChange={(event) => setAttachment(event.target.files?.[0] || null)}
+            />
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={isReplyLocked || sending || statusUpdating}
+              onClick={() => fileInputRef.current?.click()}
+              aria-label="إرفاق ملف"
+            >
+              <Paperclip className="h-4 w-4" />
+            </Button>
             <Textarea
               value={draft} 
               onChange={(event) => setDraft(event.target.value)} 
@@ -348,7 +447,7 @@ export function ChatWindow({
               className="min-h-11 max-h-32 flex-1 resize-none py-2.5"
             />
             <Button
-              disabled={isReplyLocked || !draft.trim() || sending || statusUpdating}
+              disabled={isReplyLocked || (!draft.trim() && !attachment) || sending || statusUpdating}
               onClick={() => void sendDraft()}
             >
               <Send className="h-4 w-4" />

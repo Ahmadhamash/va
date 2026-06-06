@@ -9,17 +9,25 @@ import type { Conversation, Message, ConversationStatus } from "@/lib/types";
 import { Loader2 } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
+import { useSearchParams } from "next/navigation";
 
 export default function InboxPage() {
   const [selectedId, setSelectedId] = useState("");
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
+  const [limit, setLimit] = useState(50);
   const { token } = useAuthStore();
   const queryClient = useQueryClient();
+  const searchParams = useSearchParams();
+  const initialQuery = searchParams.get("q") || "";
+  const rawStatus = searchParams.get("status") || "ALL";
+  const initialFilter = (["ALL", "AI_HANDLING", "NEEDS_HUMAN", "HUMAN_ACTIVE", "CLOSED"].includes(rawStatus)
+    ? rawStatus
+    : "ALL") as ConversationStatus | "ALL";
 
   const { data: conversations = [], isLoading: loading } = useQuery({
-    queryKey: ["conversations"],
+    queryKey: ["conversations", limit],
     queryFn: async () => {
-      const res = await apiClient.get("/conversations");
+      const res = await apiClient.get(`/conversations?limit=${limit}`);
       const data = res.data.conversations || [];
       return [...data].sort(
         (a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime()
@@ -59,7 +67,7 @@ export default function InboxPage() {
   }, [conversationDetails]);
 
   function handleStatusChange(id: string, newStatus: ConversationStatus) {
-    queryClient.setQueryData(["conversations"], (prev: Conversation[] | undefined) => {
+    queryClient.setQueryData(["conversations", limit], (prev: Conversation[] | undefined) => {
       if (!prev) return prev;
       return prev.map(c => (c.id === id ? { ...c, status: newStatus } : c));
     });
@@ -69,7 +77,7 @@ export default function InboxPage() {
   }
 
   function handleNewMessage(id: string, message: Message) {
-    queryClient.setQueryData(["conversations"], (prev: Conversation[] | undefined) => {
+    queryClient.setQueryData(["conversations", limit], (prev: Conversation[] | undefined) => {
       if (!prev) return prev;
       const updated = prev.map(c =>
         c.id === id
@@ -90,7 +98,8 @@ export default function InboxPage() {
             ...prev,
             lastMessage: message.body,
             lastMessageAt: message.createdAt,
-            messages: [...(prev.messages || []), message]
+            messages: [...(prev.messages || []), message],
+            unreadCount: 0
           }
         : prev
     );
@@ -105,7 +114,16 @@ export default function InboxPage() {
           </div>
         ) : (
           <>
-            <ConversationList conversations={conversations} selectedId={selectedId} onSelect={setSelectedId} />
+            <ConversationList
+              conversations={conversations}
+              selectedId={selectedId}
+              onSelect={setSelectedId}
+              initialQuery={initialQuery}
+              initialFilter={initialFilter}
+              canLoadMore={conversations.length >= limit}
+              loadingMore={loading}
+              onLoadMore={() => setLimit((value) => value + 50)}
+            />
             {conversations.length === 0 ? (
               <div className="flex h-96 flex-col items-center justify-center rounded-3xl border border-white/10 bg-white/[0.02] text-white/45">
                 <p>لا توجد محادثات نشطة حالياً.</p>

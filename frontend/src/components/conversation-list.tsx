@@ -62,14 +62,24 @@ function ChannelIcon({ channel }: { channel: ChannelProvider }) {
 export function ConversationList({
   conversations,
   selectedId,
-  onSelect
+  onSelect,
+  initialQuery = "",
+  initialFilter = "ALL",
+  onLoadMore,
+  canLoadMore = false,
+  loadingMore = false
 }: {
   conversations: Conversation[];
   selectedId: string;
   onSelect: (id: string) => void;
+  initialQuery?: string;
+  initialFilter?: "ALL" | ConversationStatus;
+  onLoadMore?: () => void;
+  canLoadMore?: boolean;
+  loadingMore?: boolean;
 }) {
-  const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<"ALL" | ConversationStatus>("ALL");
+  const [query, setQuery] = useState(initialQuery);
+  const [filter, setFilter] = useState<"ALL" | ConversationStatus>(initialFilter);
 
   const visible = useMemo(() => {
     return conversations.filter((conversation) => {
@@ -129,12 +139,29 @@ export function ConversationList({
               <span className="text-xs text-white/35">{formatTime(conversation.lastMessageAt)}</span>
             </div>
             <p className="mt-3 line-clamp-2 text-sm leading-6 text-white/52">{conversation.lastMessage}</p>
-            <div className="mt-3">
+            <div className="mt-3 flex items-center justify-between gap-2">
               <StatusBadge status={conversation.status} />
+              {(conversation.unreadCount || 0) > 0 ? (
+                <span className="min-w-6 rounded-full bg-emeraldx-500 px-2 py-0.5 text-center text-xs font-bold text-ink-950">
+                  {conversation.unreadCount}
+                </span>
+              ) : conversation.deliveryStatus ? (
+                <span className="text-[10px] text-white/30">{conversation.deliveryStatus}</span>
+              ) : null}
             </div>
           </button>
         ))}
         {visible.length === 0 ? <div className="p-8 text-center text-sm text-white/45">لا توجد محادثات مطابقة.</div> : null}
+        {canLoadMore ? (
+          <button
+            type="button"
+            onClick={onLoadMore}
+            disabled={loadingMore}
+            className="mt-3 w-full rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white/60 transition hover:bg-white/10 disabled:opacity-50"
+          >
+            {loadingMore ? "جاري التحميل..." : "تحميل المزيد"}
+          </button>
+        ) : null}
       </div>
     </div>
   );

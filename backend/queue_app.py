@@ -112,8 +112,9 @@ async def process_session_task(ctx, session_id: str, seq: int) -> str:
                         final_delivery = None
                         for i, bubble in enumerate(bubbles):
                             await adapter.send_typing_indicator(external_id, credentials)
-                            # Simulate typing time based on length (min 1.0s, max 3.5s)
-                            typing_delay = min(3.5, max(1.0, len(bubble) / 40.0))
+                            # Keep typing presence brief so worker slots are not
+                            # held for seconds per bubble under load.
+                            typing_delay = min(0.8, max(0.15, len(bubble) / 180.0))
                             await asyncio.sleep(typing_delay)
                             
                             delivery = await adapter.send_text_message(

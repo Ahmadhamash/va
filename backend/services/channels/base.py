@@ -4,8 +4,12 @@ from __future__ import annotations
 import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Optional
+
+
+def utc_now() -> datetime:
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 @dataclass
@@ -25,7 +29,7 @@ class NormalizedIncomingMessage:
     media_id: Optional[str] = None
     mime_type: Optional[str] = None
     url: Optional[str] = None
-    timestamp: datetime = field(default_factory=datetime.utcnow)
+    timestamp: datetime = field(default_factory=utc_now)
     raw_payload: dict = field(default_factory=dict)
 
 
@@ -62,7 +66,7 @@ class MessageStatus:
 
     channel_message_id: str
     status: str  # sent | delivered | read | failed
-    timestamp: datetime = field(default_factory=datetime.utcnow)
+    timestamp: datetime = field(default_factory=utc_now)
     error_code: Optional[str] = None
     error_message: Optional[str] = None
     raw_payload: dict = field(default_factory=dict)

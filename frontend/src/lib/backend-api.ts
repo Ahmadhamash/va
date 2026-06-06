@@ -14,8 +14,12 @@ interface FetchOptions {
 
 export async function backendFetch(path: string, opts: FetchOptions = {}) {
   const url = `${BACKEND_BASE}/api${path}`;
+  const isFormData = typeof FormData !== "undefined" && opts.body instanceof FormData;
+  const isUrlEncoded = typeof URLSearchParams !== "undefined" && opts.body instanceof URLSearchParams;
   const headers: Record<string, string> = {
-    "Content-Type": "application/json",
+    ...(!isFormData
+      ? { "Content-Type": isUrlEncoded ? "application/x-www-form-urlencoded" : "application/json" }
+      : {}),
     ...(opts.headers || {}),
   };
   if (opts.token) {
@@ -25,7 +29,7 @@ export async function backendFetch(path: string, opts: FetchOptions = {}) {
   const res = await fetch(url, {
     method: opts.method || "GET",
     headers,
-    body: opts.body ? (typeof opts.body === "string" || opts.body instanceof FormData || opts.body instanceof URLSearchParams ? opts.body as any : JSON.stringify(opts.body)) : undefined,
+    body: opts.body ? (typeof opts.body === "string" || isFormData || isUrlEncoded ? opts.body as any : JSON.stringify(opts.body)) : undefined,
     cache: "no-store",
   });
 

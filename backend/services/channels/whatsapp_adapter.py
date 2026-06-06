@@ -19,7 +19,7 @@ import asyncio
 import io
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Optional
 
 import httpx
@@ -30,6 +30,7 @@ from services.channels.base import (
     DeliveryResult,
     MessageStatus,
     NormalizedIncomingMessage,
+    utc_now,
 )
 from services.file_service import signed_upload_url
 
@@ -127,9 +128,13 @@ class WhatsAppAdapter(ChannelAdapter):
         ts_str = wa_msg.get("timestamp", "")
 
         try:
-            ts = datetime.utcfromtimestamp(int(ts_str)) if ts_str else datetime.utcnow()
+            ts = (
+                datetime.fromtimestamp(int(ts_str), timezone.utc).replace(tzinfo=None)
+                if ts_str
+                else utc_now()
+            )
         except (ValueError, OSError):
-            ts = datetime.utcnow()
+            ts = utc_now()
 
         customer_name = contacts.get(from_number)
         text: str | None = None
@@ -233,12 +238,12 @@ class WhatsAppAdapter(ChannelAdapter):
                     ts_str = status.get("timestamp", "")
                     try:
                         ts = (
-                            datetime.utcfromtimestamp(int(ts_str))
+                            datetime.fromtimestamp(int(ts_str), timezone.utc).replace(tzinfo=None)
                             if ts_str
-                            else datetime.utcnow()
+                            else utc_now()
                         )
                     except (ValueError, OSError):
-                        ts = datetime.utcnow()
+                        ts = utc_now()
 
                     errors = status.get("errors", [])
                     error_code = errors[0].get("code") if errors else None

@@ -1,7 +1,7 @@
 import logging
 from typing import Optional
-from openai import AsyncOpenAI
 import json
+from services.openai_client import get_openai_client
 
 logger = logging.getLogger("humanizer_agent")
 OPENAI_TIMEOUT_SECONDS = 30.0
@@ -37,7 +37,7 @@ class HumanizerAgent:
     """Rewrites AI drafts into human-like WhatsApp messages."""
 
     def __init__(self, api_key: str):
-        self._client = AsyncOpenAI(api_key=api_key, timeout=OPENAI_TIMEOUT_SECONDS)
+        self._client = get_openai_client(api_key, timeout=OPENAI_TIMEOUT_SECONDS)
 
     async def rewrite(
         self,
