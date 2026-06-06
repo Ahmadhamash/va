@@ -232,13 +232,19 @@ async def create_client_scenario(public_id: str, client_name: str, platform: str
     # Determine module names based on platform
     trigger_module = "facebook-messenger:watchMessages"
     action_module = "facebook-messenger:sendMessage"
+    trigger_version = 2
+    action_version = 2
     
     if platform == "instagram":
         trigger_module = "instagram-business:watchEvents"
         action_module = "instagram-business:sendMessage"
+        trigger_version = 1
+        action_version = 1
     elif platform == "whatsapp":
         trigger_module = "whatsapp-business-cloud:watchEvents2"
         action_module = "whatsapp-business-cloud:sendMessage"
+        trigger_version = 1
+        action_version = 1
 
     # Prepare blueprint JSON
     blueprint_json = json.dumps(SCENARIO_BLUEPRINT)
@@ -249,7 +255,9 @@ async def create_client_scenario(public_id: str, client_name: str, platform: str
     
     # Update modules
     blueprint["flow"][0]["module"] = trigger_module
+    blueprint["flow"][0]["version"] = trigger_version
     blueprint["flow"][2]["module"] = action_module
+    blueprint["flow"][2]["version"] = action_version
 
     # Add missing metadata property at root level of blueprint
     blueprint["metadata"] = {
