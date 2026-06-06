@@ -39,7 +39,7 @@ SCENARIO_BLUEPRINT = {
         {
             "id": 2,
             "module": "http:ActionMakeRequest",
-            "version": 3,
+            "version": 1,
             "parameters": {
                 "handleErrors": False,
                 "useMtls": False
