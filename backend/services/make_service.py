@@ -283,7 +283,7 @@ async def create_client_scenario(public_id: str, client_name: str, platform: str
             }
     except httpx.HTTPStatusError as e:
         logger.error(f"Make API error: {e.response.text}")
-        return None
+        return {"error": f"Make API Error ({e.response.status_code}): {e.response.text}"}
     except Exception as e:
         logger.error(f"Make service error: {e}")
-        return None
+        return {"error": f"Internal Error: {str(e)}"}

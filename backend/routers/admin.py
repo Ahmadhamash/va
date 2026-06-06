@@ -425,5 +425,11 @@ async def generate_make_scenario(
             status_code=500,
             detail="Failed to create Make.com scenario. Please check Make API Token, Team ID in your .env variables."
         )
+        
+    if "error" in scenario_result:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Make API Error: {scenario_result['error']}"
+        )
 
     return {"message": "Scenario created successfully", "scenario_url": scenario_result.get("url")}
