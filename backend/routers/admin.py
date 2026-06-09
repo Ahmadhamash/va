@@ -3,7 +3,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -18,7 +18,10 @@ from models import (
     StyleSample,
     User,
     BusinessPolicy,
+    BusinessWorkflow,
+    AIVerificationLog,
 )
+from seed_test_store import seed_store
 from schemas.chat import MessageOut, SessionOut
 from schemas.item import ItemOut
 from schemas.onboarding import ManyChatStatusUpdate
@@ -491,4 +494,128 @@ async def generate_manychat_webhook(
     return {
         "message": "Webhook generated successfully", 
         "webhook_url": webhook_url
+    }
+
+
+@router.post("/seed-test-store")
+async def reset_test_store(
+    _: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    # Find the user with username "test_store"
+    result = await db.execute(select(User).where(User.username == "test_store"))
+    user = result.scalar_one_or_none()
+
+    if user is not None:
+        # Delete existing products, policies, workflows of test_store user
+        await db.execute(delete(Item).where(Item.user_id == user.id))
+        await db.execute(delete(BusinessPolicy).where(BusinessPolicy.user_id == user.id))
+        await db.execute(delete(BusinessWorkflow).where(BusinessWorkflow.user_id == user.id))
+        await db.commit()
+
+    # Run seed_store using the current db session
+    await seed_store(db)
+
+    return {"ok": True, "message": "Test store reset and seeded successfully!"}
+
+
+@router.get("/pricing-breakdown")
+async def get_pricing_breakdown(
+    _: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    # 1. Total messages
+    total_messages = await db.scalar(select(func.count()).select_from(Message))
+
+    # 2. Total verification logs
+    total_logs = await db.scalar(select(func.count()).select_from(AIVerificationLog))
+
+    # 3. Retrieve verification logs for cost calculations
+    result = await db.execute(
+        select(
+            AIVerificationLog.user_id,
+            User.username,
+            User.business_name,
+            AIVerificationLog.customer_message,
+            AIVerificationLog.draft_answer,
+            AIVerificationLog.final_answer,
+            AIVerificationLog.retrieved_data,
+            AIVerificationLog.ai_trace
+        ).join(User, User.id == AIVerificationLog.user_id)
+    )
+    logs = result.all()
+
+    # Get default AI model from settings
+    app_settings = await get_settings_row(db)
+    default_model = app_settings.ai_model or "gpt-4o"
+
+    total_cost = 0.0
+    by_model = {}
+    by_client = {}
+
+    for user_id, username, b_name, cust_msg, draft, final, retrieved, ai_tr in logs:
+        # Estimate input tokens: input message + retrieved context strings
+        cust_msg_len = len(cust_msg or "")
+        retrieved_len = len(str(retrieved or ""))
+        input_chars = cust_msg_len + retrieved_len
+        # Apply a base cost for prompt context
+        input_tokens = max(500.0, input_chars / 3.0)
+
+        # Estimate output tokens
+        ans = final or draft or ""
+        output_tokens = len(ans) / 3.0
+
+        # Identify model
+        model = default_model
+        if ai_tr and isinstance(ai_tr, dict):
+            model = ai_tr.get("model", default_model)
+
+        # Rates
+        if model.startswith("gpt-4o-mini"):
+            input_rate = 0.00015
+            output_rate = 0.0006
+        else:
+            input_rate = 0.005
+            output_rate = 0.015
+
+        cost = (input_tokens / 1000.0) * input_rate + (output_tokens / 1000.0) * output_rate
+        total_cost += cost
+
+        # Group by model
+        if model not in by_model:
+            by_model[model] = {"message_count": 0, "estimated_cost": 0.0}
+        by_model[model]["message_count"] += 1
+        by_model[model]["estimated_cost"] += cost
+
+        # Group by client
+        client_key = str(user_id)
+        if client_key not in by_client:
+            by_client[client_key] = {
+                "client_id": client_key,
+                "username": username,
+                "business_name": b_name or username,
+                "message_count": 0,
+                "estimated_cost": 0.0
+            }
+        by_client[client_key]["message_count"] += 1
+        by_client[client_key]["estimated_cost"] += cost
+
+    return {
+        "total_messages": total_messages or 0,
+        "total_verification_logs": total_logs or 0,
+        "total_estimated_cost": round(total_cost, 6),
+        "by_model": {
+            m: {"message_count": v["message_count"], "estimated_cost": round(v["estimated_cost"], 6)}
+            for m, v in by_model.items()
+        },
+        "by_client": [
+            {
+                "client_id": c["client_id"],
+                "username": c["username"],
+                "business_name": c["business_name"],
+                "message_count": c["message_count"],
+                "estimated_cost": round(c["estimated_cost"], 6)
+            }
+            for c in by_client.values()
+        ]
     }

@@ -20,6 +20,8 @@ class MessageOut(BaseModel):
     media_type: str | None
     media_url: str | None
     created_at: datetime
+    risk_score: float | None = None
+    verifier_status: str | None = None
 
 
 class SessionOut(BaseModel):

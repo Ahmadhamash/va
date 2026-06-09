@@ -27,6 +27,7 @@ from models import (
     Message,
     MessageDeliveryLog,
     User,
+    AIVerificationLog,
 )
 from schemas.chat import ChatSendResponse, MessageOut, SessionOut
 from services.ai_media import TranscriptionError
@@ -558,6 +559,25 @@ async def session_messages(
         .offset(skip).limit(limit)
     )
     rows = list(result.scalars().all())
+
+    # Fetch verification logs for these messages
+    message_ids = [m.id for m in rows if m.role == "assistant"]
+    verification_logs = {}
+    if message_ids:
+        vl_result = await db.execute(
+            select(AIVerificationLog)
+            .where(AIVerificationLog.message_id.in_(message_ids))
+        )
+        for vl in vl_result.scalars().all():
+            verification_logs[vl.message_id] = (vl.risk_score, vl.verifier_status)
+
+    for m in rows:
+        if m.role == "assistant" and m.id in verification_logs:
+            m.risk_score, m.verifier_status = verification_logs[m.id]
+        else:
+            m.risk_score = None
+            m.verifier_status = None
+
     if current_user.role in _CONVERSATION_STAFF_ROLES:
         metadata = dict(session.metadata_ or {})
         metadata["last_viewed_at"] = _utcnow_iso()
@@ -583,6 +603,11 @@ async def update_session_notes(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    if current_user.role == "client":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Client role is read-only for this action",
+        )
     _require_conversation_staff(current_user)
     session = await _get_session_for_actor(session_id, current_user, db)
     metadata = dict(session.metadata_ or {})
@@ -598,6 +623,11 @@ async def takeover_session(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    if current_user.role == "client":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Client role is read-only for this action",
+        )
     _require_conversation_staff(current_user)
     session = await _get_session_for_actor(session_id, current_user, db)
     return await _set_session_status(session, db, raw_status="assigned")
@@ -609,6 +639,11 @@ async def return_session_to_ai(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    if current_user.role == "client":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Client role is read-only for this action",
+        )
     _require_conversation_staff(current_user)
     session = await _get_session_for_actor(session_id, current_user, db)
     return await _set_session_status(session, db, raw_status="returned_to_ai")
@@ -620,6 +655,11 @@ async def close_session(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    if current_user.role == "client":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Client role is read-only for this action",
+        )
     _require_conversation_staff(current_user)
     session = await _get_session_for_actor(session_id, current_user, db)
     return await _set_session_status(session, db, raw_status="resolved")
@@ -633,6 +673,11 @@ async def agent_send_message(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    if current_user.role == "client":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Client role is read-only for this action",
+        )
     _require_conversation_staff(current_user)
     # Employees/admins can reply to customer conversations.
     session = await db.get(ChatSession, session_id)

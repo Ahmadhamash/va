@@ -118,7 +118,7 @@ def supplemental_tool_plan(customer_message: str, intent: str) -> list[ToolCallP
         return calls
 
     if intent == "support":
-        if _has_any(text, _ORDER_TERMS):
+        if _has_any(text, _ORDER_TERMS) and not _has_any(text, _POLICY_TERMS):
             calls.append(ToolCallPlan("get_order_status", _order_args(customer_message)))
         if _has_any(text, _DELIVERY_TERMS) or not _has_any(text, _POLICY_TERMS):
             calls.append(ToolCallPlan("get_delivery_info", {}))

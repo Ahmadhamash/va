@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useEffect, useRef } from "react";
-import { Bot, Facebook, Instagram, MessageCircle, Paperclip, Pencil, RefreshCw, Send, StickyNote, UserCheck, XCircle, Webhook, Code, Check } from "lucide-react";
+import { Bot, Facebook, Instagram, MessageCircle, Paperclip, Pencil, RefreshCw, Send, StickyNote, UserCheck, XCircle, Webhook, Code, Check, Shield, ShieldAlert, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/status-badge";
 import type { ChannelProvider, Conversation, ConversationStatus, Message } from "@/lib/types";
@@ -103,7 +103,19 @@ function MessageBubble({ message, token }: { message: Message; token: string | n
       >
         <MediaAttachment message={message} token={token} />
         <div className="break-words whitespace-pre-wrap">{message.body}</div>
-        <div className={cn("mt-1.5 flex items-center justify-end gap-1 text-[10px] font-medium tracking-tight", message.sender === "AI" ? "text-ink-950/50" : "text-white/30")}>
+        <div className={cn("mt-1.5 flex items-center justify-end gap-1.5 text-[10px] font-medium tracking-tight", message.sender === "AI" ? "text-ink-950/50" : "text-white/30")}>
+          {message.sender === "AI" && (
+            <div className="flex items-center gap-1 mr-auto bg-black/10 px-1.5 py-0.5 rounded-full text-[9px] font-semibold text-teal-900 border border-teal-950/10" title={`تحليل الأمان والتحقق. نسبة المخاطرة: ${message.riskScore ?? 0.05}`}>
+              {typeof message.riskScore === 'number' && message.riskScore > 0.4 ? (
+                <ShieldAlert className="h-3 w-3 text-amber-700" />
+              ) : typeof message.riskScore === 'number' && message.riskScore <= 0.1 ? (
+                <ShieldCheck className="h-3 w-3 text-emerald-700" />
+              ) : (
+                <Shield className="h-3 w-3 text-teal-700" />
+              )}
+              <span>{Math.round((1 - (message.riskScore ?? 0.05)) * 100)}% safe</span>
+            </div>
+          )}
           {message.sender === "HUMAN" && message.deliveryStatus ? <span>{message.deliveryStatus}</span> : null}
           {formatTime(message.createdAt)}
         </div>

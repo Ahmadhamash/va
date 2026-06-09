@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { StatusBadge } from "@/components/status-badge";
 import type { ChannelProvider, Conversation, ConversationStatus } from "@/lib/types";
 import { cn, formatTime } from "@/lib/utils";
+import { useAuthStore } from "@/store/use-auth-store";
 
 const filters: Array<{ label: string; value: "ALL" | ConversationStatus }> = [
   { label: "الكل", value: "ALL" },
@@ -80,11 +81,14 @@ export function ConversationList({
 }) {
   const [query, setQuery] = useState(initialQuery);
   const [filter, setFilter] = useState<"ALL" | ConversationStatus>(initialFilter);
+  const { user } = useAuthStore();
+  const showBusinessName = user?.role === "admin" || user?.role === "support_agent";
 
   const visible = useMemo(() => {
     return conversations.filter((conversation) => {
       const matchesFilter = filter === "ALL" || conversation.status === filter;
-      const matchesQuery = `${conversation.customerName} ${conversation.customerPhone} ${conversation.lastMessage}`
+      const businessName = conversation.context?.business?.name || "";
+      const matchesQuery = `${conversation.customerName} ${conversation.customerPhone} ${conversation.lastMessage} ${businessName}`
         .toLowerCase()
         .includes(query.toLowerCase());
       return matchesFilter && matchesQuery;
@@ -96,7 +100,7 @@ export function ConversationList({
       <div className="border-b border-white/10 p-4">
         <div className="relative">
           <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/30" />
-          <Input className="pr-9" placeholder="ابحث في المحادثات" value={query} onChange={(event) => setQuery(event.target.value)} />
+          <Input className="pr-9 text-right" placeholder="ابحث في المحادثات" value={query} onChange={(event) => setQuery(event.target.value)} />
         </div>
         <div className="mt-3 flex flex-wrap gap-2">
           {filters.map((item) => (
@@ -134,11 +138,18 @@ export function ConversationList({
                   {conversation.customerName}
                   <StatusIndicator status={conversation.status} />
                 </div>
-                <div className="mt-1 text-xs text-white/38">{conversation.customerPhone}</div>
+                <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-white/38">
+                  <span>{conversation.customerPhone}</span>
+                  {showBusinessName && conversation.context?.business?.name && (
+                    <span className="inline-block px-1.5 py-0.5 rounded bg-cyanx-500/10 text-cyanx-300 text-[10px] font-medium">
+                      {conversation.context.business.name}
+                    </span>
+                  )}
+                </div>
               </div>
               <span className="text-xs text-white/35">{formatTime(conversation.lastMessageAt)}</span>
             </div>
-            <p className="mt-3 line-clamp-2 text-sm leading-6 text-white/52">{conversation.lastMessage}</p>
+            <p className="mt-3 line-clamp-2 text-sm leading-6 text-white/52 text-right">{conversation.lastMessage}</p>
             <div className="mt-3 flex items-center justify-between gap-2">
               <StatusBadge status={conversation.status} />
               {(conversation.unreadCount || 0) > 0 ? (

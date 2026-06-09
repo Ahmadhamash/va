@@ -183,9 +183,10 @@ class VoiceService:
     @classmethod
     def from_env(cls, openai_key: str, *, tts_provider: str = "auto") -> "VoiceService":
         """Create VoiceService from environment variables."""
+        import os
         from config import settings
 
-        elevenlabs_key = settings.ELEVENLABS_API_KEY.strip() or None
+        elevenlabs_key = (os.environ.get("ELEVENLABS_API_KEY") or settings.ELEVENLABS_API_KEY or "").strip() or None
         return cls(
             openai_key=openai_key,
             elevenlabs_key=elevenlabs_key,

@@ -30,6 +30,8 @@ export type Message = {
   mediaType?: "text" | "image" | "audio" | "file" | string | null;
   mediaUrl?: string | null;
   deliveryStatus?: "pending" | "sent" | "delivered" | "read" | "failed" | string | null;
+  riskScore?: number;
+  verifierStatus?: string;
 };
 
 export type Conversation = {

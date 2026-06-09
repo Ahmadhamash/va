@@ -58,6 +58,16 @@ function splitList(value: string) {
   return value.split(",").map((item) => item.trim()).filter(Boolean);
 }
 
+const knowledgeCategories = [
+  { value: "FAQs", label: "الأسئلة الشائعة (FAQs)" },
+  { value: "Policies", label: "السياسات (Policies)" },
+  { value: "Documents", label: "المستندات (Documents)" },
+  { value: "URLs", label: "الروابط (URLs)" },
+  { value: "Product Info", label: "معلومات المنتجات (Product Info)" },
+  { value: "Service Info", label: "معلومات الخدمات (Service Info)" },
+  { value: "Custom Category", label: "تصنيف مخصص (Custom Category)" },
+];
+
 export default function KnowledgeBasePage() {
   const { token, user, setAuth } = useAuthStore();
   const [businessType, setBusinessType] = useState<BusinessType>((user?.business_type as BusinessType) || "general");
@@ -71,11 +81,25 @@ export default function KnowledgeBasePage() {
   const [importUrl, setImportUrl] = useState("");
   const [importing, setImporting] = useState(false);
   const [candidates, setCandidates] = useState<any[]>([]);
-  const [policyForm, setPolicyForm] = useState({ title: "", body: "", category: "policies" });
+  const [policyForm, setPolicyForm] = useState({ title: "", body: "", category: "FAQs" });
+  const [customCategory, setCustomCategory] = useState("");
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
   const [styleFile, setStyleFile] = useState<File | null>(null);
   const [styleMyName, setStyleMyName] = useState("");
   const [styleUploading, setStyleUploading] = useState(false);
   const [styleStats, setStyleStats] = useState<{ total: number } | null>(null);
+
+  const groupedKnowledge = useMemo(() => {
+    const groups: Record<string, any[]> = {};
+    for (const item of knowledge) {
+      const cat = item.category || "عام";
+      if (!groups[cat]) {
+        groups[cat] = [];
+      }
+      groups[cat].push(item);
+    }
+    return groups;
+  }, [knowledge]);
 
   const dynamicLabels = useMemo(() => {
     if (businessType === "clothing") {
@@ -278,20 +302,43 @@ export default function KnowledgeBasePage() {
 
   async function addKnowledgeItem() {
     if (!token || !policyForm.title.trim() || !policyForm.body.trim()) return;
+    const finalCategory = policyForm.category === "Custom Category" ? (customCategory.trim() || "Custom Category") : policyForm.category;
     const res = await fetch("/api/knowledge", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify(policyForm),
+      body: JSON.stringify({ ...policyForm, category: finalCategory }),
     });
     const data = await res.json().catch(() => ({}));
     if (data.ok) {
-      setPolicyForm({ title: "", body: "", category: "policies" });
+      setPolicyForm({ title: "", body: "", category: "FAQs" });
+      setCustomCategory("");
       setNotice("تم حفظ المعلومة بنجاح.");
       setTimeout(() => setNotice(""), 3000);
       await load();
+    }
+  }
+
+  async function deleteKnowledgeItem(id: string) {
+    if (!token || !confirm("حذف هذه المعلومة من قاعدة المعرفة؟")) return;
+    setNotice("");
+    try {
+      const res = await fetch(`/api/knowledge/${id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.ok) {
+        setKnowledge((current) => current.filter((item) => item.id !== id));
+        setNotice("تم حذف المعلومة.");
+        setTimeout(() => setNotice(""), 3000);
+      } else {
+        throw new Error(data.error || "تعذر حذف المعلومة.");
+      }
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "حدث خطأ أثناء الحذف.");
     }
   }
 
@@ -599,6 +646,33 @@ export default function KnowledgeBasePage() {
               
               <div className="space-y-4">
                 <div>
+                  <label className="mb-1.5 block text-xs font-medium text-white/70">تصنيف المعلومة</label>
+                  <select
+                    className="w-full h-10 px-3 text-right bg-white/[0.03] border border-white/10 rounded-xl text-sm text-white/80 focus:border-emeraldx-400 focus:outline-none"
+                    value={policyForm.category}
+                    onChange={(e) => setPolicyForm({ ...policyForm, category: e.target.value })}
+                  >
+                    {knowledgeCategories.map((cat) => (
+                      <option key={cat.value} value={cat.value} className="bg-ink-950 text-white text-right">
+                        {cat.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                
+                {policyForm.category === "Custom Category" && (
+                  <div>
+                    <label className="mb-1.5 block text-xs font-medium text-white/70">اسم التصنيف المخصص</label>
+                    <Input
+                      className="h-10 text-right bg-white/[0.03]"
+                      placeholder="اكتب تصنيف مخصص..."
+                      value={customCategory}
+                      onChange={(e) => setCustomCategory(e.target.value)}
+                    />
+                  </div>
+                )}
+
+                <div>
                   <label className="mb-1.5 block text-xs font-medium text-white/70">عنوان المعلومة</label>
                   <Input className="h-10 text-right bg-white/[0.03]" placeholder="مثال: سياسة الاستبدال والاسترجاع" value={policyForm.title} onChange={(e) => setPolicyForm({ ...policyForm, title: e.target.value })} />
                 </div>
@@ -622,19 +696,51 @@ export default function KnowledgeBasePage() {
                 <span className="text-xs font-medium text-white/40">{knowledge.length} معلومات مسجلة</span>
               </div>
 
-              {knowledge.length === 0 ? (
+              {Object.keys(groupedKnowledge).length === 0 ? (
                 <div className="flex h-40 flex-col items-center justify-center rounded-2xl border border-dashed border-white/10 text-center">
                   <Info className="mb-3 h-8 w-8 text-white/20" />
                   <div className="text-sm font-medium text-white/40">لا توجد سياسات مضافة بعد</div>
                 </div>
               ) : (
-                <div className="space-y-3 custom-scrollbar max-h-[500px] overflow-y-auto pr-2">
-                  {knowledge.map((item) => (
-                    <div key={item.id} className="rounded-2xl border border-white/5 bg-white/[0.02] p-4 transition hover:bg-white/[0.04]">
-                      <div className="font-semibold text-white text-sm">{item.title}</div>
-                      <p className="mt-2 whitespace-pre-wrap text-[11px] leading-relaxed text-white/50">{item.body}</p>
-                    </div>
-                  ))}
+                <div className="space-y-4 custom-scrollbar max-h-[500px] overflow-y-auto pr-2">
+                  {Object.entries(groupedKnowledge).map(([category, items]) => {
+                    const isOpen = openGroups[category] !== false; // open by default
+                    return (
+                      <div key={category} className="border border-white/5 rounded-2xl bg-white/[0.01] overflow-hidden">
+                        <button
+                          type="button"
+                          onClick={() => setOpenGroups(prev => ({ ...prev, [category]: !isOpen }))}
+                          className="flex w-full items-center justify-between bg-white/[0.02] px-4 py-3 text-right text-xs font-semibold text-white/70 hover:bg-white/[0.04]"
+                        >
+                          <span className="text-xs text-emeraldx-400 font-medium">({items.length})</span>
+                          <span className="font-bold">{category}</span>
+                        </button>
+                        
+                        {isOpen && (
+                          <div className="p-3 space-y-3 bg-black/10">
+                            {items.map((item: any) => (
+                              <div key={item.id} className="relative rounded-xl border border-white/5 bg-white/[0.02] p-4 transition hover:bg-white/[0.04] group">
+                                <div className="flex justify-between items-start gap-3">
+                                  <button
+                                    type="button"
+                                    onClick={() => deleteKnowledgeItem(item.id)}
+                                    className="opacity-0 group-hover:opacity-100 rounded p-1 text-white/30 transition hover:bg-red-500/10 hover:text-red-400"
+                                    title="حذف المعلومة"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
+                                  <div className="flex-1 text-right">
+                                    <div className="font-semibold text-white text-sm">{item.title}</div>
+                                    <p className="mt-2 whitespace-pre-wrap text-[11px] leading-relaxed text-white/50">{item.body}</p>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </GradientCard>

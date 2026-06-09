@@ -187,6 +187,93 @@ async def _run_pre_ai_automations(
     await db.refresh(session)
     return ("\n".join(outbound) if outbound else None), session.is_escalated, results
 
+async def _run_post_ai_automations(
+    user: User,
+    session: ChatSession,
+    customer_message: str,
+    final_reply: str | None,
+    action: str,
+    result: VerificationResult | None,
+    retrieved_data: dict,
+    db: AsyncSession,
+) -> list[dict]:
+    """Run automations after the LLM reply path.
+
+    Evaluates hallucination_risk, low_confidence, product_not_found, customer_angry, and handoff_triggered.
+    """
+    from services.automation_engine import AutomationContext, AutomationEngine
+
+    message_count = await db.scalar(
+        select(func.count())
+        .select_from(Message)
+        .where(Message.session_id == session.id, Message.role == "user")
+    )
+    metadata = session.metadata_ or {}
+
+    triggered_types = []
+
+    # 1. hallucination_risk (always check)
+    triggered_types.append("hallucination_risk")
+
+    # 2. low_confidence (always check)
+    triggered_types.append("low_confidence")
+
+    # 3. product_not_found
+    has_empty_catalog = False
+    for k, v in retrieved_data.items():
+        if k.startswith("get_catalog:") and isinstance(v, dict):
+            if not v.get("items"):
+                has_empty_catalog = True
+    if (
+        (result and result.safe_response == SAFE_RESPONSES.get("product_not_found")) or
+        (result and result.verdict == "product_not_found") or
+        has_empty_catalog or
+        (final_reply and SAFE_RESPONSES.get("product_not_found") in final_reply)
+    ):
+        triggered_types.append("product_not_found")
+
+    # 4. customer_angry
+    angry_keywords = ["سيء", "غاضب", "مشتكى", "شكوى", "أسوأ", "تافه", "حقير", "نصاب", "كذاب", "خدمة سيئة", "bad service", "terrible", "worst", "angry", "complaint", "scam", "shitty", "disappointed"]
+    customer_angry = any(kw in customer_message.lower() for kw in angry_keywords)
+    if customer_angry:
+        triggered_types.append("customer_angry")
+
+    # 5. handoff_triggered
+    if action == "handoff" or (result and result.verdict == HUMAN_HANDOFF_REQUIRED):
+        triggered_types.append("handoff_triggered")
+
+    context = AutomationContext(
+        trigger="new_message",  # will be overridden per trigger loop
+        session_id=session.id,
+        user_id=user.id,
+        channel=session.channel,
+        customer_name=session.title or "",
+        message_text=customer_message or "",
+        session_message_count=int(message_count or 0),
+        customer_tags=list(metadata.get("tags", [])),
+        verifier_risk_score=result.risk_score if result else 0.0,
+        verifier_verdict=result.verdict if result else "",
+        extra={
+            "external_user_id": session.external_user_id or "",
+            "business_name": user.business_name or "",
+        },
+    )
+    engine = AutomationEngine()
+    results: list[dict] = []
+
+    for t in triggered_types:
+        context.trigger = t
+        trigger_results = await engine.evaluate_rules(
+            t,
+            context,
+            user.id,
+            db,
+        )
+        results.extend(trigger_results)
+
+    await db.refresh(session)
+    return results
+
 async def get_session_history(
     session_id: uuid.UUID, db: AsyncSession, limit: int = HISTORY_LIMIT
 ) -> list[dict]:
@@ -562,8 +649,8 @@ async def _verify_and_finalize(
     db: AsyncSession,
     message_id: uuid.UUID | None = None,
     ai_trace: dict | None = None,
-) -> tuple[str, str]:
-    """Verify the AI's draft answer and return (final_reply, action).
+) -> tuple[str, str, VerificationResult]:
+    """Verify the AI's draft answer and return (final_reply, action, result).
 
     Actions: sent, modified, blocked, handoff, clarification
     """
@@ -640,7 +727,12 @@ async def _verify_and_finalize(
         return SAFE_RESPONSES.get(
             "handoff",
             "لحظة من فضلك، رح أحولك لزميلي ليقدر يساعدك بشكل أفضل.",
-        ), "handoff"
+        ), "handoff", VerificationResult(
+            verdict=HUMAN_HANDOFF_REQUIRED,
+            risk_score=1.0,
+            reasons=["Verification process encountered an exception"],
+            safe_response=SAFE_RESPONSES.get("handoff"),
+        )
 
     logger.info(
         "Verification: verdict=%s risk=%.2f reasons=%s",
@@ -859,7 +951,7 @@ async def _verify_and_finalize(
         await db.rollback()
         logger.exception("Failed to log verification result")
 
-    return final_reply, action
+    return final_reply, action, result
 
 
 # ─── Voice Reply Helper ──────────────────────────────────────────────────────
@@ -1123,12 +1215,26 @@ async def process_message(
 
     # ── Answer Verification (anti-hallucination) ──
     customer_text = user_message if isinstance(user_message, str) else str(content)
-    reply, action = await _verify_and_finalize(
+    reply, action, result = await _verify_and_finalize(
         draft_reply, customer_text, retrieved_data,
         user, session_id, db,
         ai_trace=ai_trace,
     )
     _store_cached_reply(user_id, customer_text, reply, retrieved_data, action)
+
+    # ── Run post-AI automations ──
+    session = await db.get(ChatSession, session_id)
+    if session:
+        await _run_post_ai_automations(
+            user=user,
+            session=session,
+            customer_message=customer_text,
+            final_reply=reply,
+            action=action,
+            result=result,
+            retrieved_data=retrieved_data,
+            db=db,
+        )
 
     # Deduct AI credit
     await db.execute(
@@ -1347,12 +1453,24 @@ async def process_pending(session_id: uuid.UUID, db: AsyncSession) -> dict | Non
 
             # ── Answer Verification (anti-hallucination) ──
             customer_text = combined_text or str(content)
-            reply, action = await _verify_and_finalize(
+            reply, action, result = await _verify_and_finalize(
                 draft_reply, customer_text, retrieved_data,
                 user, session_id, db,
                 ai_trace=ai_trace,
             )
             _store_cached_reply(user_id, customer_text, reply, retrieved_data, action)
+
+            # ── Run post-AI automations ──
+            await _run_post_ai_automations(
+                user=user,
+                session=session,
+                customer_message=customer_text,
+                final_reply=reply,
+                action=action,
+                result=result,
+                retrieved_data=retrieved_data,
+                db=db,
+            )
         except APIError:
             logger.exception("OpenAI API error (worker)")
             reply = SERVICE_UNAVAILABLE_REPLY

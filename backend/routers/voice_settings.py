@@ -212,7 +212,7 @@ async def list_voice_options(
     """List voice options for the dashboard."""
     elevenlabs_key = _elevenlabs_key()
     elevenlabs_voices, elevenlabs_meta = await _load_elevenlabs_arabic_voices(
-        elevenlabs_key
+        elevenlabs_key, current_user.id
     )
     return {
         "openai": OPENAI_VOICES,
@@ -230,6 +230,27 @@ async def update_voice_settings(
 ):
     """Update voice settings for the current business."""
     settings = await _get_or_create(current_user.id, db)
+
+    # Subscription checks / Fallback
+    has_paid_subscription = await _voice_cloning_allowed(current_user, db)
+
+    # Check incoming updates
+    if body.tts_provider == "elevenlabs" and not has_paid_subscription:
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail="ElevenLabs TTS is available on paid plans only.",
+        )
+    if body.preferred_voice and body.preferred_voice.startswith("el_") and not has_paid_subscription:
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail="ElevenLabs voices are available on paid plans only.",
+        )
+
+    if not has_paid_subscription:
+        if settings.tts_provider == "elevenlabs":
+            settings.tts_provider = "openai"
+        if settings.preferred_voice and settings.preferred_voice.startswith("el_"):
+            settings.preferred_voice = "nova"
 
     # Validate voice_mode
     valid_modes = {"off", "voice_when_voice", "always_voice", "text_and_voice"}
@@ -505,6 +526,7 @@ async def _voice_cloning_allowed(user: User, db: AsyncSession) -> bool:
 
 async def _load_elevenlabs_arabic_voices(
     api_key: str,
+    user_id: uuid.UUID,
 ) -> tuple[list[dict], dict]:
     """Load real Arabic voices from the user's ElevenLabs account/library."""
     if not api_key:
@@ -561,7 +583,7 @@ async def _load_elevenlabs_arabic_voices(
 
             payload = resp.json()
             for voice in payload.get("voices", []):
-                mapped = _map_elevenlabs_voice(voice, source)
+                mapped = _map_elevenlabs_voice(voice, source, user_id)
                 if mapped is not None:
                     voices.append(mapped)
 
@@ -582,8 +604,15 @@ async def _load_elevenlabs_arabic_voices(
     }
 
 
-def _map_elevenlabs_voice(voice: dict, source: str) -> dict | None:
-    if not _is_arabic_voice(voice):
+def _map_elevenlabs_voice(voice: dict, source: str, user_id: uuid.UUID) -> dict | None:
+    labels = voice.get("labels") or {}
+    voice_user_id = labels.get("user_id")
+
+    if voice_user_id is not None and str(voice_user_id) != str(user_id):
+        return None
+
+    is_user_cloned = (voice_user_id is not None and str(voice_user_id) == str(user_id))
+    if not is_user_cloned and not _is_arabic_voice(voice):
         return None
 
     voice_id = voice.get("voice_id")
