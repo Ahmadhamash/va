@@ -10,7 +10,6 @@ Handles:
 from __future__ import annotations
 
 import logging
-import os
 import uuid
 from typing import Optional
 
@@ -184,7 +183,9 @@ class VoiceService:
     @classmethod
     def from_env(cls, openai_key: str, *, tts_provider: str = "auto") -> "VoiceService":
         """Create VoiceService from environment variables."""
-        elevenlabs_key = os.getenv("ELEVENLABS_API_KEY", "").strip() or None
+        from config import settings
+
+        elevenlabs_key = settings.ELEVENLABS_API_KEY.strip() or None
         return cls(
             openai_key=openai_key,
             elevenlabs_key=elevenlabs_key,

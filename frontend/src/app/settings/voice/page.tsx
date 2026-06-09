@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Loader2, Mic, PlayCircle, Save, Volume2 } from "lucide-react";
+import { BadgeDollarSign, Loader2, Mic, PlayCircle, Save, Upload, Volume2 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { GradientCard } from "@/components/gradient-card";
 import { Button } from "@/components/ui/button";
@@ -51,6 +51,10 @@ export default function VoiceSettingsPage() {
   const [previewing, setPreviewing] = useState<string | null>(null);
   const [audioUrl, setAudioUrl] = useState("");
   const [notice, setNotice] = useState("");
+  const [cloneName, setCloneName] = useState("");
+  const [cloneDescription, setCloneDescription] = useState("");
+  const [cloneFiles, setCloneFiles] = useState<File[]>([]);
+  const [cloning, setCloning] = useState(false);
 
   const activeVoices = useMemo(() => settings.tts_provider === "elevenlabs" ? voices.elevenlabs : voices.openai, [settings.tts_provider, voices]);
 
@@ -130,6 +134,51 @@ export default function VoiceSettingsPage() {
       setNotice(msg);
     } finally {
       setPreviewing(null);
+    }
+  }
+
+  async function cloneVoice() {
+    if (!token) {
+      setNotice("يجب تسجيل الدخول لنسخ الصوت.");
+      return;
+    }
+    if (!cloneName.trim() || cloneFiles.length === 0) {
+      setNotice("أضف اسم الصوت وملفات صوتية للنسخ.");
+      return;
+    }
+
+    setCloning(true);
+    setNotice("");
+    try {
+      const form = new FormData();
+      form.append("name", cloneName.trim());
+      form.append("description", cloneDescription.trim());
+      cloneFiles.forEach((file) => form.append("files", file));
+
+      const res = await fetch("/api/voice-settings/clone", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: form,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.success === false) {
+        throw new Error(data.detail || data.error || "تعذر نسخ الصوت.");
+      }
+
+      await load();
+      setSettings((current: any) => ({
+        ...current,
+        tts_provider: data.tts_provider || "elevenlabs",
+        preferred_voice: data.preferred_voice,
+      }));
+      setCloneName("");
+      setCloneDescription("");
+      setCloneFiles([]);
+      setNotice("تم نسخ الصوت وتعيينه كصوت ElevenLabs الافتراضي.");
+    } catch (error: any) {
+      setNotice(error.message || "تعذر نسخ الصوت.");
+    } finally {
+      setCloning(false);
     }
   }
 
@@ -257,6 +306,45 @@ export default function VoiceSettingsPage() {
                 <track kind="captions" />
               </audio>
             )}
+          </GradientCard>
+
+          <GradientCard>
+            <div className="mb-4 flex items-center justify-between">
+              <BadgeDollarSign className="h-5 w-5 text-amber-300" />
+              <h3 className="text-lg font-semibold text-white">Voice cloning</h3>
+            </div>
+            <div className="mb-4 rounded-2xl border border-amber-400/20 bg-amber-500/10 p-3 text-xs leading-5 text-amber-200/80">
+              Paid feature. Upload approved company voice samples; cloned voices are saved to ElevenLabs and used for AI voice replies.
+            </div>
+            <div className="space-y-3">
+              <input
+                value={cloneName}
+                onChange={(e) => setCloneName(e.target.value)}
+                placeholder="Voice name"
+                className="h-11 w-full rounded-2xl border border-white/10 bg-white/[0.04] px-4 text-sm text-white outline-none placeholder:text-white/30"
+              />
+              <Textarea
+                value={cloneDescription}
+                onChange={(e) => setCloneDescription(e.target.value)}
+                placeholder="Short description or consent note"
+                className="min-h-20 text-right"
+              />
+              <label className="flex min-h-28 cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed border-white/15 bg-white/[0.035] p-4 text-center text-sm text-white/55 transition hover:bg-white/[0.06]">
+                <Upload className="mb-2 h-5 w-5 text-cyanx-300" />
+                {cloneFiles.length ? `${cloneFiles.length} audio sample(s) selected` : "Upload audio samples"}
+                <input
+                  type="file"
+                  multiple
+                  accept="audio/*"
+                  className="hidden"
+                  onChange={(event) => setCloneFiles(Array.from(event.target.files || []))}
+                />
+              </label>
+              <Button className="w-full" onClick={() => void cloneVoice()} disabled={cloning || !voices.elevenlabs_available}>
+                {cloning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                {cloning ? "Cloning..." : "Clone with ElevenLabs"}
+              </Button>
+            </div>
           </GradientCard>
 
           <Button className="w-full" onClick={save} disabled={saving}>

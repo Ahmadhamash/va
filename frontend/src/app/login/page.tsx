@@ -1,11 +1,24 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { MessageCircle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuthStore } from "@/store/use-auth-store";
+
+type BusinessTypeOption = {
+  key: string;
+  label: string;
+  icon?: string;
+  group?: string;
+};
+
+const fallbackBusinessTypes: BusinessTypeOption[] = [
+  { key: "retail", label: "Retail / Ecommerce", group: "Commerce" },
+  { key: "restaurant", label: "Restaurant / Cafe", group: "Food" },
+  { key: "services", label: "Professional Services", group: "Services" },
+];
 
 export default function LoginPage() {
   const router = useRouter();
@@ -17,6 +30,26 @@ export default function LoginPage() {
   const [mode, setMode] = useState<"login" | "register">("login");
   const [email, setEmail] = useState("");
   const [businessName, setBusinessName] = useState("");
+  const [businessType, setBusinessType] = useState("retail");
+  const [businessTypes, setBusinessTypes] = useState<BusinessTypeOption[]>(fallbackBusinessTypes);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/business-types", { cache: "no-store" })
+      .then((res) => (res.ok ? res.json() : fallbackBusinessTypes))
+      .then((data) => {
+        if (!cancelled && Array.isArray(data) && data.length) {
+          setBusinessTypes(data);
+          if (!data.some((item: BusinessTypeOption) => item.key === businessType)) {
+            setBusinessType(data[0].key);
+          }
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [businessType]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -26,7 +59,7 @@ export default function LoginPage() {
       const endpoint = mode === "login" ? "/api/auth/login" : "/api/auth/register";
       const body = mode === "login"
         ? { username, password }
-        : { username, password, email, business_name: businessName };
+        : { username, password, email, business_name: businessName, business_type: businessType };
 
       const res = await fetch(endpoint, {
         method: "POST",
@@ -49,7 +82,7 @@ export default function LoginPage() {
 
       setAuth(token, user);
       if (user.role === "admin") router.push("/admin");
-      else if (user.role === "support_agent") router.push("/support");
+      else if (user.role === "support_agent") router.push("/inbox");
       else router.push("/dashboard");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "\u062D\u062F\u062B \u062E\u0637\u0623");
@@ -98,6 +131,17 @@ export default function LoginPage() {
                 value={businessName}
                 onChange={(e) => setBusinessName(e.target.value)}
               />
+              <select
+                value={businessType}
+                onChange={(e) => setBusinessType(e.target.value)}
+                className="h-11 w-full rounded-2xl border border-white/10 bg-[#16161a] px-4 text-right text-sm text-white outline-none"
+              >
+                {businessTypes.map((item) => (
+                  <option key={item.key} value={item.key}>
+                    {item.group ? `${item.group} - ` : ""}{item.label}
+                  </option>
+                ))}
+              </select>
             </>
           )}
           <Input

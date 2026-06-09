@@ -48,6 +48,7 @@ export async function GET(request: Request) {
         aiSuggestedReply: h.aiSuggestedReply || null,
         unreadCount: h.unreadCount || 0,
         deliveryStatus: h.deliveryStatus || null,
+        context: h.context || null,
         messages: [],
       };
     });

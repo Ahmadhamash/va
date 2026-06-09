@@ -18,7 +18,12 @@ _cache: dict = {"row": None, "ts": 0.0}
 async def get_settings_row(db: AsyncSession) -> AppSettings:
     row = await db.get(AppSettings, 1)
     if row is None:
-        row = AppSettings(id=1, ai_model="gpt-4o", debounce_seconds=8)
+        row = AppSettings(
+            id=1,
+            ai_model="gpt-4o",
+            debounce_seconds=8,
+            master_system_prompt="",
+        )
         db.add(row)
         await db.commit()
         await db.refresh(row)
@@ -36,6 +41,7 @@ async def _cached(db: AsyncSession) -> AppSettings:
         openai_api_key=row.openai_api_key,
         ai_model=row.ai_model,
         debounce_seconds=row.debounce_seconds,
+        master_system_prompt=row.master_system_prompt,
     )
     _cache["row"] = snap
     _cache["ts"] = now
@@ -63,3 +69,8 @@ async def effective_debounce(db: AsyncSession) -> int:
         return max(0, min(120, int(row.debounce_seconds)))
     except (TypeError, ValueError):
         return 8
+
+
+async def effective_master_system_prompt(db: AsyncSession) -> str:
+    row = await _cached(db)
+    return (row.master_system_prompt or "").strip()

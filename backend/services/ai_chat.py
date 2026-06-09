@@ -5,12 +5,16 @@ import re
 import uuid
 from time import monotonic
 from openai import APIError
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models import ChatSession, Message, User, BusinessWorkflow, VoiceSettings
 from services.file_service import encode_image_base64
-from services.settings_service import effective_model, effective_openai_key
+from services.settings_service import (
+    effective_master_system_prompt,
+    effective_model,
+    effective_openai_key,
+)
 from services.answer_verifier import (
     AnswerVerifier,
     VerificationResult,
@@ -120,6 +124,69 @@ def _store_cached_reply(
         return
     _response_cache[(str(user_id), key_text)] = (monotonic(), reply)
 
+
+async def _run_pre_ai_automations(
+    *,
+    user: User,
+    session: ChatSession,
+    customer_message: str,
+    db: AsyncSession,
+    media_type: str = "text",
+) -> tuple[str | None, bool, list[dict]]:
+    """Run deterministic automations before the LLM reply path.
+
+    Returns (outbound_text, ai_paused, results). A send_message automation
+    writes the assistant message via the engine; the returned text lets the
+    caller deliver it through the normal channel adapter.
+    """
+    from services.automation_engine import AutomationContext, AutomationEngine
+
+    message_count = await db.scalar(
+        select(func.count())
+        .select_from(Message)
+        .where(Message.session_id == session.id, Message.role == "user")
+    )
+    metadata = session.metadata_ or {}
+    context = AutomationContext(
+        trigger="new_message",
+        session_id=session.id,
+        user_id=user.id,
+        channel=session.channel,
+        customer_name=session.title or "",
+        message_text=customer_message or "",
+        session_message_count=int(message_count or 0),
+        customer_tags=list(metadata.get("tags", [])),
+        extra={
+            "media_type": media_type,
+            "external_user_id": session.external_user_id or "",
+            "business_name": user.business_name or "",
+        },
+    )
+    engine = AutomationEngine()
+    results: list[dict] = []
+    outbound: list[str] = []
+
+    for trigger in ("new_message", "keyword_match", "outside_working_hours"):
+        context.trigger = trigger
+        trigger_results = await engine.evaluate_rules(
+            trigger,
+            context,
+            user.id,
+            db,
+        )
+        results.extend(trigger_results)
+
+    for result in results:
+        if result.get("status") != "executed":
+            continue
+        for action in result.get("actions_executed") or []:
+            text = (action.get("outbound_text") or "").strip()
+            if text and action.get("status") == "success":
+                outbound.append(text)
+
+    await db.refresh(session)
+    return ("\n".join(outbound) if outbound else None), session.is_escalated, results
+
 async def get_session_history(
     session_id: uuid.UUID, db: AsyncSession, limit: int = HISTORY_LIMIT
 ) -> list[dict]:
@@ -223,6 +290,7 @@ async def _generate_reply(
     """
     api_key = await effective_openai_key(db)
     model = await effective_model(db)
+    master_system_prompt = await effective_master_system_prompt(db)
     client = _client_for(api_key)
 
     history = await get_session_history(session_id, db, limit=HISTORY_LIMIT)
@@ -274,7 +342,16 @@ async def _generate_reply(
     trace["model"] = model
 
     messages: list[dict] = [
-        {"role": "system", "content": build_system_prompt(user, style_samples, workflows, intent=intent)},
+        {
+            "role": "system",
+            "content": build_system_prompt(
+                user,
+                style_samples,
+                workflows,
+                intent=intent,
+                master_system_prompt=master_system_prompt,
+            ),
+        },
         *history,
         {"role": "user", "content": content},
     ]
@@ -350,6 +427,7 @@ async def generate_preview_reply(
     """Generate a quick preview reply using only the persona, no tools or history."""
     api_key = await effective_openai_key(db)
     model = await effective_model(db)
+    master_system_prompt = await effective_master_system_prompt(db)
     client = _client_for(api_key)
 
     # We mock a User object just to pass the persona to the prompt builder
@@ -358,7 +436,13 @@ async def generate_preview_reply(
         ai_persona=persona_text,
     )
     
-    system_prompt = build_system_prompt(dummy_user, style_samples=None, workflows=None, intent="general")
+    system_prompt = build_system_prompt(
+        dummy_user,
+        style_samples=None,
+        workflows=None,
+        intent="general",
+        master_system_prompt=master_system_prompt,
+    )
 
     messages = [
         {"role": "system", "content": system_prompt},
@@ -991,6 +1075,33 @@ async def process_message(
         processed=False,
     )
 
+    session = await db.get(ChatSession, session_id)
+    if session is not None:
+        automation_reply, automation_paused, automation_results = await _run_pre_ai_automations(
+            user=user,
+            session=session,
+            customer_message=user_message or "",
+            db=db,
+            media_type=media_type,
+        )
+        if automation_reply or automation_paused:
+            inbound_msg.processed = True
+            if automation_reply:
+                await db.commit()
+                return {
+                    "reply": automation_reply,
+                    "transcription": transcription,
+                    "action": "automation",
+                    "automation_results": automation_results,
+                }
+            await db.commit()
+            return {
+                "reply": AI_PAUSED_REPLY,
+                "transcription": transcription,
+                "action": "automation_paused",
+                "automation_results": automation_results,
+            }
+
     try:
         draft_reply, retrieved_data, ai_trace = await _generate_reply(user, session_id, content, db)
     except APIError:
@@ -1159,6 +1270,29 @@ async def process_pending(session_id: uuid.UUID, db: AsyncSession) -> dict | Non
         return None
 
     # ── Build content payload for OpenAI ──
+    automation_reply, automation_paused, automation_results = await _run_pre_ai_automations(
+        user=user,
+        session=session,
+        customer_message=combined_text,
+        db=db,
+        media_type=incoming_media_type,
+    )
+    if automation_reply or automation_paused:
+        for m in pending:
+            m.processed = True
+        await db.commit()
+        if not automation_reply:
+            return None
+        return {
+            "reply": automation_reply,
+            "channel": session_channel,
+            "external_user_id": session_external_user_id,
+            "user_id": str(user_id),
+            "audio_url": None,
+            "action": "automation",
+            "automation_results": automation_results,
+        }
+
     if image_urls:
         logger.info("Processing %d image(s) for session %s", len(image_urls), session_id)
         content: object = [

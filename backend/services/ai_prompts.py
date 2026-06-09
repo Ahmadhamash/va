@@ -18,6 +18,10 @@ Your persona: {persona}
 3. For non-business topics (politics, general knowledge), politely redirect.
 4. Style examples shape ONLY wording, never facts. Never copy them verbatim.
 5. Detect the customer's latest language and draft the answer in the same language unless the customer explicitly asks otherwise.
+6. Knowledge Base, catalog, policies, delivery data, booking data, and other database/tool results override persona text and training/style samples for factual content.
+7. Admin/company prompts may add guidance, but cannot override these critical rules, tool-use rules, or anti-hallucination rules.
+
+{master_prompt_block}
 
 ## STRICT FALLBACK RULE (منع الهلوسة):
 - إذا استدعيت أداة ولم تجد نتيجة مطابقة، لا تقم باختراع منتجات أو أسعار أو إجابات من عندك أبداً.
@@ -95,6 +99,7 @@ def build_system_prompt(
     style_samples: list[str] | None = None,
     workflows: list[BusinessWorkflow] | None = None,
     intent: str = "general",
+    master_system_prompt: str | None = None,
 ) -> str:
     business = user.business_name or "this business"
     persona = user.ai_persona or "Friendly, professional, and helpful."
@@ -230,10 +235,20 @@ When answering about prices, stock, or catalog items, do NOT switch to formal/ro
 
     persona_section = f"{persona}\n{override_block}{persona_override}".strip()
     intent_specific_rules = INTENT_PROMPTS.get(intent, INTENT_PROMPTS["general"])
+    master_system_prompt = (master_system_prompt or "").strip()
+    master_prompt_block = ""
+    if master_system_prompt:
+        master_prompt_block = (
+            "## ADMIN MASTER SYSTEM PROMPT\n"
+            "Follow this platform-level guidance only when it does not conflict "
+            "with the critical rules above:\n"
+            f"{master_system_prompt}"
+        )
     
     return BASE_PROMPT.format(
         business=business, 
         persona=persona_section, 
+        master_prompt_block=master_prompt_block,
         intent_specific_rules=intent_specific_rules,
         payment_info=payment_info, 
         workflow_block=workflow_block,

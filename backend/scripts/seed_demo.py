@@ -11,7 +11,7 @@ from decimal import Decimal
 from sqlalchemy import func, or_, select
 
 from database import AsyncSessionLocal
-from models import ChannelIntegration, Item, StyleSample, User, SubscriptionTier, UserSubscription
+from models import BusinessPolicy, ChannelIntegration, Item, StyleSample, User, SubscriptionTier, UserSubscription
 from services.auth_service import hash_password
 
 ADMIN = {"username": "admin", "email": "admin@demo.com", "password": "admin123"}
@@ -20,6 +20,7 @@ CLIENT = {
     "email": "shop@demo.com",
     "password": "shop123",
     "business_name": "متجر بلال للإلكترونيات",
+    "business_type": "electronics",
     "ai_persona": (
         "ودود ومرِح، يتكلّم بلهجة بيضاء بسيطة، يستخدم إيموجي باعتدال، "
         "يرحّب بالزبون ويختصر بالردّ. يقول 'نورتنا' و'حاضرين'."
@@ -69,6 +70,94 @@ ITEMS = [
         "price": Decimal("12.00"),
         "available": True,
     },
+    {
+        "name": "Galaxy A55 5G 256GB",
+        "description": "هاتف 5G بشاشة AMOLED، ذاكرة 256GB، كاميرا 50MP، وكفالة سنة.",
+        "category": "هواتف",
+        "price": Decimal("389.00"),
+        "available": True,
+        "item_metadata": {"storage": "256GB", "color": "navy", "warranty": "12 months"},
+    },
+    {
+        "name": "iPhone 15 128GB",
+        "description": "هاتف Apple جديد، USB-C، كاميرا مزدوجة، متوفر باللون الأسود والأزرق.",
+        "category": "هواتف",
+        "price": Decimal("799.00"),
+        "available": True,
+        "item_metadata": {"storage": "128GB", "colors": "black, blue"},
+    },
+    {
+        "name": "Laptop Pro 14",
+        "description": "لابتوب للأعمال والدراسة، شاشة 14 بوصة، 16GB RAM، 512GB SSD.",
+        "category": "لابتوبات",
+        "price": Decimal("699.00"),
+        "available": True,
+        "item_metadata": {"ram": "16GB", "storage": "512GB SSD"},
+    },
+    {
+        "name": "Gaming Monitor 27",
+        "description": "شاشة ألعاب 27 بوصة، 165Hz، دقة QHD، مدخل HDMI وDisplayPort.",
+        "category": "شاشات",
+        "price": Decimal("239.00"),
+        "available": True,
+        "item_metadata": {"refresh_rate": "165Hz", "resolution": "QHD"},
+    },
+    {
+        "name": "USB-C Hub 8-in-1",
+        "description": "محول USB-C فيه HDMI، قارئ ذاكرة، USB 3.0، وشحن PD.",
+        "category": "إكسسوارات",
+        "price": Decimal("29.00"),
+        "available": True,
+    },
+    {
+        "name": "AX3000 Wi-Fi Router",
+        "description": "راوتر Wi-Fi 6 سريع للمنازل والمكاتب الصغيرة، يغطي حتى 180 متر مربع.",
+        "category": "شبكات",
+        "price": Decimal("79.00"),
+        "available": True,
+    },
+    {
+        "name": "Webcam Full HD",
+        "description": "كاميرا 1080p للاجتماعات والبث، مايك مدمج وغطاء خصوصية.",
+        "category": "إكسسوارات",
+        "price": Decimal("34.00"),
+        "available": True,
+    },
+    {
+        "name": "Screen Protector Pack",
+        "description": "بكج حماية شاشة زجاجية لعدة موديلات، يشمل قطعتين وأدوات تركيب.",
+        "category": "حماية",
+        "price": Decimal("8.00"),
+        "available": True,
+    },
+]
+
+BUSINESS_POLICIES = [
+    {
+        "policy_type": "delivery",
+        "title": "مناطق وتكلفة التوصيل",
+        "content": "التوصيل داخل عمان خلال 24 ساعة بقيمة 3 دنانير. باقي المحافظات خلال 24-48 ساعة حسب شركة الشحن.",
+    },
+    {
+        "policy_type": "return",
+        "title": "سياسة الاستبدال والاسترجاع",
+        "content": "يمكن استبدال أو إرجاع المنتج خلال 7 أيام إذا كان غير مستخدم وبالتغليف الأصلي ومع الفاتورة. لا يشمل ذلك المنتجات المتضررة بسبب سوء الاستخدام.",
+    },
+    {
+        "policy_type": "warranty",
+        "title": "الكفالة",
+        "content": "معظم الأجهزة تشمل كفالة سنة على عيوب التصنيع. الإكسسوارات تختلف حسب المورد، ويجب التأكد من صفحة المنتج أو سؤال الموظف.",
+    },
+    {
+        "policy_type": "payment",
+        "title": "طرق الدفع",
+        "content": "نوفر الدفع نقدا عند الاستلام داخل عمان، وبطاقات الدفع، وتحويل CliQ على الاسم المستعار EBDA3.",
+    },
+    {
+        "policy_type": "faq",
+        "title": "تجربة المنتجات",
+        "content": "يمكن تجربة الأجهزة داخل المعرض قبل الشراء. المنتجات المختومة يمكن فتحها عند الشراء فقط حسب سياسة المورد.",
+    },
 ]
 
 STYLE_SAMPLES = [
@@ -90,6 +179,8 @@ async def _get_or_create_user(db, data: dict, role: str) -> User:
         user.role = role
         if data.get("business_name"):
             user.business_name = data["business_name"]
+        if data.get("business_type"):
+            user.business_type = data["business_type"]
         if data.get("ai_persona"):
             user.ai_persona = data["ai_persona"]
         await db.commit()
@@ -101,6 +192,7 @@ async def _get_or_create_user(db, data: dict, role: str) -> User:
         email=data["email"],
         hashed_password=hash_password(data["password"]),
         business_name=data.get("business_name"),
+        business_type=data.get("business_type"),
         ai_persona=data.get("ai_persona"),
         role=role,
     )
@@ -137,12 +229,28 @@ async def run() -> None:
         await _get_or_create_user(db, ADMIN, "admin")
         client = await _get_or_create_user(db, CLIENT, "client")
 
-        item_count = await db.scalar(
-            select(func.count()).select_from(Item).where(Item.user_id == client.id)
+        item_rows = await db.execute(
+            select(Item.name).where(Item.user_id == client.id)
         )
-        if not item_count:
-            for it in ITEMS:
+        existing_item_names = set(item_rows.scalars().all())
+        added_items = 0
+        for it in ITEMS:
+            if it["name"] not in existing_item_names:
                 db.add(Item(user_id=client.id, currency="USD", **it))
+                added_items += 1
+        if added_items:
+            await db.commit()
+
+        policy_rows = await db.execute(
+            select(BusinessPolicy.title).where(BusinessPolicy.user_id == client.id)
+        )
+        existing_policy_titles = set(policy_rows.scalars().all())
+        added_policies = 0
+        for policy in BUSINESS_POLICIES:
+            if policy["title"] not in existing_policy_titles:
+                db.add(BusinessPolicy(user_id=client.id, is_active=True, **policy))
+                added_policies += 1
+        if added_policies:
             await db.commit()
 
         style_count = await db.scalar(
@@ -225,7 +333,7 @@ async def run() -> None:
         print(f"  ADMIN  →  username: {ADMIN['username']}   password: {ADMIN['password']}")
         print(f"  CLIENT →  username: {CLIENT['username']}    password: {CLIENT['password']}")
         print(f"  Business: {CLIENT['business_name']}")
-        print(f"  Items: {len(ITEMS)}   Style samples: {len(STYLE_SAMPLES)}")
+        print(f"  Items: {len(ITEMS)}   Policies: {len(BUSINESS_POLICIES)}   Style samples: {len(STYLE_SAMPLES)}")
         print("-" * 60)
         print(f"  Widget script:  /widget/{widget.public_id}.js")
         print(f"  Widget message: /webhooks/widget/{widget.public_id}/message")

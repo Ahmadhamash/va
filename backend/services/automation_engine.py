@@ -421,6 +421,7 @@ class AutomationEngine:
                 text = config.get("text", "")
                 text = context.substitute_variables(text)
                 result["message"] = text
+                result["outbound_text"] = text
                 # The actual sending happens via the normal reply pipeline
                 # We store the auto-reply message in the session
                 if context.session_id:
@@ -519,7 +520,7 @@ class AutomationEngine:
         stmt = select(func.count(AutomationRun.id)).where(
             AutomationRun.rule_id == rule_id,
             AutomationRun.session_id == session_id,
-            AutomationRun.status == "success",
+            AutomationRun.status.in_(("success", "executed")),
         )
         result = await db.execute(stmt)
         return result.scalar() or 0

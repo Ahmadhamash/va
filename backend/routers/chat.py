@@ -19,7 +19,15 @@ import json
 
 from database import get_db
 from middleware.auth_middleware import get_current_user
-from models import ChatSession, Message, MessageDeliveryLog, User
+from models import (
+    BusinessPolicy,
+    ChannelIntegration,
+    ChatSession,
+    Item,
+    Message,
+    MessageDeliveryLog,
+    User,
+)
 from schemas.chat import ChatSendResponse, MessageOut, SessionOut
 from services.ai_media import TranscriptionError
 from services.ai_chat import process_message, save_message, generate_preview_reply
@@ -28,6 +36,7 @@ from services.file_service import save_upload
 router = APIRouter(prefix="/chat", tags=["chat"])
 
 _AUDIO_FALLBACK = "Couldn't process audio, please type your message"
+_CONVERSATION_STAFF_ROLES = {"admin", "support_agent"}
 
 
 class PreviewRequest(BaseModel):
@@ -92,6 +101,14 @@ async def _get_session_for_actor(
             status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized"
         )
     return session
+
+
+def _require_conversation_staff(user: User) -> None:
+    if user.role not in _CONVERSATION_STAFF_ROLES:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Conversation actions are available to employees and admins only",
+        )
 
 
 async def _set_session_status(
@@ -287,9 +304,11 @@ async def inbox_conversations(
     db: AsyncSession = Depends(get_db),
 ):
     from models import HandoffSession
+    stmt = select(ChatSession)
+    if current_user.role not in _CONVERSATION_STAFF_ROLES:
+        stmt = stmt.where(ChatSession.user_id == current_user.id)
     result = await db.execute(
-        select(ChatSession)
-        .where(ChatSession.user_id == current_user.id)
+        stmt
         .order_by(ChatSession.created_at.desc())
         .offset(skip).limit(limit)
     )
@@ -387,11 +406,85 @@ async def inbox_conversations(
             .where(delivery_rank.c.rn == 1)
         )
         last_delivery_status = {row.session_id: row.status for row in delivery_rows}
+
+    owner_ids = sorted({s.user_id for s in sessions}, key=str)
+    owners: dict[uuid.UUID, User] = {}
+    catalog_context: dict[uuid.UUID, dict] = {}
+    knowledge_context: dict[uuid.UUID, dict] = {}
+    channel_context: dict[tuple[uuid.UUID, str], dict] = {}
+    message_counts: dict[uuid.UUID, int] = {}
+
+    if owner_ids:
+        owner_rows = await db.execute(select(User).where(User.id.in_(owner_ids)))
+        owners = {owner.id: owner for owner in owner_rows.scalars().all()}
+
+        item_rows = await db.execute(
+            select(Item.user_id, Item.category, func.count())
+            .where(Item.user_id.in_(owner_ids))
+            .group_by(Item.user_id, Item.category)
+        )
+        for user_id, category, count in item_rows:
+            ctx = catalog_context.setdefault(
+                user_id,
+                {"product_count": 0, "categories": []},
+            )
+            ctx["product_count"] += int(count or 0)
+            if category and category not in ctx["categories"]:
+                ctx["categories"].append(category)
+
+        policy_rows = await db.execute(
+            select(BusinessPolicy.user_id, BusinessPolicy.policy_type, func.count())
+            .where(
+                BusinessPolicy.user_id.in_(owner_ids),
+                BusinessPolicy.is_active.is_(True),
+            )
+            .group_by(BusinessPolicy.user_id, BusinessPolicy.policy_type)
+        )
+        for user_id, policy_type, count in policy_rows:
+            ctx = knowledge_context.setdefault(
+                user_id,
+                {"item_count": 0, "categories": []},
+            )
+            ctx["item_count"] += int(count or 0)
+            if policy_type and policy_type not in ctx["categories"]:
+                ctx["categories"].append(policy_type)
+
+        integration_rows = await db.execute(
+            select(ChannelIntegration).where(
+                ChannelIntegration.user_id.in_(owner_ids),
+                ChannelIntegration.is_active.is_(True),
+            )
+        )
+        for integration in integration_rows.scalars().all():
+            credentials = integration.credentials or {}
+            channel_context[(integration.user_id, integration.platform)] = {
+                "platform": integration.platform,
+                "public_id": integration.public_id,
+                "page_id": credentials.get("page_id")
+                or credentials.get("phone_number_id")
+                or credentials.get("ig_user_id"),
+                "page_name": credentials.get("page_name")
+                or credentials.get("display_phone_number")
+                or credentials.get("account_name"),
+            }
+
+    if session_ids:
+        count_rows = await db.execute(
+            select(Message.session_id, func.count())
+            .where(Message.session_id.in_(session_ids))
+            .group_by(Message.session_id)
+        )
+        message_counts = {
+            session_id: int(count or 0)
+            for session_id, count in count_rows
+        }
     
     out = []
     for s in sessions:
         msg = last_messages.get(s.id)
         handoff = last_handoffs.get(s.id)
+        owner = owners.get(s.user_id)
+        metadata = s.metadata_ or {}
         metadata_status = (s.metadata_ or {}).get("status")
         if metadata_status == "closed":
             raw_status = "resolved"
@@ -411,6 +504,39 @@ async def inbox_conversations(
             "aiSuggestedReply": handoff.ai_suggested_reply if handoff else None,
             "unreadCount": unread_counts.get(s.id, 0),
             "deliveryStatus": last_delivery_status.get(s.id),
+            "context": {
+                "connectedAccount": channel_context.get((s.user_id, s.channel), {
+                    "platform": s.channel,
+                    "public_id": None,
+                    "page_id": None,
+                    "page_name": None,
+                }),
+                "business": {
+                    "id": str(s.user_id),
+                    "name": owner.business_name if owner else None,
+                    "type": owner.business_type if owner else None,
+                    "aiAutoReplyEnabled": bool(
+                        getattr(owner, "ai_auto_reply_enabled", True)
+                    ) if owner else True,
+                },
+                "customer": {
+                    "externalUserId": s.external_user_id,
+                    "displayName": s.title,
+                    "tags": list(metadata.get("tags", [])),
+                },
+                "productCatalog": catalog_context.get(
+                    s.user_id,
+                    {"product_count": 0, "categories": []},
+                ),
+                "knowledgeBase": knowledge_context.get(
+                    s.user_id,
+                    {"item_count": 0, "categories": []},
+                ),
+                "previousInteractions": {
+                    "message_count": message_counts.get(s.id, 0),
+                    "last_viewed_at": metadata.get("last_viewed_at"),
+                },
+            },
         })
     return out
 
@@ -424,7 +550,7 @@ async def session_messages(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    session = await _get_owned_session(session_id, current_user, db)
+    session = await _get_session_for_actor(session_id, current_user, db)
     result = await db.execute(
         select(Message)
         .where(Message.session_id == session_id)
@@ -432,10 +558,11 @@ async def session_messages(
         .offset(skip).limit(limit)
     )
     rows = list(result.scalars().all())
-    metadata = dict(session.metadata_ or {})
-    metadata["last_viewed_at"] = _utcnow_iso()
-    session.metadata_ = metadata
-    await db.commit()
+    if current_user.role in _CONVERSATION_STAFF_ROLES:
+        metadata = dict(session.metadata_ or {})
+        metadata["last_viewed_at"] = _utcnow_iso()
+        session.metadata_ = metadata
+        await db.commit()
     return rows
 
 
@@ -456,6 +583,7 @@ async def update_session_notes(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    _require_conversation_staff(current_user)
     session = await _get_session_for_actor(session_id, current_user, db)
     metadata = dict(session.metadata_ or {})
     metadata["note"] = (payload.note or "").strip()[:5000]
@@ -470,6 +598,7 @@ async def takeover_session(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    _require_conversation_staff(current_user)
     session = await _get_session_for_actor(session_id, current_user, db)
     return await _set_session_status(session, db, raw_status="assigned")
 
@@ -480,6 +609,7 @@ async def return_session_to_ai(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    _require_conversation_staff(current_user)
     session = await _get_session_for_actor(session_id, current_user, db)
     return await _set_session_status(session, db, raw_status="returned_to_ai")
 
@@ -490,6 +620,7 @@ async def close_session(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    _require_conversation_staff(current_user)
     session = await _get_session_for_actor(session_id, current_user, db)
     return await _set_session_status(session, db, raw_status="resolved")
 
@@ -502,15 +633,12 @@ async def agent_send_message(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    # Agents/admins can reply. Also, business owner (client) can reply to their own sessions.
+    _require_conversation_staff(current_user)
+    # Employees/admins can reply to customer conversations.
     session = await db.get(ChatSession, session_id)
     if session is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Session not found"
-        )
-    if current_user.role == "client" and session.user_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized"
         )
     message = (message or "").strip()
     media_type = "text"
@@ -616,6 +744,7 @@ async def delete_all_sessions(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    _require_conversation_staff(current_user)
     result = await db.execute(
         delete(ChatSession).where(ChatSession.user_id == current_user.id)
     )
@@ -629,6 +758,7 @@ async def delete_session(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    session = await _get_owned_session(session_id, current_user, db)
+    _require_conversation_staff(current_user)
+    session = await _get_session_for_actor(session_id, current_user, db)
     await db.delete(session)
     await db.commit()

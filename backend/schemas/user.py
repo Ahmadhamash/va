@@ -59,6 +59,7 @@ class ClientSummary(BaseModel):
     ai_persona: str | None
     role: str
     is_active: bool
+    ai_auto_reply_enabled: bool = True
     created_at: datetime
     item_count: int = 0
     session_count: int = 0

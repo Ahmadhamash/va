@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, Float, ForeignKey, Integer, String, func
+from sqlalchemy import Boolean, Float, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -51,7 +51,7 @@ class VoiceSettings(Base):
         Float, default=1.0, server_default="1.0"
     )
     voice_personality: Mapped[str] = mapped_column(
-        String(30), default="friendly", server_default="friendly"
+        Text, default="friendly", server_default="friendly"
     )
     # Provider-specific settings (API keys, voice IDs, etc.)
     stt_config: Mapped[dict] = mapped_column(EncryptedJSONB, default=dict, server_default="{}")

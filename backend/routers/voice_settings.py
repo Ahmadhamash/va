@@ -3,19 +3,21 @@
 Manages per-business voice pipeline configuration: STT/TTS providers,
 voice mode, preferred voice, ElevenLabs settings, etc.
 """
+import json
 import logging
-import os
 import uuid
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
+from config import settings as env_settings
 from database import get_db
 from middleware.auth_middleware import get_current_user
-from models import User, VoiceSettings
+from models import User, UserSubscription, VoiceSettings
 
 logger = logging.getLogger("voice_settings_router")
 router = APIRouter(prefix="/voice-settings", tags=["voice"])
@@ -82,6 +84,10 @@ ELEVENLABS_ARABIC_VOICES = [
 
 
 ELEVENLABS_API_BASE = "https://api.elevenlabs.io/v1"
+
+
+def _elevenlabs_key() -> str:
+    return env_settings.ELEVENLABS_API_KEY.strip()
 
 DIALECT_SAMPLES = {
     "Jordanian / Levantine": "مرحبا، كيف بقدر أساعدك اليوم؟",
@@ -176,7 +182,7 @@ async def get_voice_settings(
     settings = await _get_or_create(current_user.id, db)
 
     # Determine actual provider names
-    elevenlabs_available = bool(os.getenv("ELEVENLABS_API_KEY", "").strip())
+    elevenlabs_available = bool(_elevenlabs_key())
     tts_provider_name = "elevenlabs" if elevenlabs_available else "openai"
     if settings.tts_provider == "openai":
         tts_provider_name = "openai"
@@ -204,7 +210,7 @@ async def list_voice_options(
     current_user: User = Depends(get_current_user),
 ):
     """List voice options for the dashboard."""
-    elevenlabs_key = os.getenv("ELEVENLABS_API_KEY", "").strip()
+    elevenlabs_key = _elevenlabs_key()
     elevenlabs_voices, elevenlabs_meta = await _load_elevenlabs_arabic_voices(
         elevenlabs_key
     )
@@ -317,7 +323,7 @@ async def preview_voice(
 
     settings = await _get_or_create(current_user.id, db)
     provider = body.tts_provider or settings.tts_provider
-    if provider == "elevenlabs" and not os.getenv("ELEVENLABS_API_KEY", "").strip():
+    if provider == "elevenlabs" and not _elevenlabs_key():
         raise HTTPException(
             status_code=400,
             detail="ELEVENLABS_API_KEY is not configured on the server.",
@@ -351,6 +357,150 @@ async def preview_voice(
             "success": False,
             "error": str(e),
         }
+
+
+@router.post("/clone")
+async def clone_voice(
+    name: str = Form(..., min_length=2, max_length=100),
+    description: str = Form(default="", max_length=1000),
+    files: list[UploadFile] = File(...),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Create an ElevenLabs cloned voice for a paid account."""
+    api_key = _elevenlabs_key()
+    if not api_key:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="ELEVENLABS_API_KEY is not configured on the server.",
+        )
+    if not await _voice_cloning_allowed(current_user, db):
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail="Voice cloning is available on paid plans only.",
+        )
+    if not files:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Upload at least one audio sample.",
+        )
+
+    multipart_files = []
+    total_bytes = 0
+    for sample in files[:10]:
+        content_type = (sample.content_type or "").lower()
+        if not content_type.startswith("audio/"):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Voice cloning accepts audio files only.",
+            )
+        content = await sample.read()
+        total_bytes += len(content)
+        if total_bytes > 50 * 1024 * 1024:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail="Voice samples are too large.",
+            )
+        multipart_files.append(
+            ("files", (sample.filename or "sample.wav", content, content_type))
+        )
+
+    data = {
+        "name": name.strip(),
+        "description": description.strip(),
+        "labels": json.dumps(
+            {"source": "chatter", "user_id": str(current_user.id)},
+            ensure_ascii=False,
+        ),
+    }
+    headers = {"xi-api-key": api_key}
+
+    try:
+        async with httpx.AsyncClient(timeout=60) as client:
+            resp = await client.post(
+                f"{ELEVENLABS_API_BASE}/voices/add",
+                headers=headers,
+                data=data,
+                files=multipart_files,
+            )
+    except httpx.HTTPError as exc:
+        logger.exception("ElevenLabs voice clone request failed")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Could not reach ElevenLabs voice cloning.",
+        ) from exc
+
+    if resp.status_code >= 400:
+        logger.warning(
+            "ElevenLabs voice clone failed (%s): %s",
+            resp.status_code,
+            resp.text[:500],
+        )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="ElevenLabs voice cloning failed.",
+        )
+
+    payload = resp.json()
+    voice_id = payload.get("voice_id")
+    if not voice_id:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="ElevenLabs did not return a voice_id.",
+        )
+
+    settings = await _get_or_create(current_user.id, db)
+    settings.tts_provider = "elevenlabs"
+    settings.preferred_voice = f"el_{voice_id}"
+    config = dict(settings.tts_config or {})
+    config.update(
+        {
+            "voice_id": voice_id,
+            "cloned_voice_name": name.strip(),
+            "cloned_voice_description": description.strip(),
+            "is_cloned_voice": True,
+        }
+    )
+    settings.tts_config = config
+    await db.commit()
+
+    return {
+        "success": True,
+        "voice_id": voice_id,
+        "preferred_voice": settings.preferred_voice,
+        "tts_provider": settings.tts_provider,
+    }
+
+
+async def _voice_cloning_allowed(user: User, db: AsyncSession) -> bool:
+    if user.is_admin:
+        return True
+
+    result = await db.execute(
+        select(UserSubscription)
+        .options(selectinload(UserSubscription.tier))
+        .where(
+            UserSubscription.user_id == user.id,
+            UserSubscription.status == "active",
+        )
+    )
+    subscription = result.scalar_one_or_none()
+    if subscription is None or subscription.tier is None:
+        return False
+
+    features = subscription.tier.features or []
+    if isinstance(features, dict) and features.get("voice_cloning"):
+        return True
+    if isinstance(features, list):
+        for feature in features:
+            text = str(feature).lower()
+            if "voice" in text and "clon" in text:
+                return True
+
+    try:
+        return float(subscription.tier.price_monthly or 0) > 0
+    except (TypeError, ValueError):
+        return False
 
 
 async def _load_elevenlabs_arabic_voices(

@@ -395,6 +395,37 @@ class TestVoiceUsesVerifiedAnswer:
         assert "audio_format" in cols
         assert str(cols["audio_format"].server_default.arg) == "mp3"
 
+    @pytest.mark.asyncio
+    async def test_elevenlabs_dynamic_cloned_voice_id_is_used(self):
+        class FakeResponse:
+            content = b"audio"
+
+            def raise_for_status(self):
+                return None
+
+        class FakeClient:
+            def __init__(self):
+                self.url = ""
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return None
+
+            async def post(self, url, **kwargs):
+                self.url = url
+                return FakeResponse()
+
+        fake_client = FakeClient()
+        with patch("services.voice.tts.httpx.AsyncClient", return_value=fake_client):
+            audio = await ElevenLabsTTS("test-key").synthesize(
+                "hello", voice="el_custom_voice_123"
+            )
+
+        assert audio == b"audio"
+        assert fake_client.url.endswith("/text-to-speech/custom_voice_123")
+
 
 # ═══════════════════════════════════════════════════════════════════════
 # 6. HANDOFF STOPS AI
@@ -520,6 +551,26 @@ class TestAutomationSafety:
         assert engine._evaluate_condition(
             {"type": "message_count", "operator": "greater_than", "value": 3}, ctx
         )
+
+    @pytest.mark.asyncio
+    async def test_loop_prevention_counts_executed_runs(self):
+        class FakeResult:
+            def scalar(self):
+                return 2
+
+        db = MagicMock()
+        db.execute = AsyncMock(return_value=FakeResult())
+        count = await AutomationEngine()._get_execution_count(
+            uuid.uuid4(), uuid.uuid4(), db
+        )
+
+        assert count == 2
+        path = os.path.join(
+            os.path.dirname(__file__), "..", "services", "automation_engine.py"
+        )
+        with open(path, encoding="utf-8") as f:
+            code = f.read()
+        assert 'AutomationRun.status.in_(("success", "executed"))' in code
 
 
 # ═══════════════════════════════════════════════════════════════════════

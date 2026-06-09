@@ -44,6 +44,37 @@ export type Conversation = {
   aiSuggestedReply?: string | null;
   unreadCount?: number;
   deliveryStatus?: string | null;
+  context?: {
+    connectedAccount?: {
+      platform?: string;
+      public_id?: string | null;
+      page_id?: string | null;
+      page_name?: string | null;
+    };
+    business?: {
+      id?: string;
+      name?: string | null;
+      type?: string | null;
+      aiAutoReplyEnabled?: boolean;
+    };
+    customer?: {
+      externalUserId?: string | null;
+      displayName?: string | null;
+      tags?: string[];
+    };
+    productCatalog?: {
+      product_count?: number;
+      categories?: string[];
+    };
+    knowledgeBase?: {
+      item_count?: number;
+      categories?: string[];
+    };
+    previousInteractions?: {
+      message_count?: number;
+      last_viewed_at?: string | null;
+    };
+  };
 };
 
 export type Product = {

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { 
   Users, 
+  Bot,
   MessageSquare, 
   Settings, 
   ShieldCheck, 
@@ -27,6 +28,7 @@ import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { useAuthStore } from "@/store/use-auth-store";
 import { GradientCard } from "@/components/gradient-card";
 
@@ -40,6 +42,7 @@ interface ClientData {
   business_type: string | null;
   role: string;
   is_active: boolean;
+  ai_auto_reply_enabled: boolean;
   created_at: string;
   item_count: number;
   session_count: number;
@@ -69,7 +72,21 @@ interface PlatformSettings {
   key_source: string;
   ai_model: string;
   debounce_seconds: number;
+  master_system_prompt: string;
 }
+
+interface BusinessTypeOption {
+  key: string;
+  label: string;
+  icon?: string;
+  group?: string;
+}
+
+const fallbackBusinessTypes: BusinessTypeOption[] = [
+  { key: "retail", label: "Retail / Ecommerce", group: "Commerce" },
+  { key: "restaurant", label: "Restaurant / Cafe", group: "Food" },
+  { key: "services", label: "Professional Services", group: "Services" },
+];
 
 function manyChatStatusLabel(status: ManyChatSetupStatus) {
   if (status === "completed") return "مكتمل";
@@ -92,6 +109,7 @@ export default function AdminDashboardPage() {
   const [stats, setStats] = useState<PlatformStats | null>(null);
   const [clients, setClients] = useState<ClientData[]>([]);
   const [systemSettings, setSystemSettings] = useState<PlatformSettings | null>(null);
+  const [businessTypes, setBusinessTypes] = useState<BusinessTypeOption[]>(fallbackBusinessTypes);
   const [loading, setLoading] = useState(true);
 
   // Search query
@@ -115,6 +133,7 @@ export default function AdminDashboardPage() {
   const [apiKeyInput, setApiKeyInput] = useState("");
   const [aiModelInput, setAiModelInput] = useState("gpt-4o");
   const [debounceSecondsInput, setDebounceSecondsInput] = useState(2);
+  const [masterSystemPromptInput, setMasterSystemPromptInput] = useState("");
   const [updatingSettings, setUpdatingSettings] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
 
@@ -137,10 +156,11 @@ export default function AdminDashboardPage() {
   const loadAdminData = async () => {
     if (!token) return;
     try {
-      const [statsRes, clientsRes, settingsRes] = await Promise.all([
+      const [statsRes, clientsRes, settingsRes, businessTypesRes] = await Promise.all([
         fetch("/api/admin/stats", { headers: { Authorization: "Bearer " + token } }),
         fetch("/api/admin/clients", { headers: { Authorization: "Bearer " + token } }),
-        fetch("/api/admin/settings", { headers: { Authorization: "Bearer " + token } })
+        fetch("/api/admin/settings", { headers: { Authorization: "Bearer " + token } }),
+        fetch("/api/business-types", { cache: "no-store" })
       ]);
 
       if (statsRes.ok) {
@@ -154,6 +174,13 @@ export default function AdminDashboardPage() {
         setSystemSettings(settingsData);
         setAiModelInput(settingsData.ai_model || "gpt-4o");
         setDebounceSecondsInput(settingsData.debounce_seconds ?? 2);
+        setMasterSystemPromptInput(settingsData.master_system_prompt || "");
+      }
+      if (businessTypesRes.ok) {
+        const typesData = await businessTypesRes.json().catch(() => []);
+        if (Array.isArray(typesData) && typesData.length) {
+          setBusinessTypes(typesData);
+        }
       }
     } catch (err) {
       console.error("Failed to load admin dashboard data", err);
@@ -220,6 +247,32 @@ export default function AdminDashboardPage() {
     } catch (err) {
       console.error(err);
       showNotice("❌ حدث خطأ أثناء الاتصال بالخادم.", "error");
+    }
+  };
+
+  const handleToggleClientAI = async (client: ClientData) => {
+    if (!token) return;
+    const nextEnabledState = !client.ai_auto_reply_enabled;
+    try {
+      const res = await fetch(`/api/admin/clients/${client.id}/ai-auto-reply`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ enabled: nextEnabledState })
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setClients(prev => prev.map(c => c.id === client.id ? { ...c, ...data, ai_auto_reply_enabled: nextEnabledState } : c));
+        showNotice(nextEnabledState ? "AI auto-replies enabled for this company." : "AI auto-replies disabled for this company.");
+      } else {
+        showNotice(data.detail || "Failed to update AI auto-reply status.", "error");
+      }
+    } catch (err) {
+      console.error(err);
+      showNotice("Failed to update AI auto-reply status.", "error");
     }
   };
 
@@ -362,13 +415,15 @@ export default function AdminDashboardPage() {
         body: JSON.stringify({
           openai_api_key: apiKeyInput || null,
           ai_model: aiModelInput,
-          debounce_seconds: debounceSecondsInput
+          debounce_seconds: debounceSecondsInput,
+          master_system_prompt: masterSystemPromptInput
         })
       });
 
       if (res.ok) {
         const updatedSettings = await res.json();
         setSystemSettings(updatedSettings);
+        setMasterSystemPromptInput(updatedSettings.master_system_prompt || "");
         setApiKeyInput(""); // Clear the input sensitive string
         showNotice("⚙️ تم تحديث وحفظ إعدادات المنصة والذكاء الاصطناعي بنجاح.");
       } else {
@@ -562,6 +617,7 @@ export default function AdminDashboardPage() {
                         <th className="p-4">البريد الإلكتروني</th>
                         <th className="p-4 text-center">المنتجات</th>
                         <th className="p-4 text-center">المحادثات</th>
+                        <th className="p-4 text-center">AI</th>
                         <th className="p-4 text-center">ManyChat</th>
                         <th className="p-4 text-center">الحالة</th>
                         <th className="p-4 text-left">التحكم</th>
@@ -570,7 +626,7 @@ export default function AdminDashboardPage() {
                     <tbody className="divide-y divide-white/5 text-sm text-white/80">
                       {clients.length === 0 ? (
                         <tr>
-                          <td colSpan={7} className="p-8 text-center text-white/40">لا يوجد عملاء مطابقين للبحث.</td>
+                          <td colSpan={8} className="p-8 text-center text-white/40">لا يوجد عملاء مطابقين للبحث.</td>
                         </tr>
                       ) : (
                         clients.map((client) => (
@@ -582,6 +638,13 @@ export default function AdminDashboardPage() {
                             <td className="p-4 font-mono text-xs text-white/60">{client.email}</td>
                             <td className="p-4 text-center">{client.item_count}</td>
                             <td className="p-4 text-center">{client.session_count}</td>
+                            <td className="p-4 text-center">
+                              <span className={`inline-block rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
+                                client.ai_auto_reply_enabled ? "border border-cyanx-500/20 bg-cyanx-500/10 text-cyanx-300" : "border border-amber-500/20 bg-amber-500/10 text-amber-300"
+                              }`}>
+                                {client.ai_auto_reply_enabled ? "ON" : "OFF"}
+                              </span>
+                            </td>
                             <td className="p-4 text-center">
                               <span className={`inline-block rounded-full px-2.5 py-0.5 text-[10px] font-bold ${manyChatStatusClass(client.manychat_setup_status)}`}>
                                 {manyChatStatusLabel(client.manychat_setup_status)}
@@ -617,6 +680,15 @@ export default function AdminDashboardPage() {
                                   Manychat
                                 </Button>
                               </div>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="py-1.5 h-auto text-xs"
+                                onClick={() => handleToggleClientAI(client)}
+                              >
+                                <Bot className="h-3.5 w-3.5" />
+                                <span>{client.ai_auto_reply_enabled ? "AI OFF" : "AI ON"}</span>
+                              </Button>
                               <Button 
                                 size="sm" 
                                 variant={client.is_active ? "danger" : "secondary"}
@@ -682,6 +754,20 @@ export default function AdminDashboardPage() {
                       <option value="gpt-4-turbo">gpt-4-turbo</option>
                       <option value="gpt-3.5-turbo">gpt-3.5-turbo</option>
                     </select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-white/50 block">Master system prompt</label>
+                    <Textarea
+                      value={masterSystemPromptInput}
+                      onChange={(e) => setMasterSystemPromptInput(e.target.value)}
+                      placeholder="Optional platform-wide prompt applied to all companies."
+                      className="min-h-36 text-left font-mono text-xs"
+                      dir="ltr"
+                    />
+                    <span className="text-[10px] text-white/30 block mt-1 leading-5">
+                      Applies below critical safety and grounding rules; company prompts can still add local tone and business behavior.
+                    </span>
                   </div>
 
                   <div className="space-y-1.5">
@@ -790,17 +876,11 @@ export default function AdminDashboardPage() {
                   onChange={(e) => setNewClientBusinessType(e.target.value)}
                   className="h-11 w-full rounded-2xl border border-white/10 bg-[#16161a] px-4 text-right text-sm text-white outline-none cursor-pointer appearance-none"
                 >
-                  <option value="retail">🛍️ متجر تجزئة / تجارة إلكترونية</option>
-                  <option value="restaurant">🍽️ مطعم / كافيه</option>
-                  <option value="courses">📚 أكاديمية دورات تدريبية</option>
-                  <option value="clinic">🏥 عيادة / مركز طبي</option>
-                  <option value="salon">💇 صالون تجميل / سبا</option>
-                  <option value="services">🔧 خدمات عامة وصيانة</option>
-                  <option value="real_estate">🏠 مكتب عقارات</option>
-                  <option value="cars">🚗 معرض سيارات</option>
-                  <option value="electronics">📱 متجر إلكترونيات</option>
-                  <option value="digital">💻 منتجات رقمية واشتراكات</option>
-                  <option value="consulting">💼 مكتب استشارات وأعمال</option>
+                  {businessTypes.map((item) => (
+                    <option key={item.key} value={item.key}>
+                      {item.group ? `${item.group} - ` : ""}{item.label}
+                    </option>
+                  ))}
                 </select>
               </div>
 

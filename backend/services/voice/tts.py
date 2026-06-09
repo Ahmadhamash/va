@@ -11,9 +11,7 @@ Provider selection logic:
 from __future__ import annotations
 
 import logging
-import os
 from abc import ABC, abstractmethod
-from typing import Optional
 
 import httpx
 from services.openai_client import get_openai_client
@@ -87,9 +85,13 @@ class ElevenLabsTTS(TTSProvider):
         output_format: str = "mp3",
     ) -> bytes:
         # Resolve voice ID
+        dynamic_voice_id = None
+        if voice.startswith("el_") and voice not in self.DEFAULT_VOICE_MAP:
+            dynamic_voice_id = voice[3:]
         voice_id = self._voice_config.get(
             "voice_id",
-            self.DEFAULT_VOICE_MAP.get(voice, self.DEFAULT_VOICE_MAP["nova"]),
+            dynamic_voice_id
+            or self.DEFAULT_VOICE_MAP.get(voice, self.DEFAULT_VOICE_MAP["nova"]),
         )
         model_id = self._voice_config.get("model_id", self.DEFAULT_MODEL)
         stability = self._voice_config.get("stability", 0.5)

@@ -2,6 +2,7 @@ import uuid
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -35,6 +36,10 @@ from services.settings_service import get_settings_row, invalidate_cache
 from services.business_templates import get_template
 
 router = APIRouter(prefix="/admin", tags=["admin"])
+
+
+class AIAutoReplyUpdate(BaseModel):
+    enabled: bool
 
 
 def _mask_key(key: str | None) -> str:
@@ -164,6 +169,32 @@ async def set_client_active(
     await db.commit()
     await db.refresh(client)
     return client
+
+
+@router.patch("/clients/{client_id}/ai-auto-reply", response_model=ClientSummary)
+async def set_client_ai_auto_reply(
+    client_id: uuid.UUID,
+    payload: AIAutoReplyUpdate,
+    _: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    client = await _get_client(client_id, db)
+    client.ai_auto_reply_enabled = payload.enabled
+    await db.commit()
+    await db.refresh(client)
+    summary = ClientSummary.model_validate(client)
+    summary.item_count = await db.scalar(
+        select(func.count()).select_from(Item).where(Item.user_id == client.id)
+    )
+    summary.session_count = await db.scalar(
+        select(func.count())
+        .select_from(ChatSession)
+        .where(ChatSession.user_id == client.id)
+    )
+    summary.style_sample_count = await db.scalar(
+        select(func.count()).select_from(StyleSample).where(StyleSample.user_id == client.id)
+    )
+    return summary
 
 
 @router.patch("/clients/{client_id}/manychat-status", response_model=ClientSummary)
@@ -380,6 +411,7 @@ async def get_platform_settings(
         key_source=source,
         ai_model=row.ai_model,
         debounce_seconds=row.debounce_seconds,
+        master_system_prompt=row.master_system_prompt or "",
     )
 
 
@@ -396,6 +428,8 @@ async def update_platform_settings(
         row.ai_model = payload.ai_model.strip() or "gpt-4o"
     if payload.debounce_seconds is not None:
         row.debounce_seconds = payload.debounce_seconds
+    if payload.master_system_prompt is not None:
+        row.master_system_prompt = payload.master_system_prompt.strip()
     await db.commit()
     await db.refresh(row)
     invalidate_cache()
@@ -412,6 +446,7 @@ async def update_platform_settings(
         key_source=source,
         ai_model=row.ai_model,
         debounce_seconds=row.debounce_seconds,
+        master_system_prompt=row.master_system_prompt or "",
     )
 
 

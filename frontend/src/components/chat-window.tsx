@@ -121,7 +121,7 @@ export function ChatWindow({
   onStatusChange?: (id: string, status: ConversationStatus) => void;
   onNewMessage?: (id: string, message: Message) => void;
 }) {
-  const { token } = useAuthStore();
+  const { token, user } = useAuthStore();
   const [draft, setDraft] = useState("");
   const [status, setStatus] = useState<ConversationStatus>(conversation.status);
   const [messages, setMessages] = useState<Message[]>(conversation.messages);
@@ -135,6 +135,10 @@ export function ChatWindow({
   const [attachment, setAttachment] = useState<File | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const canAct = user?.role === "admin" || user?.role === "support_agent";
+  const context = conversation.context || {};
+  const productCategories = context.productCatalog?.categories?.slice(0, 4) || [];
+  const knowledgeCategories = context.knowledgeBase?.categories?.slice(0, 4) || [];
 
   // Sync props to state
   useEffect(() => {
@@ -196,6 +200,7 @@ export function ChatWindow({
   }, [conversation.aiSuggestedReply, status, version]);
 
   async function addMessage(sender: Message["sender"], body: string, file?: File | null) {
+    if (!canAct) return false;
     const clean = body.trim();
     if ((!clean && !file) || sending) return false;
 
@@ -256,6 +261,7 @@ export function ChatWindow({
   }
 
   async function updateStatus(newStatus: ConversationStatus, action: "takeover" | "return-to-ai" | "close") {
+    if (!canAct) return false;
     if (statusUpdating) return false;
     const previousStatus = status;
     setStatusUpdating(true);
@@ -286,9 +292,10 @@ export function ChatWindow({
 
   const isAiHandling = status === "AI_HANDLING";
   const isClosed = status === "CLOSED";
-  const isReplyLocked = isAiHandling || isClosed;
+  const isReplyLocked = !canAct || isAiHandling || isClosed;
 
   async function sendDraft() {
+    if (!canAct) return;
     if (isReplyLocked || sending || statusUpdating || (!draft.trim() && !attachment)) return;
     const currentDraft = draft;
     const currentAttachment = attachment;
@@ -303,6 +310,7 @@ export function ChatWindow({
   }
 
   async function saveNote() {
+    if (!canAct) return;
     if (!token || savingNote) return;
     setSavingNote(true);
     try {
@@ -343,6 +351,8 @@ export function ChatWindow({
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <StatusBadge status={status} />
+            {canAct ? (
+              <>
             <Button
               size="sm"
               variant={status === "HUMAN_ACTIVE" ? "secondary" : "ghost"}
@@ -368,6 +378,8 @@ export function ChatWindow({
             >
               إغلاق
             </Button>
+              </>
+            ) : null}
           </div>
         </div>
 
@@ -379,6 +391,12 @@ export function ChatWindow({
         </div>
 
         <div className="border-t border-white/10 p-4">
+          {!canAct ? (
+            <div className="rounded-2xl border border-white/10 bg-white/[0.035] px-4 py-3 text-sm text-white/50">
+              Read-only access: you can view conversations and analytics, but only employees and admins can reply or change conversation status.
+            </div>
+          ) : (
+            <>
           <div className={cn("mb-3 rounded-3xl border p-4 transition-opacity", isReplyLocked ? "opacity-50 pointer-events-none border-white/10 bg-white/5" : "border-emeraldx-400/20 bg-emeraldx-500/10")}>
             <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-2 text-sm font-semibold text-emeraldx-400">
@@ -454,6 +472,8 @@ export function ChatWindow({
               إرسال
             </Button>
           </div>
+            </>
+          )}
         </div>
       </div>
 
@@ -473,6 +493,36 @@ export function ChatWindow({
               <span>عدد الرسائل</span>
               <span className="text-white">{messages.length}</span>
             </div>
+            <div className="flex justify-between gap-3">
+              <span>Business</span>
+              <span className="text-white">{context.business?.name || "-"}</span>
+            </div>
+            <div className="flex justify-between gap-3">
+              <span>Account</span>
+              <span className="text-white">{context.connectedAccount?.page_name || context.connectedAccount?.platform || "-"}</span>
+            </div>
+            <div className="flex justify-between gap-3">
+              <span>Catalog</span>
+              <span className="text-white">{context.productCatalog?.product_count || 0}</span>
+            </div>
+            {productCategories.length ? (
+              <div className="flex flex-wrap justify-end gap-1">
+                {productCategories.map((category) => (
+                  <span key={category} className="rounded-full bg-white/7 px-2 py-0.5 text-[10px] text-white/50">{category}</span>
+                ))}
+              </div>
+            ) : null}
+            <div className="flex justify-between gap-3">
+              <span>Knowledge</span>
+              <span className="text-white">{context.knowledgeBase?.item_count || 0}</span>
+            </div>
+            {knowledgeCategories.length ? (
+              <div className="flex flex-wrap justify-end gap-1">
+                {knowledgeCategories.map((category) => (
+                  <span key={category} className="rounded-full bg-cyanx-500/10 px-2 py-0.5 text-[10px] text-cyanx-300">{category}</span>
+                ))}
+              </div>
+            ) : null}
           </div>
         </div>
         <div className="rounded-3xl border border-white/10 bg-white/[0.045] p-4 transition-all duration-300">
@@ -481,7 +531,7 @@ export function ChatWindow({
               <StickyNote className="h-4 w-4 text-cyanx-400" />
               ملاحظات
             </div>
-            {!isEditingNote && (
+            {canAct && !isEditingNote && (
               <Button
                 variant="ghost"
                 size="sm"

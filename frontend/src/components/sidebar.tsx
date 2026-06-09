@@ -72,7 +72,8 @@ const supportNavGroups = [
   {
     title: "مركز الموظفين",
     items: [
-      { href: "/support", label: "المحادثات المسندة", icon: Inbox },
+      { href: "/inbox", label: "المحادثات", icon: Inbox },
+      { href: "/analytics", label: "التحليلات", icon: BarChart3 },
       { href: "/settings", label: "حسابي", icon: Settings },
     ],
   },

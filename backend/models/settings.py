@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Integer, String, func
+from sqlalchemy import Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from database import Base
@@ -23,6 +23,9 @@ class AppSettings(Base):
     )
     debounce_seconds: Mapped[int] = mapped_column(
         Integer, default=8, server_default="8"
+    )
+    master_system_prompt: Mapped[str] = mapped_column(
+        Text, default="", server_default=""
     )
     updated_at: Mapped[datetime] = mapped_column(
         server_default=func.now(), onupdate=func.now()

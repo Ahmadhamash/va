@@ -13,7 +13,7 @@ function isPublicPath(pathname: string) {
 
 function roleHome(role?: string) {
   if (role === "admin") return "/admin";
-  if (role === "support_agent") return "/support";
+  if (role === "support_agent") return "/inbox";
   return "/dashboard";
 }
 
