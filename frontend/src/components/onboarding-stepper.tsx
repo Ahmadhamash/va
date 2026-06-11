@@ -1,9 +1,17 @@
+"use client";
+
 import { CircleCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useLanguageStore } from "@/store/use-language-store";
 
-const steps = ["النشاط", "القنوات", "المعرفة", "السلوك", "اختبار", "جاهز"];
+const stepsAr = ["النشاط", "القنوات", "المعرفة", "السلوك", "اختبار", "جاهز"];
+const stepsEn = ["Business", "Channels", "Knowledge", "Behavior", "Testing", "Ready"];
 
 export function OnboardingStepper({ current }: { current: number }) {
+  const language = useLanguageStore((state) => state.language);
+  const isRtl = language === "ar";
+  const steps = isRtl ? stepsAr : stepsEn;
+
   return (
     <div className="grid gap-2 sm:grid-cols-6">
       {steps.map((step, index) => {
@@ -32,3 +40,4 @@ export function OnboardingStepper({ current }: { current: number }) {
     </div>
   );
 }
+

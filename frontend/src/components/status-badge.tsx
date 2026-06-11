@@ -1,13 +1,16 @@
+"use client";
+
 import { AlertCircle, Bot, CircleCheck, Clock3, PauseCircle, UserCheck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import type { ConnectionStatus, ConversationStatus } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { useLanguageStore } from "@/store/use-language-store";
 
 type StatusBadgeProps = {
   status: ConnectionStatus | ConversationStatus | "ACTIVE" | "PAUSED";
 };
 
-const labels: Record<string, string> = {
+const labelsAr: Record<string, string> = {
   DISCONNECTED: "غير مربوط",
   SETUP_REQUIRED: "يحتاج إعداد",
   PENDING_VERIFICATION: "بانتظار التحقق",
@@ -23,7 +26,27 @@ const labels: Record<string, string> = {
   PAUSED: "متوقف"
 };
 
+const labelsEn: Record<string, string> = {
+  DISCONNECTED: "Disconnected",
+  SETUP_REQUIRED: "Setup Required",
+  PENDING_VERIFICATION: "Pending Verification",
+  CONNECTED: "Connected",
+  READY: "Ready",
+  ERROR: "Error",
+  DEMO_MODE: "Demo Mode",
+  AI_HANDLING: "AI Handling",
+  NEEDS_HUMAN: "Needs Handoff",
+  HUMAN_ACTIVE: "Active Handoff",
+  CLOSED: "Closed",
+  ACTIVE: "Active",
+  PAUSED: "Paused"
+};
+
 export function StatusBadge({ status }: StatusBadgeProps) {
+  const language = useLanguageStore((state) => state.language);
+  const isRtl = language === "ar";
+  const labels = isRtl ? labelsAr : labelsEn;
+
   const Icon =
     status === "READY" || status === "CONNECTED"
       ? CircleCheck
@@ -55,3 +78,4 @@ export function StatusBadge({ status }: StatusBadgeProps) {
     </Badge>
   );
 }
+

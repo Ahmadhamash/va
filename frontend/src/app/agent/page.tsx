@@ -10,8 +10,9 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { GradientCard } from "@/components/gradient-card";
 import { useAuthStore } from "@/store/use-auth-store";
+import { useLanguageStore } from "@/store/use-language-store";
 
-const dialects = [
+const dialectsAr = [
   { id: "jordanian", label: "أردني", hint: "لهجة يومية قريبة من السوق الأردني" },
   { id: "syrian", label: "شامي", hint: "أسلوب لطيف ومفهوم في بلاد الشام" },
   { id: "saudi", label: "خليجي", hint: "مناسب لعملاء السعودية والخليج" },
@@ -19,16 +20,36 @@ const dialects = [
   { id: "msa", label: "عربي مبسط", hint: "رسمي وواضح بدون عامية قوية" },
 ] as const;
 
-const tones = [
+const dialectsEn = [
+  { id: "jordanian", label: "Jordanian", hint: "Daily dialect close to the Jordanian market" },
+  { id: "syrian", label: "Levantine", hint: "Kind and understandable style in the Levant" },
+  { id: "saudi", label: "Gulf", hint: "Suitable for clients in Saudi Arabia and the Gulf" },
+  { id: "egyptian", label: "Egyptian", hint: "Light and clear for Egyptian customers" },
+  { id: "msa", label: "Modern Standard", hint: "Formal and clear without strong colloquialisms" },
+] as const;
+
+const tonesAr = [
   { id: "friendly", label: "ودود", hint: "دافئ وسريع وقريب من العميل" },
   { id: "professional", label: "مهني", hint: "مختصر ومحترم ومناسب للعلامات الرسمية" },
   { id: "salesy", label: "مبيعات", hint: "نشط ومقنع بدون مبالغة" },
 ] as const;
 
-const strictnessOptions = [
+const tonesEn = [
+  { id: "friendly", label: "Friendly", hint: "Warm, prompt, and close to the customer" },
+  { id: "professional", label: "Professional", hint: "Brief, respectful, and suitable for official brands" },
+  { id: "salesy", label: "Sales", hint: "Active and persuasive without exaggeration" },
+] as const;
+
+const strictnessOptionsAr = [
   { id: "strict", label: "صارم", hint: "لا يجاوب إلا من قاعدة المعرفة" },
   { id: "balanced", label: "متوازن", hint: "يسأل توضيح ويرفض التخمين" },
   { id: "guided", label: "إرشادي", hint: "يساعد بأسئلة متابعة بدون اختراع حقائق" },
+] as const;
+
+const strictnessOptionsEn = [
+  { id: "strict", label: "Strict", hint: "Only answers from the knowledge base" },
+  { id: "balanced", label: "Balanced", hint: "Asks for clarification and rejects guessing" },
+  { id: "guided", label: "Guided", hint: "Helps with follow-up questions without inventing facts" },
 ] as const;
 
 function parsePersonaConfig(persona?: string | null) {
@@ -43,17 +64,24 @@ function parsePersonaConfig(persona?: string | null) {
 
 export default function AgentSettingsPage() {
   const { token, user, setAuth } = useAuthStore();
+  const language = useLanguageStore((state) => state.language);
+  const isRtl = language === "ar";
+
+  const dialects = isRtl ? dialectsAr : dialectsEn;
+  const tones = isRtl ? tonesAr : tonesEn;
+  const strictnessOptions = isRtl ? strictnessOptionsAr : strictnessOptionsEn;
+
   const [notice, setNotice] = useState("");
-  const [agentName, setAgentName] = useState("مساعد chatter");
+  const [agentName, setAgentName] = useState(isRtl ? "مساعد chatter" : "chatter Assistant");
   const [dialect, setDialect] = useState("jordanian");
   const [tone, setTone] = useState("friendly");
   const [strictness, setStrictness] = useState("balanced");
-  const [workingHours, setWorkingHours] = useState("9 صباحاً - 6 مساءً");
-  const [fallbackMessage, setFallbackMessage] = useState("ثواني بس، رح أحولك لموظف يساعدك بشكل أدق.");
+  const [workingHours, setWorkingHours] = useState(isRtl ? "9 صباحاً - 6 مساءً" : "9 AM - 6 PM");
+  const [fallbackMessage, setFallbackMessage] = useState(isRtl ? "ثواني بس، رح أحولك لموظف يساعدك بشكل أدق." : "Just a second, I will connect you to a staff member to assist you better.");
   const [angryHandoff, setAngryHandoff] = useState(true);
   const [refundHandoff, setRefundHandoff] = useState(true);
   const [sensitiveHandoff, setSensitiveHandoff] = useState(true);
-  const [bannedPhrases, setBannedPhrases] = useState<string[]>(["مجاني بالكامل", "خصم سري"]);
+  const [bannedPhrases, setBannedPhrases] = useState<string[]>(isRtl ? ["مجاني بالكامل", "خصم سري"] : ["completely free", "secret discount"]);
   const [phraseInput, setPhraseInput] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -108,11 +136,11 @@ export default function AgentSettingsPage() {
         body: JSON.stringify({ ai_persona: persona }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.detail || "تعذر حفظ إعدادات الوكيل.");
+      if (!res.ok) throw new Error(data.detail || (isRtl ? "تعذر حفظ إعدادات الوكيل." : "Could not save agent settings."));
       setAuth(token, data);
-      setNotice("تم حفظ إعدادات الوكيل وتطبيقها على نظام الذكاء.");
+      setNotice(isRtl ? "تم حفظ إعدادات الوكيل وتطبيقها على نظام الذكاء." : "Agent settings saved and applied to the AI system.");
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "صار خطأ أثناء الحفظ.");
+      setNotice(error instanceof Error ? error.message : (isRtl ? "صار خطأ أثناء الحفظ." : "Error occurred while saving."));
     } finally {
       setSaving(false);
     }
@@ -127,7 +155,10 @@ export default function AgentSettingsPage() {
   }
 
   return (
-    <AppShell title="الوكيل الذكي" subtitle="إعدادات آمنة ومفهومة بدون تعريض System Prompt أو Temperature للعميل.">
+    <AppShell 
+      title={isRtl ? "الوكيل الذكي" : "Smart AI Agent"} 
+      subtitle={isRtl ? "إعدادات آمنة ومفهومة بدون تعريض System Prompt أو Temperature للعميل." : "Safe, understandable controls without exposing System Prompt or Temperature to the user."}
+    >
       <div className="grid gap-6 xl:grid-cols-[1fr_420px]">
         <div className="space-y-6">
           {notice && (
@@ -139,16 +170,16 @@ export default function AgentSettingsPage() {
           <GradientCard>
             <div className="mb-5 flex items-center justify-between">
               <Sparkles className="h-5 w-5 text-primary-400" />
-              <h2 className="text-xl font-semibold text-white">هوية الوكيل</h2>
+              <h2 className="text-xl font-semibold text-white">{isRtl ? "هوية الوكيل" : "Agent Identity"}</h2>
             </div>
             <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2 text-right">
-                <label className="text-xs font-semibold text-white/60">اسم الوكيل</label>
-                <Input value={agentName} onChange={(e) => setAgentName(e.target.value)} className="text-right" />
+              <div className="space-y-2 rtl:text-right ltr:text-left">
+                <label className="text-xs font-semibold text-white/60">{isRtl ? "اسم الوكيل" : "Agent Name"}</label>
+                <Input value={agentName} onChange={(e) => setAgentName(e.target.value)} className="rtl:text-right ltr:text-left" />
               </div>
-              <div className="space-y-2 text-right">
-                <label className="text-xs font-semibold text-white/60">أوقات العمل</label>
-                <Input value={workingHours} onChange={(e) => setWorkingHours(e.target.value)} className="text-right" />
+              <div className="space-y-2 rtl:text-right ltr:text-left">
+                <label className="text-xs font-semibold text-white/60">{isRtl ? "أوقات العمل" : "Working Hours"}</label>
+                <Input value={workingHours} onChange={(e) => setWorkingHours(e.target.value)} className="rtl:text-right ltr:text-left" />
               </div>
             </div>
           </GradientCard>
@@ -156,7 +187,7 @@ export default function AgentSettingsPage() {
           <GradientCard>
             <div className="mb-5 flex items-center justify-between">
               <MessageCircle className="h-5 w-5 text-primary-400" />
-              <h2 className="text-xl font-semibold text-white">لهجة الوكيل</h2>
+              <h2 className="text-xl font-semibold text-white">{isRtl ? "لهجة الوكيل" : "Agent Dialect"}</h2>
             </div>
             <div className="grid gap-3 md:grid-cols-5">
               {dialects.map((item) => (
@@ -164,7 +195,7 @@ export default function AgentSettingsPage() {
                   key={item.id}
                   type="button"
                   onClick={() => setDialect(item.id)}
-                  className={`rounded-2xl border p-4 text-right transition ${
+                  className={`rounded-2xl border p-4 text-start transition ${
                     dialect === item.id
                       ? "border-primary-400/40 bg-primary-500/12 text-white shadow-glow"
                       : "border-white/10 bg-white/[0.035] text-white/65 hover:border-white/18 hover:bg-white/[0.06]"
@@ -180,7 +211,7 @@ export default function AgentSettingsPage() {
           <GradientCard>
             <div className="mb-5 flex items-center justify-between">
               <Bot className="h-5 w-5 text-primary-400" />
-              <h2 className="text-xl font-semibold text-white">النبرة والالتزام</h2>
+              <h2 className="text-xl font-semibold text-white">{isRtl ? "النبرة والالتزام" : "Tone & Strictness"}</h2>
             </div>
             <div className="grid gap-3 md:grid-cols-3">
               {tones.map((item) => (
@@ -188,7 +219,7 @@ export default function AgentSettingsPage() {
                   key={item.id}
                   type="button"
                   onClick={() => setTone(item.id)}
-                  className={`rounded-2xl border p-4 text-right transition ${
+                  className={`rounded-2xl border p-4 text-start transition ${
                     tone === item.id ? "border-primary-400/40 bg-primary-500/12 text-white" : "border-white/10 bg-white/[0.035] text-white/65"
                   }`}
                 >
@@ -203,7 +234,7 @@ export default function AgentSettingsPage() {
                   key={item.id}
                   type="button"
                   onClick={() => setStrictness(item.id)}
-                  className={`rounded-2xl border p-4 text-right transition ${
+                  className={`rounded-2xl border p-4 text-start transition ${
                     strictness === item.id ? "border-cyanx-400/40 bg-cyanx-500/12 text-white" : "border-white/10 bg-white/[0.035] text-white/65"
                   }`}
                 >
@@ -217,20 +248,35 @@ export default function AgentSettingsPage() {
           <GradientCard>
             <div className="mb-5 flex items-center justify-between">
               <Handshake className="h-5 w-5 text-primary-400" />
-              <h2 className="text-xl font-semibold text-white">التحويل البشري</h2>
+              <h2 className="text-xl font-semibold text-white">{isRtl ? "التحويل البشري" : "Human Handoff"}</h2>
             </div>
             <div className="space-y-3">
-              <ToggleSetting title="غضب أو شكوى واضحة" description="تتحول المحادثة لموظف بدل استمرار الذكاء بالرد." checked={angryHandoff} onChange={setAngryHandoff} />
-              <ToggleSetting title="إلغاء أو استرجاع أو مشكلة دفع" description="الحالات المالية تنتقل لموظف المنصة." checked={refundHandoff} onChange={setRefundHandoff} />
-              <ToggleSetting title="معلومات حساسة أو قانونية" description="الذكاء يتوقف عن التخمين ويطلب تدخل بشري." checked={sensitiveHandoff} onChange={setSensitiveHandoff} />
+              <ToggleSetting 
+                title={isRtl ? "غضب أو شكوى واضحة" : "Anger or clear complaint"} 
+                description={isRtl ? "تتحول المحادثة لموظف بدل استمرار الذكاء بالرد." : "Transfers the chat to support staff instead of auto-responding."} 
+                checked={angryHandoff} 
+                onChange={setAngryHandoff} 
+              />
+              <ToggleSetting 
+                title={isRtl ? "إلغاء أو استرجاع أو مشكلة دفع" : "Cancellation, refund, or payment issue"} 
+                description={isRtl ? "الحالات المالية تنتقل لموظف المنصة." : "Financial cases transfer directly to support agents."} 
+                checked={refundHandoff} 
+                onChange={setRefundHandoff} 
+              />
+              <ToggleSetting 
+                title={isRtl ? "معلومات حساسة أو قانونية" : "Sensitive or legal info"} 
+                description={isRtl ? "الذكاء يتوقف عن التخمين ويطلب تدخل بشري." : "AI stops guessing and prompts for human support."} 
+                checked={sensitiveHandoff} 
+                onChange={setSensitiveHandoff} 
+              />
             </div>
-            <Textarea className="mt-4 min-h-24 text-right" value={fallbackMessage} onChange={(e) => setFallbackMessage(e.target.value)} />
+            <Textarea className="mt-4 min-h-24 rtl:text-right ltr:text-left" value={fallbackMessage} onChange={(e) => setFallbackMessage(e.target.value)} />
           </GradientCard>
 
           <GradientCard>
             <div className="mb-5 flex items-center justify-between">
               <ShieldCheck className="h-5 w-5 text-primary-400" />
-              <h2 className="text-xl font-semibold text-white">عبارات ممنوعة</h2>
+              <h2 className="text-xl font-semibold text-white">{isRtl ? "عبارات ممنوعة" : "Forbidden Phrases"}</h2>
             </div>
             <div className="flex gap-2">
               <Button type="button" size="sm" onClick={addBannedPhrase} className="h-10">
@@ -245,11 +291,11 @@ export default function AgentSettingsPage() {
                     addBannedPhrase();
                   }
                 }}
-                className="h-10 text-right"
-                placeholder="مثال: مجاني بالكامل"
+                className="h-10 rtl:text-right ltr:text-left"
+                placeholder={isRtl ? "مثال: مجاني بالكامل" : "e.g., completely free"}
               />
             </div>
-            <div className="mt-4 flex flex-wrap justify-end gap-2">
+            <div className="mt-4 flex flex-wrap gap-2 rtl:justify-end ltr:justify-start">
               {bannedPhrases.map((phrase) => (
                 <span key={phrase} className="inline-flex items-center gap-2 rounded-full border border-red-500/20 bg-red-500/10 px-3 py-1.5 text-xs text-red-200">
                   <button type="button" onClick={() => setBannedPhrases(bannedPhrases.filter((item) => item !== phrase))}>
@@ -263,7 +309,7 @@ export default function AgentSettingsPage() {
 
           <Button className="w-full" onClick={handleSave} disabled={saving}>
             <CheckCircle2 className="h-4 w-4" />
-            {saving ? "جاري الحفظ..." : "حفظ إعدادات الوكيل"}
+            {saving ? (isRtl ? "جاري الحفظ..." : "Saving...") : (isRtl ? "حفظ إعدادات الوكيل" : "Save Agent Settings")}
           </Button>
         </div>
 
@@ -289,3 +335,4 @@ export default function AgentSettingsPage() {
     </AppShell>
   );
 }
+

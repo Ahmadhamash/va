@@ -5,8 +5,12 @@ import { GradientCard } from "@/components/gradient-card";
 import { Calendar, Clock, CheckCircle2, XCircle } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
+import { useLanguageStore } from "@/store/use-language-store";
 
 export default function BookingsPage() {
+  const language = useLanguageStore((state) => state.language);
+  const isRtl = language === "ar";
+
   const { data: bookings = [], isLoading } = useQuery({
     queryKey: ["bookings"],
     queryFn: async () => {
@@ -15,22 +19,31 @@ export default function BookingsPage() {
     },
   });
 
+  const availableDays = [
+    { ar: "الأحد - الخميس", en: "Sunday - Thursday", timeAr: "09:00 ص - 05:00 م", timeEn: "09:00 AM - 05:00 PM" },
+    { ar: "الجمعة", en: "Friday", timeAr: "مغلق", timeEn: "Closed" },
+    { ar: "السبت", en: "Saturday", timeAr: "09:00 ص - 05:00 م", timeEn: "09:00 AM - 05:00 PM" }
+  ];
+
   return (
-    <AppShell title="إدارة الحجوزات" subtitle="مواعيد العملاء التي قام الوكيل الذكي بجدولتها.">
-      <div className="grid gap-6 lg:grid-cols-[1fr_300px]">
+    <AppShell 
+      title={isRtl ? "إدارة الحجوزات" : "Bookings Management"} 
+      subtitle={isRtl ? "مواعيد العملاء التي قام الوكيل الذكي بجدولتها." : "Customer appointments scheduled by the AI agent."}
+    >
+      <div className="grid gap-6 lg:grid-cols-[1fr_300px] rtl:text-right ltr:text-left">
         <div className="space-y-6">
           <GradientCard>
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-semibold text-white">الحجوزات القادمة</h3>
+            <div className="mb-6 flex items-center justify-between">
+              <h3 className="text-xl font-semibold text-white">{isRtl ? "الحجوزات القادمة" : "Upcoming Bookings"}</h3>
             </div>
             
             <div className="space-y-4">
               {isLoading ? (
-                <div className="text-center py-8 text-white/50">جاري التحميل...</div>
+                <div className="text-center py-8 text-white/50">{isRtl ? "جاري التحميل..." : "Loading..."}</div>
               ) : bookings.length === 0 ? (
                 <div className="text-center py-12 text-white/50 border border-dashed border-white/10 rounded-3xl bg-white/[0.02]">
                   <Calendar className="h-8 w-8 mx-auto mb-3 text-white/20" />
-                  لا توجد حجوزات مسجلة حالياً.
+                  {isRtl ? "لا توجد حجوزات مسجلة حالياً." : "No bookings registered currently."}
                 </div>
               ) : (
                 bookings.map((booking: any) => (
@@ -39,17 +52,19 @@ export default function BookingsPage() {
                       <div className="grid h-12 w-12 place-items-center rounded-2xl bg-cyanx-500/10 text-cyanx-400">
                         <Clock className="h-6 w-6" />
                       </div>
-                      <div>
+                      <div className="rtl:text-right ltr:text-left">
                         <div className="font-semibold text-white">{booking.customer_name}</div>
-                        <div className="text-xs text-white/50 mt-1">{booking.service_name} • {new Date(booking.date).toLocaleDateString("ar-SA")} {booking.time}</div>
+                        <div className="text-xs text-white/50 mt-1">
+                          {booking.service_name} • {new Date(booking.date).toLocaleDateString(isRtl ? "ar-SA" : "en-US")} {booking.time}
+                        </div>
                       </div>
                     </div>
                     <div className="flex gap-2">
                       <button className="rounded-full bg-primary-500/10 px-3 py-1.5 text-xs font-semibold text-primary-400 flex items-center gap-1 hover:bg-primary-500/20">
-                        <CheckCircle2 className="h-4 w-4" /> تأكيد
+                        <CheckCircle2 className="h-4 w-4" /> {isRtl ? "تأكيد" : "Confirm"}
                       </button>
                       <button className="rounded-full bg-red-500/10 px-3 py-1.5 text-xs font-semibold text-red-400 flex items-center gap-1 hover:bg-red-500/20">
-                        <XCircle className="h-4 w-4" /> إلغاء
+                        <XCircle className="h-4 w-4" /> {isRtl ? "إلغاء" : "Cancel"}
                       </button>
                     </div>
                   </div>
@@ -61,15 +76,15 @@ export default function BookingsPage() {
         
         <div className="space-y-6">
           <GradientCard className="border-white/10 bg-white/5">
-            <h3 className="text-lg font-semibold text-white mb-4">أوقات العمل المتاحة</h3>
+            <h3 className="text-lg font-semibold text-white mb-4">{isRtl ? "أوقات العمل المتاحة" : "Available Working Hours"}</h3>
             <p className="text-xs text-white/50 mb-4">
-              الوكيل الذكي سيقوم بعرض هذه الأوقات للعملاء عند طلب حجز موعد.
+              {isRtl ? "الوكيل الذكي سيقوم بعرض هذه الأوقات للعملاء عند طلب حجز موعد." : "The smart agent will show these times to clients when they request an appointment."}
             </p>
             <div className="space-y-3">
-              {["الأحد - الخميس", "الجمعة", "السبت"].map((day, i) => (
-                <div key={i} className="rounded-2xl border border-white/10 bg-black/20 p-3 text-sm">
-                  <div className="font-semibold text-white/80">{day}</div>
-                  <div className="text-xs text-primary-400 mt-1">{i === 1 ? "مغلق" : "09:00 ص - 05:00 م"}</div>
+              {availableDays.map((day, i) => (
+                <div key={i} className="rounded-2xl border border-white/10 bg-black/20 p-3 text-sm rtl:text-right ltr:text-left">
+                  <div className="font-semibold text-white/80">{isRtl ? day.ar : day.en}</div>
+                  <div className="text-xs text-primary-400 mt-1">{isRtl ? day.timeAr : day.timeEn}</div>
                 </div>
               ))}
             </div>
@@ -79,3 +94,4 @@ export default function BookingsPage() {
     </AppShell>
   );
 }
+

@@ -7,11 +7,14 @@ import { GradientCard } from "@/components/gradient-card";
 import { MetricCard } from "@/components/metric-card";
 import { useAuthStore } from "@/store/use-auth-store";
 import { cn } from "@/lib/utils";
+import { useLanguageStore } from "@/store/use-language-store";
 
 export default function AnalyticsPage() {
   const [analyticsData, setAnalyticsData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const { token } = useAuthStore();
+  const language = useLanguageStore((state) => state.language);
+  const isRtl = language === "ar";
 
   useEffect(() => {
     async function loadAnalytics() {
@@ -35,7 +38,10 @@ export default function AnalyticsPage() {
 
   if (loading) {
     return (
-      <AppShell title="التحليلات والأداء" subtitle="بيانات وإحصائيات فورية توضح فاعلية الذكاء الاصطناعي وتوفير الجهد البشري.">
+      <AppShell 
+        title={isRtl ? "التحليلات والأداء" : "Analytics & Performance"} 
+        subtitle={isRtl ? "بيانات وإحصائيات فورية توضح فاعلية الذكاء الاصطناعي وتوفير الجهد البشري." : "Live metrics that show AI effectiveness and saved human effort."}
+      >
         <div className="flex h-96 items-center justify-center">
           <Loader2 className="h-8 w-8 animate-spin text-primary-400" />
         </div>
@@ -49,42 +55,45 @@ export default function AnalyticsPage() {
     aiResolved: 0,
     aiRate: "0%",
     handoffs: 0,
-    avgResponseTime: "0 ث",
-    deflectionCount: "0 رسالة موفرة",
-    dailyStats: [{ name: "اليوم", value: 0 }],
-    mostAsked: [{ topic: "لا توجد أسئلة كافية", count: 0, percentage: 0 }],
-    channelMix: [{ name: "لا توجد قنوات نشطة", value: 0, count: 0 }],
+    avgResponseTime: isRtl ? "0 ث" : "0 s",
+    deflectionCount: isRtl ? "0 رسالة موفرة" : "0 saved messages",
+    dailyStats: [{ name: isRtl ? "اليوم" : "Today", value: 0 }],
+    mostAsked: [{ topic: isRtl ? "لا توجد أسئلة كافية" : "Not enough questions yet", count: 0, percentage: 0 }],
+    channelMix: [{ name: isRtl ? "لا توجد قنوات نشطة" : "No active channels", value: 0, count: 0 }],
     sentiment: { positive: 100, neutral: 0, negative: 0 },
-    handoffReasons: [{ reason: "لا توجد تحويلات", value: 0 }]
+    handoffReasons: [{ reason: isRtl ? "لا توجد تحويلات" : "No handoffs yet", value: 0 }]
   };
 
   const maxDailyValue = Math.max(...data.dailyStats.map((d: any) => d.value));
 
   return (
-    <AppShell title="التحليلات والأداء" subtitle="بيانات وإحصائيات فورية حقيقية 100% من واقع محادثات وجلسات النظام الفعلية.">
-      <div className="space-y-6">
+    <AppShell 
+      title={isRtl ? "التحليلات والأداء" : "Analytics & Performance"} 
+      subtitle={isRtl ? "بيانات وإحصائيات فورية حقيقية 100% من واقع محادثات وجلسات النظام الفعلية." : "100% real-time statistics from actual conversations and system sessions."}
+    >
+      <div className="space-y-6 rtl:text-right ltr:text-left">
         {/* Date Selector Header */}
         <div className="flex flex-wrap items-center justify-between gap-4 bg-white/[0.02] border border-white/5 p-3 rounded-3xl">
-          <div className="flex items-center gap-2 text-white/50 text-xs text-right md:order-last">
+          <div className="flex items-center gap-2 text-white/50 text-xs rtl:text-right ltr:text-left order-first md:order-last">
             <Calendar className="h-4 w-4" />
-            <span>نطاق التحليل النشط (بيانات حية ومباشرة)</span>
+            <span>{isRtl ? "نطاق التحليل النشط (بيانات حية ومباشرة)" : "Active analysis range (live data)"}</span>
           </div>
           <div className="flex gap-2">
             <button
               type="button"
               className="rounded-full px-4 py-2 text-xs font-semibold bg-primary-500 text-ink-950 shadow-glow"
             >
-              قاعدة البيانات الحالية
+              {isRtl ? "قاعدة البيانات الحالية" : "Current Database"}
             </button>
           </div>
         </div>
 
         {/* Metric Cards Grid */}
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <MetricCard label="إجمالي المحادثات" value={data.conversations.toLocaleString()} hint="مستمر" icon={MessageCircle} />
-          <MetricCard label="حُلت تلقائياً بالذكاء" value={data.aiResolved.toLocaleString()} hint={data.aiRate} icon={Zap} />
-          <MetricCard label="التحويل للموظفين" value={data.handoffs.toLocaleString()} hint="نشط" icon={UserCheck} />
-          <MetricCard label="سرعة استجابة الوكيل" value={data.avgResponseTime} hint="فوري" icon={Clock3} />
+          <MetricCard label={isRtl ? "إجمالي المحادثات" : "Total Conversations"} value={data.conversations.toLocaleString()} hint={isRtl ? "مستمر" : "Ongoing"} icon={MessageCircle} />
+          <MetricCard label={isRtl ? "حُلت تلقائياً بالذكاء" : "Auto-resolved by AI"} value={data.aiResolved.toLocaleString()} hint={data.aiRate} icon={Zap} />
+          <MetricCard label={isRtl ? "التحويل للموظفين" : "Handoff to Staff"} value={data.handoffs.toLocaleString()} hint={isRtl ? "نشط" : "Active"} icon={UserCheck} />
+          <MetricCard label={isRtl ? "سرعة استجابة الوكيل" : "Agent Response Time"} value={data.avgResponseTime} hint={isRtl ? "فوري" : "Instant"} icon={Clock3} />
         </div>
 
         {/* Detailed Metrics Charts & Statistics */}
@@ -94,9 +103,9 @@ export default function AnalyticsPage() {
           <div className="space-y-6">
             <GradientCard className="rounded-3xl border border-white/10 bg-white/[0.025]">
               <div className="mb-6 flex items-center justify-between">
-                <div className="text-right">
-                  <h2 className="text-lg font-bold text-white">نشاط وحجم المحادثات الفعلي</h2>
-                  <p className="mt-1 text-xs text-white/45">مخطط بياني حقيقي يمثل المحادثات مقسمة حسب أيام الأسبوع.</p>
+                <div className="rtl:text-right ltr:text-left">
+                  <h2 className="text-lg font-bold text-white">{isRtl ? "نشاط وحجم المحادثات الفعلي" : "Actual Chat Volume & Activity"}</h2>
+                  <p className="mt-1 text-xs text-white/45">{isRtl ? "مخطط بياني حقيقي يمثل المحادثات مقسمة حسب أيام الأسبوع." : "Real-time chart representing chats grouped by days of the week."}</p>
                 </div>
                 <TrendingUp className="h-5 w-5 text-primary-400" />
               </div>
@@ -110,7 +119,7 @@ export default function AnalyticsPage() {
                       <div className="relative w-full flex justify-center">
                         {/* Hover Tooltip */}
                         <div className="absolute bottom-full mb-2 bg-primary-500 text-ink-950 text-[10px] font-bold px-2 py-1 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap shadow-glow">
-                          {item.value} محادثة
+                          {item.value} {isRtl ? "محادثة" : "chats"}
                         </div>
                       </div>
                       <div className="w-full bg-white/5 rounded-t-xl overflow-hidden h-44 flex items-end">
@@ -128,16 +137,16 @@ export default function AnalyticsPage() {
 
             {/* AI Performance Insight Cards */}
             <div className="grid gap-6 md:grid-cols-2">
-              <GradientCard className="rounded-3xl border border-white/10 bg-white/[0.025] text-right">
-                <div className="flex items-center gap-2 justify-end mb-4">
-                  <span className="font-bold text-sm text-white">تحليل رضا العملاء (CSAT)</span>
+              <GradientCard className="rounded-3xl border border-white/10 bg-white/[0.025] rtl:text-right ltr:text-left">
+                <div className="flex items-center gap-2 justify-end mb-4 rtl:justify-end ltr:justify-start">
+                  <span className="font-bold text-sm text-white">{isRtl ? "تحليل رضا العملاء (CSAT)" : "Customer Satisfaction (CSAT)"}</span>
                   <Heart className="h-4.5 w-4.5 text-red-400 animate-pulse" />
                 </div>
                 <div className="space-y-4">
                   <div>
                     <div className="flex justify-between text-xs mb-1.5">
-                      <span className="text-white/40">إيجابي ({data.sentiment.positive}%)</span>
-                      <span className="text-primary-400 font-bold">راضي ومستفيد</span>
+                      <span className="text-white/40">{isRtl ? `إيجابي (${data.sentiment.positive}%)` : `Positive (${data.sentiment.positive}%)`}</span>
+                      <span className="text-primary-400 font-bold">{isRtl ? "راضي ومستفيد" : "Satisfied"}</span>
                     </div>
                     <div className="h-2 w-full bg-white/5 rounded-full overflow-hidden">
                       <div className="h-full bg-primary-500 rounded-full" style={{ width: `${data.sentiment.positive}%` }} />
@@ -145,8 +154,8 @@ export default function AnalyticsPage() {
                   </div>
                   <div>
                     <div className="flex justify-between text-xs mb-1.5">
-                      <span className="text-white/40">محايد ({data.sentiment.neutral}%)</span>
-                      <span className="text-amber-400 font-bold">طبيعي</span>
+                      <span className="text-white/40">{isRtl ? `محايد (${data.sentiment.neutral}%)` : `Neutral (${data.sentiment.neutral}%)`}</span>
+                      <span className="text-amber-400 font-bold">{isRtl ? "طبيعي" : "Neutral"}</span>
                     </div>
                     <div className="h-2 w-full bg-white/5 rounded-full overflow-hidden">
                       <div className="h-full bg-amber-500 rounded-full" style={{ width: `${data.sentiment.neutral}%` }} />
@@ -154,8 +163,8 @@ export default function AnalyticsPage() {
                   </div>
                   <div>
                     <div className="flex justify-between text-xs mb-1.5">
-                      <span className="text-white/40">سلبي ({data.sentiment.negative}%)</span>
-                      <span className="text-red-400 font-bold">بحاجة لمتابعة</span>
+                      <span className="text-white/40">{isRtl ? `سلبي (${data.sentiment.negative}%)` : `Negative (${data.sentiment.negative}%)`}</span>
+                      <span className="text-red-400 font-bold">{isRtl ? "بحاجة لمتابعة" : "Needs Attention"}</span>
                     </div>
                     <div className="h-2 w-full bg-white/5 rounded-full overflow-hidden">
                       <div className="h-full bg-red-500 rounded-full" style={{ width: `${data.sentiment.negative}%` }} />
@@ -164,9 +173,9 @@ export default function AnalyticsPage() {
                 </div>
               </GradientCard>
 
-              <GradientCard className="rounded-3xl border border-white/10 bg-white/[0.025] text-right">
-                <div className="flex items-center gap-2 justify-end mb-4">
-                  <span className="font-bold text-sm text-white">أسباب تحويل العملاء الأكثر شيوعاً</span>
+              <GradientCard className="rounded-3xl border border-white/10 bg-white/[0.025] rtl:text-right ltr:text-left">
+                <div className="flex items-center gap-2 justify-end mb-4 rtl:justify-end ltr:justify-start">
+                  <span className="font-bold text-sm text-white">{isRtl ? "أسباب تحويل العملاء الأكثر شيوعاً" : "Most Common Handoff Reasons"}</span>
                   <ShieldAlert className="h-4.5 w-4.5 text-amber-400" />
                 </div>
                 <div className="space-y-3">
@@ -186,13 +195,13 @@ export default function AnalyticsPage() {
             
             {/* Top Questions Card */}
             <GradientCard className="rounded-3xl border border-white/10 bg-white/[0.025]">
-              <h2 className="text-lg font-bold text-white text-right">المواضيع والأسئلة الأكثر شيوعاً</h2>
-              <p className="text-[11px] text-white/45 text-right mt-1">الأسئلة التي قادت لتحويل بشري وقاعدة البيانات ترصدها.</p>
+              <h2 className="text-lg font-bold text-white rtl:text-right ltr:text-left">{isRtl ? "المواضيع والأسئلة الأكثر شيوعاً" : "Most Frequently Asked Topics"}</h2>
+              <p className="text-[11px] text-white/45 rtl:text-right ltr:text-left mt-1">{isRtl ? "الأسئلة التي قادت لتحويل بشري وقاعدة البيانات ترصدها." : "Questions that led to human handoff monitored by the system."}</p>
               <div className="mt-5 space-y-3">
                 {data.mostAsked.map((item: any) => (
-                  <div key={item.topic} className="flex items-center justify-between rounded-2xl bg-white/[0.035] border border-white/5 px-4 py-3 text-right">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[10px] text-white/35">({item.count} محادثة)</span>
+                  <div key={item.topic} className="flex items-center justify-between rounded-2xl bg-white/[0.035] border border-white/5 px-4 py-3 rtl:text-right ltr:text-left">
+                    <div className="flex items-center gap-1.5 order-last md:order-first">
+                      <span className="text-[10px] text-white/35">({item.count} {isRtl ? "محادثة" : "chats"})</span>
                       <span className="text-xs font-semibold text-primary-400">%{item.percentage}</span>
                     </div>
                     <span className="text-xs text-white/80 font-medium">{item.topic}</span>
@@ -203,13 +212,13 @@ export default function AnalyticsPage() {
 
             {/* Channels Card */}
             <GradientCard className="rounded-3xl border border-white/10 bg-white/[0.025]">
-              <h2 className="text-lg font-bold text-white text-right">توزيع القنوات المتصلة</h2>
-              <p className="text-[11px] text-white/45 text-right mt-1">نسبة المحادثات الفعلية القادمة من القنوات المختلفة المتصلة.</p>
+              <h2 className="text-lg font-bold text-white rtl:text-right ltr:text-left">{isRtl ? "توزيع القنوات المتصلة" : "Connected Channels Breakdown"}</h2>
+              <p className="text-[11px] text-white/45 rtl:text-right ltr:text-left mt-1">{isRtl ? "نسبة المحادثات الفعلية القادمة من القنوات المختلفة المتصلة." : "Percentage of actual conversations coming from connected channels."}</p>
               <div className="mt-5 space-y-4">
                 {data.channelMix.map((item: any) => (
-                  <div key={item.name} className="text-right">
+                  <div key={item.name} className="rtl:text-right ltr:text-left">
                     <div className="mb-2 flex items-center justify-between text-xs">
-                      <span className="text-white/40">({item.count} محادثة)</span>
+                      <span className="text-white/40">({item.count} {isRtl ? "محادثة" : "chats"})</span>
                       <span className="font-semibold text-white">{item.name} · {item.value}%</span>
                     </div>
                     <div className="h-2 rounded-full bg-white/5">
@@ -221,14 +230,22 @@ export default function AnalyticsPage() {
             </GradientCard>
 
             {/* AI report summary */}
-            <div className="rounded-3xl border border-primary-400/10 bg-primary-500/5 p-5 text-right flex items-start gap-3">
-              <div className="flex-1">
-                <h4 className="text-xs font-bold text-primary-400 flex items-center justify-end gap-1.5 mb-1">
-                  <span>تقرير كفاءة الوكيل</span>
+            <div className="rounded-3xl border border-primary-400/10 bg-primary-500/5 p-5 rtl:text-right ltr:text-left flex items-start gap-3">
+              <div className="flex-1 rtl:text-right ltr:text-left">
+                <h4 className="text-xs font-bold text-primary-400 flex items-center justify-end gap-1.5 mb-1 rtl:justify-end ltr:justify-start">
+                  <span>{isRtl ? "تقرير كفاءة الوكيل" : "Agent Efficiency Report"}</span>
                   <Award className="h-4 w-4" />
                 </h4>
                 <p className="text-[11px] leading-5 text-white/60">
-                  حقق الوكيل الذكي وفراً حقيقياً بنسبة تعادل <b>{data.aiRate}</b> من إجمالي عبء خدمة العملاء، معالِجاً <b>{data.deflectionCount}</b> وتوفيرها على فريق الدعم البشري.
+                  {isRtl ? (
+                    <>
+                      حقق الوكيل الذكي وفراً حقيقياً بنسبة تعادل <b>{data.aiRate}</b> من إجمالي عبء خدمة العملاء، معالِجاً <b>{data.deflectionCount}</b> وتوفيرها على فريق الدعم البشري.
+                    </>
+                  ) : (
+                    <>
+                      The smart agent achieved a real savings of <b>{data.aiRate}</b> of the total customer service load, processing <b>{data.deflectionCount}</b> and saving them for the human support team.
+                    </>
+                  )}
                 </p>
               </div>
             </div>
@@ -240,3 +257,4 @@ export default function AnalyticsPage() {
     </AppShell>
   );
 }
+

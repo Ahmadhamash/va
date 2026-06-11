@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/store/use-auth-store";
+import { useLanguageStore } from "@/store/use-language-store";
 
 interface Message {
   id: string;
@@ -41,6 +42,9 @@ export function AgentPreview({
   bannedPhrases?: string[];
   handoffToggles?: { angry: boolean; refund: boolean; sensitive: boolean };
 }) {
+  const language = useLanguageStore((state) => state.language);
+  const isRtl = language === "ar";
+
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState("");
   const [isTyping, setIsTyping] = useState(false);
@@ -53,7 +57,9 @@ export function AgentPreview({
       {
         id: "init",
         sender: "AI",
-        body: `أنا ${agentName}. ${dialectGreeting[dialect] || dialectGreeting.jordanian}`,
+        body: isRtl 
+          ? `أنا ${agentName}. ${dialectGreeting[dialect] || dialectGreeting.jordanian}`
+          : `I am ${agentName}. ${dialectGreeting[dialect] || dialectGreeting.jordanian}`,
       },
     ]);
   }
@@ -107,32 +113,38 @@ export function AgentPreview({
       });
       const data = await res.json();
       
-      let replyText = data.reply || "عذراً، ما قدرت أرد حالياً.";
+      let replyText = data.reply || (isRtl ? "عذراً، ما قدرت أرد حالياً." : "Sorry, I could not respond at the moment.");
       let isHandoff = false;
       let handoffReason = "";
 
       // Simple frontend check for handoff terms to simulate handoff state visually
       const textLower = textToSend.toLowerCase();
-      if (handoffToggles.angry && ["شكوى", "غاضب", "سيء", "نصب", "مشكلة"].some((word) => textLower.includes(word))) {
-        isHandoff = true; handoffReason = "شكوى أو غضب"; replyText = fallbackMessage;
-      } else if (handoffToggles.refund && ["استرجاع", "إلغاء", "فلوسي", "مصاري", "ترجيع"].some((word) => textLower.includes(word))) {
-        isHandoff = true; handoffReason = "إلغاء أو استرجاع"; replyText = fallbackMessage;
-      } else if (handoffToggles.sensitive && ["قانوني", "كلمة المرور", "سري", "اختراق"].some((word) => textLower.includes(word))) {
-        isHandoff = true; handoffReason = "معلومة حساسة"; replyText = fallbackMessage;
+      if (handoffToggles.angry && ["شكوى", "غاضب", "سيء", "نصب", "مشكلة", "complaint", "angry", "bad", "scam", "problem"].some((word) => textLower.includes(word))) {
+        isHandoff = true; 
+        handoffReason = isRtl ? "شكوى أو غضب" : "Complaint or Anger"; 
+        replyText = fallbackMessage;
+      } else if (handoffToggles.refund && ["استرجاع", "إلغاء", "فلوسي", "مصاري", "ترجيع", "refund", "cancel", "money", "return"].some((word) => textLower.includes(word))) {
+        isHandoff = true; 
+        handoffReason = isRtl ? "إلغاء أو استرجاع" : "Cancellation or Refund"; 
+        replyText = fallbackMessage;
+      } else if (handoffToggles.sensitive && ["قانوني", "كلمة المرور", "سري", "اختراق", "legal", "password", "secret", "hack"].some((word) => textLower.includes(word))) {
+        isHandoff = true; 
+        handoffReason = isRtl ? "معلومة حساسة" : "Sensitive Information"; 
+        replyText = fallbackMessage;
       }
 
       setMessages((current) => [
         ...current,
         { id: `ai-${Date.now()}`, sender: "AI", body: replyText },
         ...(isHandoff
-          ? [{ id: `sys-${Date.now()}`, sender: "SYSTEM" as const, body: `تم تشغيل التحويل البشري: ${handoffReason}.` }]
+          ? [{ id: `sys-${Date.now()}`, sender: "SYSTEM" as const, body: isRtl ? `تم تشغيل التحويل البشري: ${handoffReason}.` : `Human handoff triggered: ${handoffReason}.` }]
           : []),
       ]);
       if (isHandoff) setAgentStatus("HANDOFF");
     } catch (error) {
       setMessages((current) => [
         ...current,
-        { id: `ai-${Date.now()}`, sender: "AI", body: "حصل خطأ في الاتصال بالسيرفر. تأكد من إعداداتك." },
+        { id: `ai-${Date.now()}`, sender: "AI", body: isRtl ? "حصل خطأ في الاتصال بالسيرفر. تأكد من إعداداتك." : "Server connection error. Please verify settings." },
       ]);
     } finally {
       setIsTyping(false);
@@ -140,10 +152,10 @@ export function AgentPreview({
   }
 
   const quickTests = [
-    { label: "أوقات العمل", query: "شو أوقات الدوام؟" },
-    { label: "استرجاع", query: "بدي استرجاع مصاري" },
-    { label: "شكوى", query: "عندي شكوى ومشكلة" },
-    { label: "سؤال عام", query: "كيف بقدر أطلب؟" },
+    { label: isRtl ? "أوقات العمل" : "Working Hours", query: "شو أوقات الدوام؟" },
+    { label: isRtl ? "استرجاع" : "Refund", query: "بدي استرجاع مصاري" },
+    { label: isRtl ? "شكوى" : "Complaint", query: "عندي شكوى ومشكلة" },
+    { label: isRtl ? "سؤال عام" : "General Question", query: "كيف بقدر أطلب؟" },
   ];
 
   return (
@@ -156,9 +168,9 @@ export function AgentPreview({
             </div>
             <span className={cn("absolute -bottom-1 -left-1 h-3.5 w-3.5 rounded-full border-2 border-ink-950", agentStatus === "ONLINE" ? "bg-primary-400" : "bg-amber-500")} />
           </div>
-          <div className="text-right">
+          <div className="rtl:text-right ltr:text-left">
             <h3 className="text-sm font-semibold text-white">{agentName}</h3>
-            <p className="text-[10px] text-white/50">{agentStatus === "ONLINE" ? "نشط الآن" : "تحويل بشري نشط"}</p>
+            <p className="text-[10px] text-white/50">{agentStatus === "ONLINE" ? (isRtl ? "نشط الآن" : "Active Now") : (isRtl ? "تحويل بشري نشط" : "Human handoff active")}</p>
           </div>
         </div>
         <Button type="button" size="sm" variant="ghost" className="h-8 w-8 p-0 text-white/40 hover:text-white" onClick={resetChat}>
@@ -184,7 +196,7 @@ export function AgentPreview({
           const customer = msg.sender === "CUSTOMER";
           return (
             <div key={msg.id} className={cn("flex w-full", customer ? "justify-end" : "justify-start")}>
-              <div className={cn("max-w-[80%] rounded-2xl px-3.5 py-2.5 text-right text-xs leading-5", customer ? "rounded-br-none border border-white/5 bg-white/[0.07] text-white/90" : "rounded-bl-none bg-primary-500 font-medium text-white")}>
+              <div className={cn("max-w-[80%] rounded-2xl px-3.5 py-2.5 rtl:text-right ltr:text-left text-xs leading-5", customer ? "rounded-br-none border border-white/5 bg-white/[0.07] text-white/90" : "rounded-bl-none bg-primary-500 font-medium text-white")}>
                 {msg.body}
               </div>
             </div>
@@ -203,8 +215,10 @@ export function AgentPreview({
       </div>
 
       <div className="border-t border-white/5 bg-white/[0.02] p-3">
-        <div className="mb-2 text-right text-[10px] font-medium text-white/40">اختبارات سريعة</div>
-        <div className="flex flex-wrap justify-end gap-1.5">
+        <div className="mb-2 rtl:text-right ltr:text-left text-right text-[10px] font-medium text-white/40">
+          {isRtl ? "اختبارات سريعة" : "Quick Tests"}
+        </div>
+        <div className="flex flex-wrap gap-1.5 rtl:justify-end ltr:justify-start">
           {quickTests.map((test) => (
             <button
               type="button"
@@ -230,8 +244,10 @@ export function AgentPreview({
           value={inputText}
           onChange={(event) => setInputText(event.target.value)}
           disabled={agentStatus === "HANDOFF" || isTyping}
-          placeholder={agentStatus === "HANDOFF" ? "المحادثة محولة لموظف..." : "اكتب رسالة للتجربة..."}
-          className="h-9 pr-3 text-right text-xs"
+          placeholder={agentStatus === "HANDOFF" 
+            ? (isRtl ? "المحادثة محولة لموظف..." : "Conversation claimed by staff...") 
+            : (isRtl ? "اكتب رسالة للتجربة..." : "Type a message to test...")}
+          className="h-9 pr-3 rtl:text-right ltr:text-left text-xs"
         />
         <Button type="submit" disabled={agentStatus === "HANDOFF" || isTyping || !inputText.trim()} size="sm" className="h-9 px-3">
           <Send className="h-3.5 w-3.5 scale-x-[-1]" />
@@ -240,3 +256,4 @@ export function AgentPreview({
     </GradientCard>
   );
 }
+

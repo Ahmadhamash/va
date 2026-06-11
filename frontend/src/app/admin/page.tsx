@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { 
   Users, 
   Bot,
@@ -36,6 +36,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { useAuthStore } from "@/store/use-auth-store";
 import { GradientCard } from "@/components/gradient-card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useLanguageStore } from "@/store/use-language-store";
+import { cn } from "@/lib/utils";
 
 type ManyChatSetupStatus = "not_started" | "pending_setup" | "completed";
 
@@ -94,10 +96,10 @@ const fallbackBusinessTypes: BusinessTypeOption[] = [
   { key: "services", label: "Professional Services", group: "Services" },
 ];
 
-function manyChatStatusLabel(status: ManyChatSetupStatus) {
-  if (status === "completed") return "مكتمل";
-  if (status === "pending_setup") return "قيد الإعداد";
-  return "لم يبدأ";
+function manyChatStatusLabel(status: ManyChatSetupStatus, isRtl: boolean) {
+  if (status === "completed") return isRtl ? "مكتمل" : "Completed";
+  if (status === "pending_setup") return isRtl ? "قيد الإعداد" : "Pending Setup";
+  return isRtl ? "لم يبدأ" : "Not Started";
 }
 
 function manyChatStatusClass(status: ManyChatSetupStatus) {
@@ -112,6 +114,9 @@ function manyChatStatusClass(status: ManyChatSetupStatus) {
 
 export default function AdminDashboardPage() {
   const { token, user } = useAuthStore();
+  const language = useLanguageStore((state) => state.language);
+  const isRtl = language === "ar";
+
   const [stats, setStats] = useState<PlatformStats | null>(null);
   const [clients, setClients] = useState<ClientData[]>([]);
   const [systemSettings, setSystemSettings] = useState<PlatformSettings | null>(null);
@@ -184,14 +189,18 @@ export default function AdminDashboardPage() {
       if (res.ok) {
         const updatedUser = await res.json();
         setClients(prev => prev.map(c => c.id === editingClientPrompt.id ? { ...c, ai_persona: updatedUser.ai_persona } : c));
-        showNotice(`✨ تم تحديث البرومبت الشخصي للعميل ${editingClientPrompt.username} بنجاح.`);
+        showNotice(
+          isRtl 
+            ? `✨ تم تحديث البرومبت الشخصي للعميل ${editingClientPrompt.username} بنجاح.` 
+            : `✨ Persona behavior for client ${editingClientPrompt.username} has been successfully updated.`
+        );
         setEditingClientPrompt(null);
       } else {
-        showNotice("❌ فشل تحديث البرومبت الشخصي.", "error");
+        showNotice(isRtl ? "❌ فشل تحديث البرومبت الشخصي." : "❌ Failed to update persona prompt.", "error");
       }
     } catch (err) {
       console.error(err);
-      showNotice("❌ حدث خطأ أثناء الاتصال بالخادم.", "error");
+      showNotice(isRtl ? "❌ حدث خطأ أثناء الاتصال بالخادم." : "❌ An error occurred connecting to the server.", "error");
     } finally {
       setSavingClientPrompt(false);
     }
@@ -199,7 +208,10 @@ export default function AdminDashboardPage() {
 
   const handleResetTestingStore = async () => {
     if (!token) return;
-    if (!confirm("هل أنت متأكد من رغبتك في إعادة تهيئة بيئة الاختبار؟ سيتم مسح الجلسات وسجلات المحاكاة الاختبارية.")) return;
+    const msg = isRtl
+      ? "هل أنت متأكد من رغبتك في إعادة تهيئة بيئة الاختبار؟ سيتم مسح الجلسات وسجلات المحاكاة الاختبارية."
+      : "Are you sure you want to reset the testing environment? Past mock conversations and logs will be deleted.";
+    if (!confirm(msg)) return;
     setResettingTesting(true);
     try {
       const res = await fetch("/api/admin/reset-testing", {
@@ -212,11 +224,11 @@ export default function AdminDashboardPage() {
       if (res.ok && data.ok) {
         showNotice(`✅ ${data.message}`);
       } else {
-        showNotice("❌ فشل إعادة تهيئة بيئة الاختبار.", "error");
+        showNotice(isRtl ? "❌ فشل إعادة تهيئة بيئة الاختبار." : "❌ Failed to reset testing environment.", "error");
       }
     } catch (err) {
       console.error(err);
-      showNotice("❌ حدث خطأ أثناء محاولة الاتصال بالخادم.", "error");
+      showNotice(isRtl ? "❌ حدث خطأ أثناء محاولة الاتصال بالخادم." : "❌ An error occurred connecting to the server.", "error");
     } finally {
       setResettingTesting(false);
     }
@@ -261,7 +273,7 @@ export default function AdminDashboardPage() {
       }
     } catch (err) {
       console.error("Failed to load admin dashboard data", err);
-      showNotice("❌ حدث خطأ أثناء الاتصال بالخادم لجلب البيانات.", "error");
+      showNotice(isRtl ? "❌ حدث خطأ أثناء الاتصال بالخادم لجلب البيانات." : "❌ Error occurred fetching platform data from server.", "error");
     } finally {
       setLoading(false);
     }
@@ -313,17 +325,21 @@ export default function AdminDashboardPage() {
 
       if (res.ok) {
         setClients(prev => prev.map(c => c.id === client.id ? { ...c, is_active: nextActiveState } : c));
-        showNotice(nextActiveState ? `🔓 تم تنشيط حساب العميل ${client.username} بنجاح.` : `🔒 تم تعطيل حساب العميل ${client.username} بنجاح.`);
+        showNotice(
+          nextActiveState 
+            ? (isRtl ? `🔓 تم تنشيط حساب العميل ${client.username} بنجاح.` : `🔓 Account for @${client.username} activated successfully.`) 
+            : (isRtl ? `🔒 تم تعطيل حساب العميل ${client.username} بنجاح.` : `🔒 Account for @${client.username} deactivated successfully.`)
+        );
         
         // Reload stats to reflect active client counts
         const statsRes = await fetch("/api/admin/stats", { headers: { Authorization: "Bearer " + token } });
         if (statsRes.ok) setStats(await statsRes.json());
       } else {
-        showNotice("❌ فشل تعديل حالة نشاط الحساب.", "error");
+        showNotice(isRtl ? "❌ فشل تعديل حالة نشاط الحساب." : "❌ Failed to change account status.", "error");
       }
     } catch (err) {
       console.error(err);
-      showNotice("❌ حدث خطأ أثناء الاتصال بالخادم.", "error");
+      showNotice(isRtl ? "❌ حدث خطأ أثناء الاتصال بالخادم." : "❌ An error occurred connecting to the server.", "error");
     }
   };
 
@@ -343,13 +359,17 @@ export default function AdminDashboardPage() {
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
         setClients(prev => prev.map(c => c.id === client.id ? { ...c, ...data, ai_auto_reply_enabled: nextEnabledState } : c));
-        showNotice(nextEnabledState ? "AI auto-replies enabled for this company." : "AI auto-replies disabled for this company.");
+        showNotice(
+          nextEnabledState 
+            ? (isRtl ? "تم تفعيل ردود الذكاء الاصطناعي لهذه الشركة." : "AI auto-replies enabled for this company.") 
+            : (isRtl ? "تم تعطيل ردود الذكاء الاصطناعي لهذه الشركة." : "AI auto-replies disabled for this company.")
+        );
       } else {
-        showNotice(data.detail || "Failed to update AI auto-reply status.", "error");
+        showNotice(data.detail || (isRtl ? "فشل تعديل حالة الرد الآلي للذكاء." : "Failed to update AI auto-reply status."), "error");
       }
     } catch (err) {
       console.error(err);
-      showNotice("Failed to update AI auto-reply status.", "error");
+      showNotice(isRtl ? "فشل تعديل حالة الرد الآلي للذكاء." : "Failed to update AI auto-reply status.", "error");
     }
   };
 
@@ -376,7 +396,11 @@ export default function AdminDashboardPage() {
 
       const data = await res.json();
       if (res.ok) {
-        showNotice(`✨ تم إنشاء حساب العميل ${newClientUsername} بنجاح!`);
+        showNotice(
+          isRtl 
+            ? `✨ تم إنشاء حساب العميل ${newClientUsername} بنجاح!` 
+            : `✨ Client account ${newClientUsername} created successfully!`
+        );
         setShowCreateModal(false);
         // Clear inputs
         setNewClientUsername("");
@@ -387,11 +411,16 @@ export default function AdminDashboardPage() {
         // Refresh stats & client list
         loadAdminData();
       } else {
-        showNotice(`❌ فشل إنشاء العميل: ${data.detail || "خطأ غير معروف"}`, "error");
+        showNotice(
+          isRtl 
+            ? `❌ فشل إنشاء العميل: ${data.detail || "خطأ غير معروف"}` 
+            : `❌ Failed to create client: ${data.detail || "Unknown error"}`, 
+          "error"
+        );
       }
     } catch (err) {
       console.error(err);
-      showNotice("❌ حدث خطأ أثناء محاولة إرسال البيانات.", "error");
+      showNotice(isRtl ? "❌ حدث خطأ أثناء محاولة إرسال البيانات." : "❌ An error occurred submitting details.", "error");
     } finally {
       setCreatingClient(false);
     }
@@ -413,15 +442,15 @@ export default function AdminDashboardPage() {
       });
 
       if (res.ok) {
-        showNotice("🔑 تم تغيير كلمة مرور الحساب بنجاح.");
+        showNotice(isRtl ? "🔑 تم تغيير كلمة مرور الحساب بنجاح." : "🔑 Account password updated successfully.");
         setResettingClientId(null);
         setNewPassword("");
       } else {
-        showNotice("❌ فشل تحديث كلمة المرور.", "error");
+        showNotice(isRtl ? "❌ فشل تحديث كلمة المرور." : "❌ Failed to update password.", "error");
       }
     } catch (err) {
       console.error(err);
-      showNotice("❌ حدث خطأ أثناء معالجة الطلب.", "error");
+      showNotice(isRtl ? "❌ حدث خطأ أثناء معالجة الطلب." : "❌ An error occurred updating password.", "error");
     } finally {
       setProcessingPasswordReset(false);
     }
@@ -431,7 +460,7 @@ export default function AdminDashboardPage() {
   const handleGenerateManychatWebhook = async (clientId: string) => {
     if (!token) return;
     
-    showNotice(`⏳ جاري توليد رابط Webhook لمنصة Manychat...`);
+    showNotice(isRtl ? `⏳ جاري توليد رابط Webhook لمنصة Manychat...` : `⏳ Generating Manychat Webhook URL...`);
 
     try {
       const res = await fetch(`/api/admin/clients/${clientId}/manychat-webhook`, {
@@ -443,13 +472,18 @@ export default function AdminDashboardPage() {
       const data = await res.json();
       if (res.ok && data.webhook_url) {
         navigator.clipboard.writeText(data.webhook_url);
-        showNotice("✅ تم إنشاء الرابط ونسخه إلى الحافظة بنجاح!");
+        showNotice(isRtl ? "✅ تم إنشاء الرابط ونسخه إلى الحافظة بنجاح!" : "✅ Webhook URL copied to clipboard!");
       } else {
-        showNotice(`❌ فشل توليد الرابط: ${data.detail || "خطأ غير معروف"}`, "error");
+        showNotice(
+          isRtl 
+            ? `❌ فشل توليد الرابط: ${data.detail || "خطأ غير معروف"}` 
+            : `❌ Generation failed: ${data.detail || "Unknown error"}`, 
+          "error"
+        );
       }
     } catch (err) {
       console.error(err);
-      showNotice("❌ حدث خطأ أثناء الاتصال بالخادم.", "error");
+      showNotice(isRtl ? "❌ حدث خطأ أثناء الاتصال بالخادم." : "❌ An error occurred connecting to the server.", "error");
     }
   };
 
@@ -467,13 +501,22 @@ export default function AdminDashboardPage() {
       const data = await res.json();
       if (res.ok) {
         setClients(prev => prev.map(client => client.id === clientId ? { ...client, ...data } : client));
-        showNotice(status === "completed" ? "تم تعليم طلب ManyChat كمكتمل." : "تم تحديث حالة طلب ManyChat.");
+        showNotice(
+          status === "completed" 
+            ? (isRtl ? "تم تعليم طلب ManyChat كمكتمل." : "ManyChat setup marked completed.") 
+            : (isRtl ? "تم تحديث حالة طلب ManyChat." : "ManyChat setup status updated.")
+        );
       } else {
-        showNotice(`فشل تحديث حالة ManyChat: ${data.detail || "خطأ غير معروف"}`, "error");
+        showNotice(
+          isRtl 
+            ? `فشل تحديث حالة ManyChat: ${data.detail || "خطأ غير معروف"}` 
+            : `Failed to update ManyChat status: ${data.detail || "Unknown error"}`, 
+          "error"
+        );
       }
     } catch (err) {
       console.error(err);
-      showNotice("حدث خطأ أثناء تحديث حالة ManyChat.", "error");
+      showNotice(isRtl ? "حدث خطأ أثناء تحديث حالة ManyChat." : "Error occurred updating ManyChat status.", "error");
     }
   };
 
@@ -502,13 +545,13 @@ export default function AdminDashboardPage() {
         setSystemSettings(updatedSettings);
         setMasterSystemPromptInput(updatedSettings.master_system_prompt || "");
         setApiKeyInput(""); // Clear the input sensitive string
-        showNotice("⚙️ تم تحديث وحفظ إعدادات المنصة والذكاء الاصطناعي بنجاح.");
+        showNotice(isRtl ? "⚙️ تم تحديث وحفظ إعدادات المنصة والذكاء الاصطناعي بنجاح." : "⚙️ Platform config and AI parameters successfully saved.");
       } else {
-        showNotice("❌ فشل حفظ الإعدادات.", "error");
+        showNotice(isRtl ? "❌ فشل حفظ الإعدادات." : "❌ Failed to save configurations.", "error");
       }
     } catch (err) {
       console.error(err);
-      showNotice("❌ حدث خطأ أثناء محاولة حفظ التكوينات الجديدة.", "error");
+      showNotice(isRtl ? "❌ حدث خطأ أثناء محاولة حفظ التكوينات الجديدة." : "❌ An error occurred saving new configurations.", "error");
     } finally {
       setUpdatingSettings(false);
     }
@@ -518,37 +561,44 @@ export default function AdminDashboardPage() {
     return (
       <div className="flex min-h-screen items-center justify-center bg-ink-950">
         <div className="text-center">
-          <Loader2 className="h-8 w-8 animate-spin text-cyanx-400 mx-auto mb-3" />
-          <span className="text-sm text-white/50">جاري تحميل لوحة تحكم مدير المنصة...</span>
+          <Loader2 className="h-8 w-8 animate-spin text-cyan-400 mx-auto mb-3" />
+          <span className="text-sm text-white/50">
+            {isRtl ? "جاري تحميل لوحة تحكم مدير المنصة..." : "Loading Admin Dashboard..."}
+          </span>
         </div>
       </div>
     );
   }
 
   return (
-    <AppShell title="لوحة الإشراف العام" subtitle="إدارة العملاء، إحصائيات النظام، وإعدادات الذكاء الاصطناعي للمنصة.">
-      <div className="space-y-6" dir="rtl">
+    <AppShell 
+      title={isRtl ? "لوحة الإشراف العام" : "Admin Dashboard"} 
+      subtitle={isRtl ? "إدارة العملاء، إحصائيات النظام، وإعدادات الذكاء الاصطناعي للمنصة." : "Platform administration: manage accounts, check statistics, and configure global AI properties."}
+    >
+      <div className="space-y-6" dir={isRtl ? "rtl" : "ltr"}>
         {notice && (
-          <div className={`rounded-3xl border px-5 py-4 text-sm font-semibold text-right animate-pulse ${
+          <div className={cn(
+            "rounded-3xl border px-5 py-4 text-sm font-semibold animate-pulse",
+            isRtl ? "text-right" : "text-left",
             notice.type === "success" ? "border-primary-400/20 bg-primary-500/10 text-primary-400" : "border-red-400/20 bg-red-500/10 text-red-400"
-          }`}>
+          )}>
             {notice.message}
           </div>
         )}
 
-        <Tabs defaultValue="management" className="w-full text-right">
+        <Tabs defaultValue="management" className={cn("w-full", isRtl ? "text-right" : "text-left")}>
           <TabsList className="grid grid-cols-3 bg-white/5 border border-white/10 p-1 rounded-2xl w-full max-w-xl mb-6">
             <TabsTrigger value="management" className="rounded-xl text-xs font-semibold py-2">
-              <Settings className="h-4 w-4 ml-1.5 shrink-0" />
-              إدارة المشتركين والإعدادات
+              <Settings className="h-4 w-4 mx-1.5 shrink-0" />
+              {isRtl ? "إدارة المشتركين والإعدادات" : "Subscribers & Settings"}
             </TabsTrigger>
             <TabsTrigger value="testing" className="rounded-xl text-xs font-semibold py-2">
-              <Bot className="h-4 w-4 ml-1.5 shrink-0" />
-              متجر اختبار الـ AI
+              <Bot className="h-4 w-4 mx-1.5 shrink-0" />
+              {isRtl ? "متجر اختبار الـ AI" : "AI Testing Center"}
             </TabsTrigger>
             <TabsTrigger value="pricing" className="rounded-xl text-xs font-semibold py-2">
-              <Coins className="h-4 w-4 ml-1.5 shrink-0" />
-              التسعير والتكاليف
+              <Coins className="h-4 w-4 mx-1.5 shrink-0" />
+              {isRtl ? "التسعير والتكاليف" : "Pricing & Costs"}
             </TabsTrigger>
           </TabsList>
 
@@ -556,44 +606,52 @@ export default function AdminDashboardPage() {
             {/* 1. Statistics Cards */}
             {stats && (
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-5 text-right relative overflow-hidden">
-                  <div className="absolute top-0 right-0 w-24 h-24 bg-cyanx-500/5 rounded-full blur-2xl" />
+                <div className={cn("rounded-3xl border border-white/10 bg-white/[0.04] p-5 relative overflow-hidden", isRtl ? "text-right" : "text-left")}>
+                  <div className="absolute top-0 right-0 w-24 h-24 bg-cyan-500/5 rounded-full blur-2xl" />
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-white/40">إجمالي الشركات المسجلة</span>
-                    <Users className="h-5 w-5 text-cyanx-400" />
+                    <span className="text-xs font-semibold text-white/40">{isRtl ? "إجمالي الشركات المسجلة" : "Total Registered Businesses"}</span>
+                    <Users className="h-5 w-5 text-cyan-400" />
                   </div>
                   <div className="mt-4 text-3xl font-extrabold text-white">{stats.clients}</div>
-                  <div className="mt-1 text-[10px] text-cyanx-400 font-semibold">{stats.active_clients} شركة نشطة حالياً</div>
+                  <div className="mt-1 text-[10px] text-cyan-400 font-semibold">
+                    {isRtl ? `${stats.active_clients} شركة نشطة حالياً` : `${stats.active_clients} active accounts`}
+                  </div>
                 </div>
 
-                <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-5 text-right relative overflow-hidden">
+                <div className={cn("rounded-3xl border border-white/10 bg-white/[0.04] p-5 relative overflow-hidden", isRtl ? "text-right" : "text-left")}>
                   <div className="absolute top-0 right-0 w-24 h-24 bg-primary-500/5 rounded-full blur-2xl" />
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-white/40">المحادثات في المنصة</span>
+                    <span className="text-xs font-semibold text-white/40">{isRtl ? "المحادثات في المنصة" : "Total Platform Chats"}</span>
                     <MessageSquare className="h-5 w-5 text-primary-400" />
                   </div>
                   <div className="mt-4 text-3xl font-extrabold text-white">{stats.sessions}</div>
-                  <div className="mt-1 text-[10px] text-primary-400 font-semibold">{stats.messages} رسالة متبادلة</div>
+                  <div className="mt-1 text-[10px] text-primary-400 font-semibold">
+                    {isRtl ? `${stats.messages} رسالة متبادلة` : `${stats.messages} total messages`}
+                  </div>
                 </div>
 
-                <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-5 text-right relative overflow-hidden">
+                <div className={cn("rounded-3xl border border-white/10 bg-white/[0.04] p-5 relative overflow-hidden", isRtl ? "text-right" : "text-left")}>
                   <div className="absolute top-0 right-0 w-24 h-24 bg-violet-500/5 rounded-full blur-2xl" />
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-white/40">القنوات المتصلة</span>
+                    <span className="text-xs font-semibold text-white/40">{isRtl ? "القنوات المتصلة" : "Connected Channels"}</span>
                     <Smartphone className="h-5 w-5 text-violet-400" />
                   </div>
                   <div className="mt-4 text-3xl font-extrabold text-white">{stats.channels}</div>
-                  <div className="mt-1 text-[10px] text-violet-400 font-semibold">موزعة على واتساب وماسنجر وإنستغرام</div>
+                  <div className="mt-1 text-[10px] text-violet-400 font-semibold">
+                    {isRtl ? "موزعة على واتساب وماسنجر وإنستغرام" : "WhatsApp, FB Messenger & IG"}
+                  </div>
                 </div>
 
-                <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-5 text-right relative overflow-hidden">
+                <div className={cn("rounded-3xl border border-white/10 bg-white/[0.04] p-5 relative overflow-hidden", isRtl ? "text-right" : "text-left")}>
                   <div className="absolute top-0 right-0 w-24 h-24 bg-amber-500/5 rounded-full blur-2xl" />
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-white/40">المعرفة والمنتجات</span>
+                    <span className="text-xs font-semibold text-white/40">{isRtl ? "المعرفة والمنتجات" : "Items & Catalog size"}</span>
                     <BookOpen className="h-5 w-5 text-amber-400" />
                   </div>
                   <div className="mt-4 text-3xl font-extrabold text-white">{stats.items}</div>
-                  <div className="mt-1 text-[10px] text-amber-400 font-semibold">{stats.style_samples} نموذج أسلوب مسجل</div>
+                  <div className="mt-1 text-[10px] text-amber-400 font-semibold">
+                    {isRtl ? `${stats.style_samples} نموذج أسلوب مسجل` : `${stats.style_samples} style tone samples`}
+                  </div>
                 </div>
               </div>
             )}
@@ -602,28 +660,41 @@ export default function AdminDashboardPage() {
               {/* Left / Main Panel: Client List & Management */}
               <div className="space-y-6">
                 <Card className="border-amber-400/20">
-                  <CardHeader className="flex flex-col md:flex-row-reverse md:items-center md:justify-between gap-3">
-                    <div className="text-right">
-                      <CardTitle className="flex items-center justify-end gap-2 text-right">
-                        <span>طلبات ربط ManyChat</span>
-                        <Clock3 className="h-5 w-5 text-amber-300" />
+                  <CardHeader className={cn("flex gap-3 flex-col md:flex-row", isRtl ? "md:flex-row-reverse" : "md:flex-row")}>
+                    <div className={isRtl ? "text-right" : "text-left"}>
+                      <CardTitle className={cn("flex items-center gap-2", isRtl ? "justify-end text-right" : "justify-start text-left")}>
+                        {isRtl ? (
+                          <>
+                            <span>طلبات ربط ManyChat</span>
+                            <Clock3 className="h-5 w-5 text-amber-300" />
+                          </>
+                        ) : (
+                          <>
+                            <Clock3 className="h-5 w-5 text-amber-300" />
+                            <span>ManyChat Integration Requests</span>
+                          </>
+                        )}
                       </CardTitle>
-                      <CardDescription className="text-right">العملاء الذين أرسلوا بيانات الصفحة وينتظرون الإعداد اليدوي من حساب الوكالة.</CardDescription>
+                      <CardDescription className={isRtl ? "text-right" : "text-left"}>
+                        {isRtl 
+                          ? "العملاء الذين أرسلوا بيانات الصفحة وينتظرون الإعداد اليدوي من حساب الوكالة." 
+                          : "Clients who sent page details and wait for manual agency account setup."}
+                      </CardDescription>
                     </div>
-                    <span className="rounded-full border border-amber-400/20 bg-amber-500/10 px-3 py-1 text-xs font-bold text-amber-300">
-                      {pendingManychatClients.length} قيد الإعداد
+                    <span className={cn("rounded-full border border-amber-400/20 bg-amber-500/10 px-3 py-1 text-xs font-bold text-amber-300 md:mr-auto", isRtl ? "md:mr-auto" : "md:ml-auto")}>
+                      {isRtl ? `${pendingManychatClients.length} قيد الإعداد` : `${pendingManychatClients.length} Pending`}
                     </span>
                   </CardHeader>
                   <CardContent>
                     {pendingManychatClients.length === 0 ? (
                       <div className="rounded-2xl border border-dashed border-white/10 py-8 text-center text-sm text-white/40">
-                        لا توجد طلبات ManyChat معلقة حالياً.
+                        {isRtl ? "لا توجد طلبات ManyChat معلقة حالياً." : "No pending ManyChat setup requests."}
                       </div>
                     ) : (
                       <div className="space-y-3">
                         {pendingManychatClients.map((client) => (
-                          <div key={client.id} className="rounded-2xl border border-white/10 bg-white/[0.025] p-4 text-right">
-                            <div className="flex flex-wrap items-start justify-between gap-4">
+                          <div key={client.id} className={cn("rounded-2xl border border-white/10 bg-white/[0.025] p-4", isRtl ? "text-right" : "text-left")}>
+                            <div className={cn("flex flex-wrap items-start gap-4", isRtl ? "justify-between" : "justify-between flex-row-reverse")}>
                               <div className="flex flex-wrap gap-2">
                                 <Button
                                   size="sm"
@@ -631,19 +702,19 @@ export default function AdminDashboardPage() {
                                   className="text-xs"
                                   onClick={() => handleGenerateManychatWebhook(client.id)}
                                 >
-                                  <Smartphone className="h-3.5 w-3.5 ml-1" />
-                                  نسخ Webhook
+                                  <Smartphone className="h-3.5 w-3.5 mx-1" />
+                                  {isRtl ? "نسخ Webhook" : "Copy Webhook"}
                                 </Button>
                                 <Button
                                   size="sm"
                                   className="text-xs"
                                   onClick={() => handleUpdateManychatStatus(client.id, "completed")}
                                 >
-                                  <CheckCircle2 className="h-3.5 w-3.5 ml-1" />
-                                  تم الإعداد
+                                  <CheckCircle2 className="h-3.5 w-3.5 mx-1" />
+                                  {isRtl ? "تم الإعداد" : "Complete Setup"}
                                 </Button>
                               </div>
-                              <div>
+                              <div className={isRtl ? "text-right" : "text-left"}>
                                 <div className="font-semibold text-white">{client.business_name || client.username}</div>
                                 <div className="mt-1 text-xs text-white/40">{client.email}</div>
                               </div>
@@ -653,16 +724,16 @@ export default function AdminDashboardPage() {
                                 href={client.fb_page_link || "#"}
                                 target="_blank"
                                 rel="noreferrer"
-                                className={`rounded-xl bg-black/15 p-3 font-mono text-cyanx-300 ${!client.fb_page_link ? "pointer-events-none text-white/30" : ""}`}
+                                className={cn("rounded-xl bg-black/15 p-3 font-mono text-cyan-300 text-center", !client.fb_page_link && "pointer-events-none text-white/30")}
                                 dir="ltr"
                               >
-                                {client.fb_page_link || "no facebook link"}
+                                {client.fb_page_link || "No Facebook link"}
                               </a>
-                              <div className="rounded-xl bg-black/15 p-3 font-mono" dir="ltr">
-                                {client.ig_username ? `@${client.ig_username}` : "no instagram"}
+                              <div className="rounded-xl bg-black/15 p-3 font-mono text-center" dir="ltr">
+                                {client.ig_username ? `@${client.ig_username}` : "No Instagram Username"}
                               </div>
-                              <div className="rounded-xl bg-black/15 p-3 font-mono" dir="ltr">
-                                {client.wa_number || "no whatsapp"}
+                              <div className="rounded-xl bg-black/15 p-3 font-mono text-center" dir="ltr">
+                                {client.wa_number || "No WhatsApp number"}
                               </div>
                             </div>
                           </div>
@@ -673,18 +744,31 @@ export default function AdminDashboardPage() {
                 </Card>
 
                 <Card>
-                  <CardHeader className="flex flex-col md:flex-row-reverse md:items-center md:justify-between gap-4">
-                    <div className="text-right">
-                      <CardTitle className="flex items-center justify-end gap-2 text-right">
-                        <span>إدارة المشتركين والشركات</span>
-                        <UserCheck className="h-5 w-5 text-cyanx-400" />
+                  <CardHeader className={cn("flex gap-4 flex-col md:flex-row", isRtl ? "md:flex-row-reverse" : "md:flex-row")}>
+                    <div className={isRtl ? "text-right" : "text-left"}>
+                      <CardTitle className={cn("flex items-center gap-2", isRtl ? "justify-end text-right" : "justify-start text-left")}>
+                        {isRtl ? (
+                          <>
+                            <span>إدارة المشتركين والشركات</span>
+                            <UserCheck className="h-5 w-5 text-cyan-400" />
+                          </>
+                        ) : (
+                          <>
+                            <UserCheck className="h-5 w-5 text-cyan-400" />
+                            <span>Subscriber Accounts Directory</span>
+                          </>
+                        )}
                       </CardTitle>
-                      <CardDescription className="text-right">إجمالي الشركات المسجلة بالخدمة، يمكنك تعطيل/تنشيط الحسابات أو تغيير كلمة المرور.</CardDescription>
+                      <CardDescription className={isRtl ? "text-right" : "text-left"}>
+                        {isRtl 
+                          ? "إجمالي الشركات المسجلة بالخدمة، يمكنك تعطيل/تنشيط الحسابات أو تغيير كلمة المرور." 
+                          : "Total registered companies in the service. Activate/deactivate accounts or reset passwords."}
+                      </CardDescription>
                     </div>
-                    <div className="flex gap-2">
+                    <div className={cn("flex gap-2", isRtl ? "md:mr-auto" : "md:ml-auto")}>
                       <Button onClick={() => setShowCreateModal(true)} className="flex items-center gap-1.5 text-xs py-2.5 h-auto">
                         <Plus className="h-4 w-4" />
-                        <span>إنشاء حساب مشترك</span>
+                        <span>{isRtl ? "إنشاء حساب مشترك" : "Add Subscriber Account"}</span>
                       </Button>
                       <Button variant="secondary" onClick={loadAdminData} className="p-2 h-10 w-10 shrink-0">
                         <RefreshCw className="h-4 w-4" />
@@ -693,40 +777,42 @@ export default function AdminDashboardPage() {
                   </CardHeader>
                   <CardContent className="space-y-4">
                     {/* Search Bar */}
-                    <div className="text-right">
+                    <div className={isRtl ? "text-right" : "text-left"}>
                       <Input 
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        placeholder="🔍 ابحث عن عميل بالاسم، اسم المستخدم، أو البريد الإلكتروني..." 
-                        className="max-w-md ml-auto"
+                        placeholder={isRtl ? "🔍 ابحث عن عميل بالاسم، اسم المستخدم، أو البريد الإلكتروني..." : "🔍 Search client by name, username, or email address..."} 
+                        className={cn("max-w-md", isRtl ? "ml-auto text-right" : "mr-auto text-left")}
                       />
                     </div>
 
                     {/* Clients Table */}
                     <div className="overflow-x-auto rounded-2xl border border-white/10 bg-white/[0.015] scrollbar-thin">
-                      <table className="w-full text-right border-collapse">
+                      <table className={cn("w-full border-collapse", isRtl ? "text-right" : "text-left")}>
                         <thead>
                           <tr className="border-b border-white/10 bg-white/[0.03] text-xs font-semibold text-white/50">
-                            <th className="p-4">العميل / النشاط التجاري</th>
-                            <th className="p-4">البريد الإلكتروني</th>
-                            <th className="p-4 text-center">المنتجات</th>
-                            <th className="p-4 text-center">المحادثات</th>
+                            <th className="p-4">{isRtl ? "العميل / النشاط التجاري" : "Client / Business"}</th>
+                            <th className="p-4">{isRtl ? "البريد الإلكتروني" : "Email"}</th>
+                            <th className="p-4 text-center">{isRtl ? "المنتجات" : "Products"}</th>
+                            <th className="p-4 text-center">{isRtl ? "المحادثات" : "Chats"}</th>
                             <th className="p-4 text-center">AI</th>
                             <th className="p-4 text-center">ManyChat</th>
-                            <th className="p-4 text-center">الحالة</th>
-                            <th className="p-4 text-left">التحكم</th>
+                            <th className="p-4 text-center">{isRtl ? "الحالة" : "Status"}</th>
+                            <th className="p-4 text-center">{isRtl ? "التحكم" : "Actions"}</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-white/5 text-sm text-white/80">
                           {clients.length === 0 ? (
                             <tr>
-                              <td colSpan={8} className="p-8 text-center text-white/40">لا يوجد عملاء مطابقين للبحث.</td>
+                              <td colSpan={8} className="p-8 text-center text-white/40">
+                                {isRtl ? "لا يوجد عملاء مطابقين للبحث." : "No clients matching search filter."}
+                              </td>
                             </tr>
                           ) : (
                             clients.map((client) => (
                               <tr key={client.id} className="hover:bg-white/[0.01]">
                                 <td className="p-4 font-semibold text-white">
-                                  <div>{client.business_name || "بدون اسم نشاط"}</div>
+                                  <div>{client.business_name || (isRtl ? "بدون اسم نشاط" : "No business name")}</div>
                                   <div className="text-xs text-white/40 mt-0.5">@{client.username}</div>
                                 </td>
                                 <td className="p-4 font-mono text-xs text-white/60">{client.email}</td>
@@ -734,76 +820,78 @@ export default function AdminDashboardPage() {
                                 <td className="p-4 text-center">{client.session_count}</td>
                                 <td className="p-4 text-center">
                                   <span className={`inline-block rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
-                                    client.ai_auto_reply_enabled ? "border border-cyanx-500/20 bg-cyanx-500/10 text-cyanx-300" : "border border-amber-500/20 bg-amber-500/10 text-amber-300"
+                                    client.ai_auto_reply_enabled ? "border border-cyan-500/20 bg-cyan-500/10 text-cyan-300" : "border border-amber-500/20 bg-amber-500/10 text-amber-300"
                                   }`}>
                                     {client.ai_auto_reply_enabled ? "ON" : "OFF"}
                                   </span>
                                 </td>
                                 <td className="p-4 text-center">
                                   <span className={`inline-block rounded-full px-2.5 py-0.5 text-[10px] font-bold ${manyChatStatusClass(client.manychat_setup_status)}`}>
-                                    {manyChatStatusLabel(client.manychat_setup_status)}
+                                    {manyChatStatusLabel(client.manychat_setup_status, isRtl)}
                                   </span>
                                 </td>
                                 <td className="p-4 text-center">
                                   <span className={`inline-block rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
                                     client.is_active ? "bg-primary-500/10 border border-primary-500/20 text-primary-400" : "bg-red-500/10 border border-red-500/20 text-red-400"
                                   }`}>
-                                    {client.is_active ? "نشط" : "معطل"}
+                                    {client.is_active ? (isRtl ? "نشط" : "Active") : (isRtl ? "معطل" : "Deactivated")}
                                   </span>
                                 </td>
-                                <td className="p-4 text-left flex justify-end gap-2">
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    className="text-cyanx-400 hover:bg-cyanx-400/10 py-1.5 h-auto text-xs"
-                                    onClick={() => {
-                                      setEditingClientPrompt(client);
-                                      setClientPromptText(client.ai_persona || "");
-                                    }}
-                                  >
-                                    <Bot className="h-3.5 w-3.5 ml-1" />
-                                    <span>تعديل البرومبت</span>
-                                  </Button>
-                                  <Button 
-                                    size="sm" 
-                                    variant="ghost" 
-                                    className="text-amber-400 hover:bg-amber-400/10 py-1.5 h-auto text-xs"
-                                    onClick={() => setResettingClientId(client.id)}
-                                  >
-                                    <Key className="h-3.5 w-3.5 ml-1" />
-                                    <span>كلمة المرور</span>
-                                  </Button>
-                                  <div className="flex bg-violet-400/5 rounded-md p-1 gap-1 items-center border border-violet-500/10">
-                                    <span className="text-[9px] text-violet-300/50 px-1 font-bold">ربط:</span>
+                                <td className="p-4 text-center">
+                                  <div className={cn("flex gap-2 flex-wrap items-center", isRtl ? "justify-end" : "justify-start")}>
                                     <Button
                                       size="sm"
                                       variant="ghost"
-                                      className="text-violet-400 hover:bg-violet-400/10 py-1 h-auto text-[10px] px-2 flex gap-1 items-center"
-                                      title="نسخ رابط Manychat Webhook"
-                                      onClick={() => handleGenerateManychatWebhook(client.id)}
+                                      className="text-cyan-400 hover:bg-cyan-400/10 py-1.5 h-auto text-xs"
+                                      onClick={() => {
+                                        setEditingClientPrompt(client);
+                                        setClientPromptText(client.ai_persona || "");
+                                      }}
                                     >
-                                      <Smartphone className="h-3 w-3" />
-                                      Manychat
+                                      <Bot className="h-3.5 w-3.5 mx-1" />
+                                      <span>{isRtl ? "تعديل البرومبت" : "Edit Persona"}</span>
+                                    </Button>
+                                    <Button 
+                                      size="sm" 
+                                      variant="ghost" 
+                                      className="text-amber-400 hover:bg-amber-400/10 py-1.5 h-auto text-xs"
+                                      onClick={() => setResettingClientId(client.id)}
+                                    >
+                                      <Key className="h-3.5 w-3.5 mx-1" />
+                                      <span>{isRtl ? "كلمة المرور" : "Password"}</span>
+                                    </Button>
+                                    <div className="flex bg-violet-400/5 rounded-md p-1 gap-1 items-center border border-violet-500/10">
+                                      <span className="text-[9px] text-violet-300/50 px-1 font-bold">{isRtl ? "ربط:" : "Link:"}</span>
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        className="text-violet-400 hover:bg-violet-400/10 py-1 h-auto text-[10px] px-2 flex gap-1 items-center"
+                                        title={isRtl ? "نسخ رابط Manychat Webhook" : "Copy Manychat Webhook URL"}
+                                        onClick={() => handleGenerateManychatWebhook(client.id)}
+                                      >
+                                        <Smartphone className="h-3 w-3" />
+                                        Manychat
+                                      </Button>
+                                    </div>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="py-1.5 h-auto text-xs"
+                                      onClick={() => handleToggleClientAI(client)}
+                                    >
+                                      <Bot className="h-3.5 w-3.5 mx-1" />
+                                      <span>{client.ai_auto_reply_enabled ? "AI OFF" : "AI ON"}</span>
+                                    </Button>
+                                    <Button 
+                                      size="sm" 
+                                      variant={client.is_active ? "danger" : "secondary"}
+                                      className="py-1.5 h-auto text-xs"
+                                      onClick={() => handleToggleClientActive(client)}
+                                    >
+                                      {client.is_active ? <Lock className="h-3.5 w-3.5 mx-1" /> : <Unlock className="h-3.5 w-3.5 mx-1" />}
+                                      <span>{client.is_active ? (isRtl ? "تعطيل" : "Deactivate") : (isRtl ? "تنشيط" : "Activate")}</span>
                                     </Button>
                                   </div>
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    className="py-1.5 h-auto text-xs"
-                                    onClick={() => handleToggleClientAI(client)}
-                                  >
-                                    <Bot className="h-3.5 w-3.5 ml-1" />
-                                    <span>{client.ai_auto_reply_enabled ? "AI OFF" : "AI ON"}</span>
-                                  </Button>
-                                  <Button 
-                                    size="sm" 
-                                    variant={client.is_active ? "danger" : "secondary"}
-                                    className="py-1.5 h-auto text-xs"
-                                    onClick={() => handleToggleClientActive(client)}
-                                  >
-                                    {client.is_active ? <Lock className="h-3.5 w-3.5 ml-1" /> : <Unlock className="h-3.5 w-3.5 ml-1" />}
-                                    <span>{client.is_active ? "تعطيل" : "تنشيط"}</span>
-                                  </Button>
                                 </td>
                               </tr>
                             ))
@@ -817,22 +905,24 @@ export default function AdminDashboardPage() {
 
               {/* Right Panel: Platform Global Settings */}
               <div className="space-y-6">
-                <GradientCard className="text-right">
-                  <div className="flex items-center justify-end gap-2 border-b border-white/10 pb-4 mb-4">
-                    <span className="font-bold text-white text-base">إعدادات المنصة والـ AI</span>
-                    <Settings className="h-5 w-5 text-cyanx-400" />
+                <GradientCard className={isRtl ? "text-right" : "text-left"}>
+                  <div className={cn("flex items-center gap-2 border-b border-white/10 pb-4 mb-4", isRtl ? "justify-end text-right" : "justify-start text-left flex-row-reverse")}>
+                    <span className="font-bold text-white text-base">{isRtl ? "إعدادات المنصة والـ AI" : "Platform & Global AI Config"}</span>
+                    <Settings className="h-5 w-5 text-cyan-400" />
                   </div>
 
                   {systemSettings && (
                     <form onSubmit={handleSaveSettings} className="space-y-4">
                       <div className="space-y-1.5">
-                        <label className="text-xs font-semibold text-white/50 block">مفتاح OpenAI API Key</label>
+                        <label className="text-xs font-semibold text-white/50 block">
+                          {isRtl ? "مفتاح OpenAI API Key" : "OpenAI API Key"}
+                        </label>
                         <div className="relative">
                           <Input 
                             type={showApiKey ? "text" : "password"} 
                             value={apiKeyInput}
                             onChange={(e) => setApiKeyInput(e.target.value)}
-                            placeholder={systemSettings.openai_api_key_masked || "لم يتم إدخال مفتاح API"}
+                            placeholder={systemSettings.openai_api_key_masked || (isRtl ? "لم يتم إدخال مفتاح API" : "No API Key entered")}
                             className="font-mono text-left pl-10"
                           />
                           <button
@@ -844,26 +934,38 @@ export default function AdminDashboardPage() {
                           </button>
                         </div>
                         <span className="text-[10px] text-white/30 block mt-1 leading-5">
-                          المصدر الحالي للمفتاح: <span className="font-bold text-cyanx-400">{systemSettings.key_source === "env" ? "ملف البيئة (.env)" : systemSettings.key_source === "database" ? "قاعدة البيانات" : "لا يوجد"}</span>
+                          {isRtl ? "المصدر الحالي للمفتاح: " : "Current key source: "}
+                          <span className="font-bold text-cyan-400">
+                            {systemSettings.key_source === "env" 
+                              ? (isRtl ? "ملف البيئة (.env)" : "Environment variables (.env)") 
+                              : systemSettings.key_source === "database" 
+                                ? (isRtl ? "قاعدة البيانات" : "Database config") 
+                                : (isRtl ? "لا يوجد" : "None")}
+                          </span>
                         </span>
                       </div>
 
                       <div className="space-y-1.5">
-                        <label className="text-xs font-semibold text-white/50 block">نموذج الذكاء الاصطناعي الافتراضي</label>
+                        <label className="text-xs font-semibold text-white/50 block">
+                          {isRtl ? "نموذج الذكاء الاصطناعي الافتراضي" : "Default Global LLM Model"}
+                        </label>
                         <select
                           value={aiModelInput}
                           onChange={(e) => setAiModelInput(e.target.value)}
-                          className="h-11 w-full rounded-2xl border border-white/10 bg-[#16161a] px-4 text-right text-sm text-white outline-none cursor-pointer appearance-none"
+                          className={cn(
+                            "h-11 w-full rounded-2xl border border-white/10 bg-[#16161a] px-4 text-sm text-white outline-none cursor-pointer appearance-none",
+                            isRtl ? "text-right" : "text-left"
+                          )}
                         >
-                          <option value="gpt-4o">gpt-4o (الافتراضي - فائق الدقة)</option>
-                          <option value="gpt-4o-mini">gpt-4o-mini (سريع واقتصادي)</option>
+                          <option value="gpt-4o">{isRtl ? "gpt-4o (الافتراضي - فائق الدقة)" : "gpt-4o (Default - Ultra Accurate)"}</option>
+                          <option value="gpt-4o-mini">{isRtl ? "gpt-4o-mini (سريع واقتصادي)" : "gpt-4o-mini (Fast & Cost Efficient)"}</option>
                           <option value="gpt-4-turbo">gpt-4-turbo</option>
                           <option value="gpt-3.5-turbo">gpt-3.5-turbo</option>
                         </select>
                       </div>
 
                       <div className="space-y-1.5">
-                        <label className="text-xs font-semibold text-white/50 block">Master system prompt</label>
+                        <label className="text-xs font-semibold text-white/50 block">Master System Prompt</label>
                         <Textarea
                           value={masterSystemPromptInput}
                           onChange={(e) => setMasterSystemPromptInput(e.target.value)}
@@ -877,7 +979,9 @@ export default function AdminDashboardPage() {
                       </div>
 
                       <div className="space-y-1.5">
-                        <label className="text-xs font-semibold text-white/50 block">ثواني التأخير للرد الآلي (Debounce)</label>
+                        <label className="text-xs font-semibold text-white/50 block">
+                          {isRtl ? "ثواني التأخير للرد الآلي (Debounce)" : "Auto-Reply Debounce (Seconds)"}
+                        </label>
                         <Input 
                           type="number" 
                           min="1" 
@@ -886,18 +990,20 @@ export default function AdminDashboardPage() {
                           onChange={(e) => setDebounceSecondsInput(parseInt(e.target.value) || 2)}
                           className="font-mono text-left"
                         />
-                        <span className="text-[10px] text-white/30 block mt-1">حجم النافذة الزمنية لتجميع رسائل العميل المتتالية قبل الرد.</span>
+                        <span className="text-[10px] text-white/30 block mt-1">
+                          {isRtl ? "حجم النافذة الزمنية لتجميع رسائل العميل المتتالية قبل الرد." : "Time window to buffer consecutive customer messages before replying."}
+                        </span>
                       </div>
 
                       <div className="pt-2">
                         <Button type="submit" disabled={updatingSettings} className="w-full justify-center">
                           {updatingSettings ? (
                             <>
-                              <Loader2 className="h-4 w-4 animate-spin ml-2" />
-                              <span>جاري الحفظ...</span>
+                              <Loader2 className="h-4 w-4 animate-spin mx-2" />
+                              <span>{isRtl ? "جاري الحفظ..." : "Saving..."}</span>
                             </>
                           ) : (
-                            <span>حفظ التكوينات</span>
+                            <span>{isRtl ? "حفظ التكوينات" : "Save Configurations"}</span>
                           )}
                         </Button>
                       </div>
@@ -905,20 +1011,22 @@ export default function AdminDashboardPage() {
                   )}
                 </GradientCard>
 
-                <Card className="border-cyanx-400/20">
+                <Card className="border-cyan-400/20">
                   <CardHeader>
-                    <CardTitle className="flex items-center justify-end gap-2 text-right">
-                      <span>أمان وموثوقية المنصة</span>
-                      <ShieldCheck className="h-5 w-5 text-cyanx-400" />
+                    <CardTitle className={cn("flex items-center gap-2", isRtl ? "justify-end text-right" : "justify-start text-left flex-row-reverse")}>
+                      <span>{isRtl ? "أمان وموثوقية المنصة" : "Platform Reliability & Security"}</span>
+                      <ShieldCheck className="h-5 w-5 text-cyan-400" />
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="text-right text-xs text-white/40 leading-6 space-y-2">
+                  <CardContent className={cn("text-xs text-white/40 leading-6 space-y-2", isRtl ? "text-right" : "text-left")}>
                     <p>
-                      كمشرف عام، يرجى الحفاظ على سرية مفاتيح API المضافة. تؤثر التعديلات هنا بشكل فوري على جميع عمليات الرد والـ Webhooks النشطة عبر النظام لكافة حسابات العملاء.
+                      {isRtl 
+                        ? "كمشرف عام، يرجى الحفاظ على سرية مفاتيح API المضافة. تؤثر التعديلات هنا بشكل فوري على جميع عمليات الرد والـ Webhooks النشطة عبر النظام لكافة حسابات العملاء."
+                        : "As master administrator, please preserve the confidentiality of API Keys. Any changes applied here instantly impact message replies and active Webhooks system-wide."}
                     </p>
                     <div className="rounded-xl bg-white/[0.02] border border-white/5 p-3 flex items-center justify-between">
                       <span className="font-bold text-white font-mono">{user?.username}</span>
-                      <span className="text-cyanx-400">حساب الإشراف النشط</span>
+                      <span className="text-cyan-400">{isRtl ? "حساب الإشراف النشط" : "Active Admin Account"}</span>
                     </div>
                   </CardContent>
                 </Card>
@@ -927,21 +1035,25 @@ export default function AdminDashboardPage() {
           </TabsContent>
 
           <TabsContent value="testing" className="space-y-6">
-            <GradientCard className="text-right">
-              <div className="flex items-center justify-end gap-2 border-b border-white/10 pb-4 mb-4">
-                <span className="font-bold text-white text-lg">بيئة محاكاة واختبار الذكاء الاصطناعي (AI Testing Store)</span>
-                <Bot className="h-6 w-6 text-cyanx-400" />
+            <GradientCard className={isRtl ? "text-right" : "text-left"}>
+              <div className={cn("flex items-center gap-2 border-b border-white/10 pb-4 mb-4", isRtl ? "justify-end text-right" : "justify-start text-left flex-row-reverse")}>
+                <span className="font-bold text-white text-lg">{isRtl ? "بيئة محاكاة واختبار الذكاء الاصطناعي (AI Testing Store)" : "AI Simulation & Test Sandbox (AI Testing Store)"}</span>
+                <Bot className="h-6 w-6 text-cyan-400" />
               </div>
               <p className="text-sm leading-6 text-white/70 mb-6 font-semibold">
-                تتيح لك لوحة الاختبار الإشراف على كيفية تفاعل وكلاء العملاء في بيئة تجريبية معزولة قبل تطبيق التغييرات على قنوات الواتساب أو ماسنجر الرسمية.
+                {isRtl 
+                  ? "تتيح لك لوحة الاختبار الإشراف على كيفية تفاعل وكلاء العملاء في بيئة تجريبية معزولة قبل تطبيق التغييرات على قنوات الواتساب أو ماسنجر الرسمية." 
+                  : "The testing console allows you to monitor how company agents interact in an isolated simulation before applying changes live to WhatsApp/Messenger."}
               </p>
 
               <div className="grid gap-6 md:grid-cols-2">
                 {/* Reset Section */}
-                <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-5 space-y-4 text-right">
-                  <h3 className="font-bold text-white text-base">إعادة تهيئة بيئة الاختبار</h3>
+                <div className={cn("rounded-2xl border border-white/10 bg-white/[0.02] p-5 space-y-4", isRtl ? "text-right" : "text-left")}>
+                  <h3 className="font-bold text-white text-base">{isRtl ? "إعادة تهيئة بيئة الاختبار" : "Reset Test Environment"}</h3>
                   <p className="text-xs text-white/50 leading-5">
-                    عند إعادة التهيئة، سيتم مسح كافة سجلات المحاكاة وجلسات الدردشة الاختبارية السابقة للتأكد من أن الاختبارات الجديدة تبدأ بنظافة مطلقة ودون أي تداخل مع مدخلات قديمة.
+                    {isRtl 
+                      ? "عند إعادة التهيئة، سيتم مسح كافة سجلات المحاكاة وجلسات الدردشة الاختبارية السابقة للتأكد من أن الاختبارات الجديدة تبدأ بنظافة مطلقة ودون أي تداخل مع مدخلات قديمة." 
+                      : "Resetting deletes all past test chats and simulation history to ensure a clean testing state free of historical context leaks."}
                   </p>
                   <Button 
                     type="button" 
@@ -952,79 +1064,81 @@ export default function AdminDashboardPage() {
                   >
                     {resettingTesting ? (
                       <>
-                        <Loader2 className="h-4 w-4 animate-spin ml-2" />
-                        <span>جاري إعادة التهيئة...</span>
+                        <Loader2 className="h-4 w-4 animate-spin mx-2" />
+                        <span>{isRtl ? "جاري إعادة التهيئة..." : "Resetting..."}</span>
                       </>
                     ) : (
                       <>
-                        <RefreshCw className="h-4 w-4 ml-2" />
-                        <span>إعادة تهيئة بيئة الاختبار</span>
+                        <RefreshCw className="h-4 w-4 mx-2" />
+                        <span>{isRtl ? "إعادة تهيئة بيئة الاختبار" : "Reset Test Sandbox"}</span>
                       </>
                     )}
                   </Button>
                 </div>
 
                 {/* Login Instructions Section */}
-                <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-5 space-y-4 text-right">
-                  <h3 className="font-bold text-white text-base">تعليمات تسجيل الدخول والمحاكاة</h3>
+                <div className={cn("rounded-2xl border border-white/10 bg-white/[0.02] p-5 space-y-4", isRtl ? "text-right" : "text-left")}>
+                  <h3 className="font-bold text-white text-base">{isRtl ? "تعليمات تسجيل الدخول والمحاكاة" : "How to Log In & Run Simulation"}</h3>
                   <div className="text-xs text-white/60 space-y-3 leading-5">
-                    <div className="flex items-start gap-2">
-                      <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-cyanx-500/20 text-[10px] font-bold text-cyanx-300 mt-0.5 ml-2">1</span>
-                      <p>اختر العميل المستهدف للاختبار من القائمة في التبويب الرئيسي للإشراف العام.</p>
+                    <div className={cn("flex items-start gap-2", isRtl ? "flex-row" : "flex-row-reverse")}>
+                      <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-cyan-500/20 text-[10px] font-bold text-cyan-300 mt-0.5 mx-2">1</span>
+                      <p>{isRtl ? "اختر العميل المستهدف للاختبار من القائمة في التبويب الرئيسي للإشراف العام." : "Select the target client from the subscribers list on the main tab."}</p>
                     </div>
-                    <div className="flex items-start gap-2">
-                      <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-cyanx-500/20 text-[10px] font-bold text-cyanx-300 mt-0.5 ml-2">2</span>
-                      <p>قم بنسخ اسم المستخدم الخاص به. إذا لم تكن تعرف كلمة المرور الخاصة به، استخدم زر <strong>"كلمة المرور"</strong> في الجدول لتعيين كلمة مرور مؤقتة للاختبار.</p>
+                    <div className={cn("flex items-start gap-2", isRtl ? "flex-row" : "flex-row-reverse")}>
+                      <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-cyan-500/20 text-[10px] font-bold text-cyan-300 mt-0.5 mx-2">2</span>
+                      <p>{isRtl ? "قم بنسخ اسم المستخدم الخاص به. إذا لم تكن تعرف كلمة المرور الخاصة به، استخدم زر \"كلمة المرور\" في الجدول لتعيين كلمة مرور مؤقتة للاختبار." : "Copy their username. If password is unknown, click the 'Password' button in the table to assign a temporary testing password."}</p>
                     </div>
-                    <div className="flex items-start gap-2">
-                      <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-cyanx-500/20 text-[10px] font-bold text-cyanx-300 mt-0.5 ml-2">3</span>
-                      <p>افتح متصفحاً خفياً أو سجل خروجك من الحساب الحالي، ثم قم بتسجيل الدخول كعميل باستخدام تلك البيانات.</p>
+                    <div className={cn("flex items-start gap-2", isRtl ? "flex-row" : "flex-row-reverse")}>
+                      <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-cyan-500/20 text-[10px] font-bold text-cyan-300 mt-0.5 mx-2">3</span>
+                      <p>{isRtl ? "افتح متصفحاً خفياً أو سجل خروجك من الحساب الحالي، ثم قم بتسجيل الدخول كعميل باستخدام تلك البيانات." : "Open an incognito window or log out, then sign in as the company using those details."}</p>
                     </div>
-                    <div className="flex items-start gap-2">
-                      <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-cyanx-500/20 text-[10px] font-bold text-cyanx-300 mt-0.5 ml-2">4</span>
-                      <p>اذهب إلى صندوق الوارد أو صفحة المنتجات والسياسات الخاصة بالعميل، واستخدم الدردشة التفاعلية لاختبار إجابات المساعد فورياً ورؤية نقاط أمان الردود.</p>
+                    <div className={cn("flex items-start gap-2", isRtl ? "flex-row" : "flex-row-reverse")}>
+                      <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-cyan-500/20 text-[10px] font-bold text-cyan-300 mt-0.5 mx-2">4</span>
+                      <p>{isRtl ? "اذهب إلى صندوق الوارد أو صفحة المنتجات والسياسات الخاصة بالعميل، واستخدم الدردشة التفاعلية لاختبار إجابات المساعد فورياً ورؤية نقاط أمان الردود." : "Go to the inbox or knowledge base pages of the client and use the chat interface to test replies and safety metrics."}</p>
                     </div>
                   </div>
                 </div>
               </div>
 
               {/* Active Clients Quick Lookup */}
-              <div className="mt-8 space-y-4 text-right">
-                <h3 className="font-bold text-white text-base">العملاء النشطون المتاحون للاختبار السريع</h3>
+              <div className="mt-8 space-y-4">
+                <h3 className="font-bold text-white text-base">{isRtl ? "العملاء النشطون المتاحون للاختبار السريع" : "Active Clients Available for Sandbox Testing"}</h3>
                 <div className="overflow-x-auto rounded-xl border border-white/5 bg-black/20">
-                  <table className="w-full text-right border-collapse">
+                  <table className={cn("w-full border-collapse", isRtl ? "text-right" : "text-left")}>
                     <thead>
                       <tr className="border-b border-white/5 bg-white/[0.02] text-xs font-semibold text-white/40">
-                        <th className="p-3">النشاط التجاري / اسم المستخدم</th>
-                        <th className="p-3">البريد الإلكتروني</th>
-                        <th className="p-3 text-center">المنتجات</th>
-                        <th className="p-3 text-center">حالة الـ AI</th>
-                        <th className="p-3 text-left">التوجيه</th>
+                        <th className="p-3">{isRtl ? "النشاط التجاري / اسم المستخدم" : "Business / Username"}</th>
+                        <th className="p-3">{isRtl ? "البريد الإلكتروني" : "Email"}</th>
+                        <th className="p-3 text-center">{isRtl ? "المنتجات" : "Products"}</th>
+                        <th className="p-3 text-center">{isRtl ? "حالة الـ AI" : "AI Status"}</th>
+                        <th className="p-3 text-center">{isRtl ? "التوجيه" : "Guidance"}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-white/5 text-xs text-white/70">
                       {clients.filter(c => c.is_active).length === 0 ? (
                         <tr>
-                          <td colSpan={5} className="p-6 text-center text-white/30">لا يوجد عملاء نشطون حالياً.</td>
+                          <td colSpan={5} className="p-6 text-center text-white/30">{isRtl ? "لا يوجد عملاء نشطون حالياً." : "No active clients currently."}</td>
                         </tr>
                       ) : (
                         clients.filter(c => c.is_active).map((client) => (
                           <tr key={client.id} className="hover:bg-white/[0.005]">
                             <td className="p-3">
-                              <span className="font-semibold text-white">{client.business_name || "بدون اسم"}</span>
+                              <span className="font-semibold text-white">{client.business_name || (isRtl ? "بدون اسم" : "Unnamed")}</span>
                               <span className="text-white/40 block">@{client.username}</span>
                             </td>
                             <td className="p-3 font-mono text-white/50">{client.email}</td>
                             <td className="p-3 text-center text-white">{client.item_count}</td>
                             <td className="p-3 text-center">
                               <span className={`inline-block rounded px-2 py-0.5 text-[10px] font-bold ${
-                                client.ai_auto_reply_enabled ? "bg-cyanx-500/10 text-cyanx-300" : "bg-amber-500/10 text-amber-300"
+                                client.ai_auto_reply_enabled ? "bg-cyan-500/10 text-cyan-300" : "bg-amber-500/10 text-amber-300"
                               }`}>
-                                {client.ai_auto_reply_enabled ? "نشط" : "معطل"}
+                                {client.ai_auto_reply_enabled ? (isRtl ? "نشط" : "Active") : (isRtl ? "معطل" : "Disabled")}
                               </span>
                             </td>
-                            <td className="p-3 text-left">
-                              <span className="text-white/30 text-[10px]">استخدم بيانات الحساب لتسجيل الدخول كعميل والاختبار</span>
+                            <td className="p-3 text-center">
+                              <span className="text-white/30 text-[10px]">
+                                {isRtl ? "استخدم بيانات الحساب لتسجيل الدخول كعميل والاختبار" : "Sign in with these credentials to simulate client view"}
+                              </span>
                             </td>
                           </tr>
                         ))
@@ -1037,75 +1151,84 @@ export default function AdminDashboardPage() {
           </TabsContent>
 
           <TabsContent value="pricing" className="space-y-6">
-            <GradientCard className="text-right">
-              <div className="flex items-center justify-end gap-2 border-b border-white/10 pb-4 mb-4">
-                <span className="font-bold text-white text-lg">التسعير وتكاليف رسائل الذكاء الاصطناعي (Pricing & Costs)</span>
-                <Coins className="h-6 w-6 text-cyanx-400" />
+            <GradientCard className={isRtl ? "text-right" : "text-left"}>
+              <div className={cn("flex items-center gap-2 border-b border-white/10 pb-4 mb-4", isRtl ? "justify-end text-right" : "justify-start text-left flex-row-reverse")}>
+                <span className="font-bold text-white text-lg">{isRtl ? "التسعير وتكاليف رسائل الذكاء الاصطناعي (Pricing & Costs)" : "LLM Execution Cost & Simulator"}</span>
+                <Coins className="h-6 w-6 text-cyan-400" />
               </div>
-              <p className="text-sm leading-6 text-white/70 mb-6">
-                احسب تكاليف استدعاءات LLM للمحادثات، وراجع التكلفة التفصيلية لكل رسالة بناءً على النموذج وحجم المدخلات لضمان تحقيق هوامش ربح جيدة للمنصة.
+              <p className="text-sm leading-6 text-white/70 mb-6 font-medium">
+                {isRtl 
+                  ? "احسب تكاليف استدعاءات LLM للمحادثات، وراجع التكلفة التفصيلية لكل رسالة بناءً على النموذج وحجم المدخلات لضمان تحقيق هوامش ربح جيدة للمنصة." 
+                  : "Simulate and project LLM API call costs. Review detailed message usage costs based on active model and tokens to maintain platform margins."}
               </p>
 
-              <div className="grid gap-6 md:grid-cols-2 text-right">
+              <div className="grid gap-6 md:grid-cols-2">
                 {/* Cost Breakdown Info */}
-                <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-5 space-y-4">
-                  <h3 className="font-bold text-white text-base flex items-center justify-start gap-2">
+                <div className={cn("rounded-2xl border border-white/10 bg-white/[0.02] p-5 space-y-4", isRtl ? "text-right" : "text-left")}>
+                  <h3 className={cn("font-bold text-white text-base flex items-center gap-2", isRtl ? "justify-start" : "justify-start flex-row-reverse")}>
                     <TrendingUp className="h-5 w-5 text-primary-400" />
-                    <span>تحليل تكاليف الـ LLM لكل 1,000 رسالة</span>
+                    <span>{isRtl ? "تحليل تكاليف الـ LLM لكل 1,000 رسالة" : "LLM API Cost per 1,000 queries"}</span>
                   </h3>
                   <div className="text-xs text-white/60 space-y-3 leading-5">
                     <p>
-                      يتم تسعير الرسائل بناءً على عدد التوكينات (Tokens) المدخلة والمخرجة من OpenAI API.
+                      {isRtl 
+                        ? "يتم تسعير الرسائل بناءً على عدد التوكينات (Tokens) المدخلة والمخرجة من OpenAI API." 
+                        : "API calls are priced directly based on input and output tokens consumed."}
                     </p>
                     <div className="border-t border-white/5 pt-3 space-y-2">
-                      <div className="flex justify-between">
+                      <div className={cn("flex justify-between", !isRtl && "flex-row-reverse")}>
                         <span className="font-mono text-white">$0.005 / 1K</span>
-                        <span>تكلفة مدخلات GPT-4o (Input Tokens):</span>
+                        <span>{isRtl ? "تكلفة مدخلات GPT-4o (Input Tokens):" : "GPT-4o Input tokens cost:"}</span>
                       </div>
-                      <div className="flex justify-between">
+                      <div className={cn("flex justify-between", !isRtl && "flex-row-reverse")}>
                         <span className="font-mono text-white">$0.015 / 1K</span>
-                        <span>تكلفة مخرجات GPT-4o (Output Tokens):</span>
+                        <span>{isRtl ? "تكلفة مخرجات GPT-4o (Output Tokens):" : "GPT-4o Output tokens cost:"}</span>
                       </div>
                     </div>
                     <div className="border-t border-white/5 pt-3 space-y-2">
-                      <div className="flex justify-between">
+                      <div className={cn("flex justify-between", !isRtl && "flex-row-reverse")}>
                         <span className="font-mono text-white">$0.00015 / 1K</span>
-                        <span>تكلفة مدخلات GPT-4o-mini:</span>
+                        <span>{isRtl ? "تكلفة مدخلات GPT-4o-mini:" : "GPT-4o-mini Input tokens cost:"}</span>
                       </div>
-                      <div className="flex justify-between">
+                      <div className={cn("flex justify-between", !isRtl && "flex-row-reverse")}>
                         <span className="font-mono text-white">$0.0006 / 1K</span>
-                        <span>تكلفة مخرجات GPT-4o-mini:</span>
+                        <span>{isRtl ? "تكلفة مخرجات GPT-4o-mini:" : "GPT-4o-mini Output tokens cost:"}</span>
                       </div>
                     </div>
                     <p className="text-[10px] text-white/40 border-t border-white/5 pt-3">
-                      * يمثل النموذج gpt-4o-mini خياراً اقتصادياً جداً للخدمة بنسبة وفر تتجاوز 90% مع كفاءة ردود عالية للمحادثات العادية.
+                      {isRtl 
+                        ? "* يمثل النموذج gpt-4o-mini خياراً اقتصادياً جداً للخدمة بنسبة وفر تتجاوز 90% مع كفاءة ردود عالية للمحادثات العادية." 
+                        : "* gpt-4o-mini model offers an incredibly economical option, saving >90% in cost with reliable response generation for standard text."}
                     </p>
                   </div>
                 </div>
 
                 {/* Interactive Simulator */}
-                <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-5 space-y-4">
-                  <h3 className="font-bold text-white text-base flex items-center justify-start gap-2">
-                    <Calculator className="h-5 w-5 text-cyanx-400" />
-                    <span>حاسبة التكلفة التفاعلية للرسائل</span>
+                <div className={cn("rounded-2xl border border-white/10 bg-white/[0.02] p-5 space-y-4", isRtl ? "text-right" : "text-left")}>
+                  <h3 className={cn("font-bold text-white text-base flex items-center gap-2", isRtl ? "justify-start" : "justify-start flex-row-reverse")}>
+                    <Calculator className="h-5 w-5 text-cyan-400" />
+                    <span>{isRtl ? "حاسبة التكلفة التفاعلية للرسائل" : "Interactive Message Cost Calculator"}</span>
                   </h3>
                   
                   <div className="space-y-3">
                     <div className="space-y-1">
-                      <label className="text-[11px] text-white/50 block text-right">النموذج المستخدم</label>
+                      <label className="text-[11px] text-white/50 block">{isRtl ? "النموذج المستخدم" : "AI model simulated"}</label>
                       <select
                         value={pricingModel}
                         onChange={(e) => setPricingModel(e.target.value)}
-                        className="h-10 w-full rounded-xl border border-white/10 bg-[#16161a] px-3 text-right text-xs text-white"
+                        className={cn(
+                          "h-10 w-full rounded-xl border border-white/10 bg-[#16161a] px-3 text-xs text-white",
+                          isRtl ? "text-right" : "text-left"
+                        )}
                       >
-                        <option value="gpt-4o">gpt-4o (الدقة الفائقة)</option>
-                        <option value="gpt-4o-mini">gpt-4o-mini (الاقتصادي)</option>
+                        <option value="gpt-4o">{isRtl ? "gpt-4o (الدقة الفائقة)" : "gpt-4o (Ultra Accuracy)"}</option>
+                        <option value="gpt-4o-mini">{isRtl ? "gpt-4o-mini (الاقتصادي)" : "gpt-4o-mini (Economic)"}</option>
                       </select>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3 text-right">
+                    <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-1">
-                        <label className="text-[11px] text-white/50 block">مخرجات الرسالة (Tokens)</label>
+                        <label className="text-[11px] text-white/50 block">{isRtl ? "مخرجات الرسالة (Tokens)" : "Output Tokens size"}</label>
                         <Input 
                           type="number"
                           value={avgOutputTokens}
@@ -1114,7 +1237,7 @@ export default function AdminDashboardPage() {
                         />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-[11px] text-white/50 block">مدخلات الرسالة (Tokens)</label>
+                        <label className="text-[11px] text-white/50 block">{isRtl ? "مدخلات الرسالة (Tokens)" : "Input Tokens size"}</label>
                         <Input 
                           type="number"
                           value={avgInputTokens}
@@ -1141,17 +1264,17 @@ export default function AdminDashboardPage() {
 
                       return (
                         <div className="bg-black/40 border border-white/5 rounded-xl p-3 space-y-2 text-xs">
-                          <div className="flex justify-between font-bold">
-                            <span className="font-mono text-cyanx-300">${totalCostPerMessage.toFixed(6)}</span>
-                            <span>التكلفة الفعلية التقريبية للرسالة الواحدة:</span>
+                          <div className={cn("flex justify-between font-bold", !isRtl && "flex-row-reverse")}>
+                            <span className="font-mono text-cyan-300">${totalCostPerMessage.toFixed(6)}</span>
+                            <span>{isRtl ? "التكلفة الفعلية التقريبية للرسالة الواحدة:" : "Approx actual cost per message:"}</span>
                           </div>
-                          <div className="flex justify-between font-semibold">
+                          <div className={cn("flex justify-between font-semibold", !isRtl && "flex-row-reverse")}>
                             <span className="font-mono text-white">${totalCost1K.toFixed(4)}</span>
-                            <span>تكلفة 1,000 استعلام من هذا الحجم:</span>
+                            <span>{isRtl ? "تكلفة 1,000 استعلام من هذا الحجم:" : "Estimated cost per 1,000 messages:"}</span>
                           </div>
-                          <div className="flex justify-between text-primary-400 border-t border-white/5 pt-2 font-bold">
+                          <div className={cn("flex text-primary-400 border-t border-white/5 pt-2 font-bold justify-between", !isRtl && "flex-row-reverse")}>
                             <span className="font-mono">${platformProfit1K.toFixed(2)}</span>
-                            <span>صافي الربح التقريبي لكل 1,000 رسالة (بافتراض اشتراك 1 سنت للرسالة):</span>
+                            <span>{isRtl ? "صافي الربح التقريبي لكل 1,000 رسالة (بافتراض اشتراك 1 سنت للرسالة):" : "Approx net margin per 1K replies (assuming client billed $0.01/message):"}</span>
                           </div>
                         </div>
                       );
@@ -1161,33 +1284,33 @@ export default function AdminDashboardPage() {
               </div>
 
               {/* General Message Costs Comparative Table */}
-              <div className="mt-8 space-y-4 text-right">
-                <h3 className="font-bold text-white text-base">مقارنة التكاليف للمقاييس الشائعة للرسائل</h3>
+              <div className="mt-8 space-y-4">
+                <h3 className="font-bold text-white text-base">{isRtl ? "مقارنة التكاليف للمقاييس الشائعة للرسائل" : "Comparative Benchmarks for Standard Conversational Sizes"}</h3>
                 <div className="overflow-x-auto rounded-xl border border-white/5 bg-black/20">
-                  <table className="w-full text-right border-collapse">
+                  <table className={cn("w-full border-collapse", isRtl ? "text-right" : "text-left")}>
                     <thead>
                       <tr className="border-b border-white/5 bg-white/[0.02] text-xs font-semibold text-white/40">
-                        <th className="p-3">حجم المحادثة المفترض (سياق + مدخلات + مخرجات)</th>
-                        <th className="p-3 text-center">النموذج gpt-4o</th>
-                        <th className="p-3 text-center">النموذج gpt-4o-mini</th>
-                        <th className="p-3 text-center">وفر التكاليف %</th>
+                        <th className="p-3">{isRtl ? "حجم المحادثة المفترض (سياق + مدخلات + مخرجات)" : "Assumed Conversation Size (Context + Inputs + Output)"}</th>
+                        <th className="p-3 text-center">{isRtl ? "النموذج gpt-4o" : "gpt-4o Model"}</th>
+                        <th className="p-3 text-center">{isRtl ? "النموذج gpt-4o-mini" : "gpt-4o-mini Model"}</th>
+                        <th className="p-3 text-center">{isRtl ? "وفر التكاليف %" : "Cost Savings %"}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-white/5 text-xs text-white/70">
                       <tr>
-                        <td className="p-3">رسالة قصيرة (200 مدخلات، 50 مخرجات)</td>
+                        <td className="p-3">{isRtl ? "رسالة قصيرة (200 مدخلات، 50 مخرجات)" : "Short message (200 inputs, 50 outputs)"}</td>
                         <td className="p-3 text-center font-mono">$0.00175</td>
                         <td className="p-3 text-center font-mono">$0.00006</td>
                         <td className="p-3 text-center text-primary-400 font-bold">96.5%</td>
                       </tr>
                       <tr>
-                        <td className="p-3">رسالة متوسطة مع سياق بسيط (500 مدخلات، 100 مخرجات)</td>
+                        <td className="p-3">{isRtl ? "رسالة متوسطة مع سياق بسيط (500 مدخلات، 100 مخرجات)" : "Medium message with minor context (500 inputs, 100 outputs)"}</td>
                         <td className="p-3 text-center font-mono">$0.00400</td>
                         <td className="p-3 text-center font-mono">$0.00014</td>
                         <td className="p-3 text-center text-primary-400 font-bold">96.6%</td>
                       </tr>
                       <tr>
-                        <td className="p-3">رسالة طويلة مع سياق قاعدة معرفة كاملة (2,000 مدخلات، 200 مخرجات)</td>
+                        <td className="p-3">{isRtl ? "رسالة طويلة مع سياق قاعدة معرفة كاملة (2,000 مدخلات، 200 مخرجات)" : "Long message with full knowledge base context (2,000 inputs, 200 outputs)"}</td>
                         <td className="p-3 text-center font-mono">$0.01300</td>
                         <td className="p-3 text-center font-mono">$0.00042</td>
                         <td className="p-3 text-center text-primary-400 font-bold">96.8%</td>
@@ -1204,25 +1327,29 @@ export default function AdminDashboardPage() {
       {/* MODAL 1: Create Client Account */}
       {showCreateModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="w-full max-w-md rounded-3xl border border-white/10 bg-ink-950 p-6 text-right space-y-4" dir="rtl">
-            <h4 className="text-lg font-bold text-white flex items-center justify-start gap-2">
-              <Plus className="h-5 w-5 text-cyanx-400" />
-              <span>إنشاء حساب مشترك جديد</span>
+          <div className={cn("w-full max-w-md rounded-3xl border border-white/10 bg-ink-950 p-6 space-y-4", isRtl ? "text-right" : "text-left")} dir={isRtl ? "rtl" : "ltr"}>
+            <h4 className={cn("text-lg font-bold text-white flex items-center gap-2", isRtl ? "justify-start" : "justify-start flex-row-reverse")}>
+              <Plus className="h-5 w-5 text-cyan-400" />
+              <span>{isRtl ? "إنشاء حساب مشترك جديد" : "Register New Subscriber Account"}</span>
             </h4>
-            <p className="text-xs text-white/50">قم بتعبئة بيانات المشترك وسيتم تنشيط حسابه وصناعة قالب البيانات الخاص به تلقائياً.</p>
+            <p className="text-xs text-white/50">
+              {isRtl 
+                ? "قم بتعبئة بيانات المشترك وسيتم تنشيط حسابه وصناعة قالب البيانات الخاص به تلقائياً." 
+                : "Fill out the fields. The company account will be provisioned and templates generated automatically."}
+            </p>
 
             <form onSubmit={handleCreateClient} className="space-y-4">
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-white/70 block">اسم المستخدم (Username)</label>
+                <label className="text-xs font-semibold text-white/70 block">{isRtl ? "اسم المستخدم (Username)" : "Username"}</label>
                 <Input 
                   value={newClientUsername} 
                   onChange={(e) => setNewClientUsername(e.target.value)}
-                  placeholder="مثال: custom_shop" 
+                  placeholder={isRtl ? "مثال: custom_shop" : "e.g. custom_shop"}
                   required 
                 />
               </div>
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-white/70 block">البريد الإلكتروني</label>
+                <label className="text-xs font-semibold text-white/70 block">{isRtl ? "البريد الإلكتروني" : "Email Address"}</label>
                 <Input 
                   type="email" 
                   value={newClientEmail} 
@@ -1233,7 +1360,7 @@ export default function AdminDashboardPage() {
                 />
               </div>
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-white/70 block">كلمة المرور البدئية</label>
+                <label className="text-xs font-semibold text-white/70 block">{isRtl ? "كلمة المرور البدئية" : "Initial Password"}</label>
                 <Input 
                   type="password" 
                   value={newClientPassword} 
@@ -1243,19 +1370,22 @@ export default function AdminDashboardPage() {
                 />
               </div>
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-white/70 block">اسم النشاط التجاري (Business Name)</label>
+                <label className="text-xs font-semibold text-white/70 block">{isRtl ? "اسم النشاط التجاري (Business Name)" : "Business Name"}</label>
                 <Input 
                   value={newClientBusinessName} 
                   onChange={(e) => setNewClientBusinessName(e.target.value)}
-                  placeholder="مثال: معرض الهدى للسيارات" 
+                  placeholder={isRtl ? "مثال: معرض الهدى للسيارات" : "e.g. Al Hoda Cars showroom"} 
                 />
               </div>
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-white/70 block">نوع النشاط (Template)</label>
+                <label className="text-xs font-semibold text-white/70 block">{isRtl ? "نوع النشاط (Template)" : "Business Type (Template)"}</label>
                 <select
                   value={newClientBusinessType}
                   onChange={(e) => setNewClientBusinessType(e.target.value)}
-                  className="h-11 w-full rounded-2xl border border-white/10 bg-[#16161a] px-4 text-right text-sm text-white outline-none cursor-pointer appearance-none"
+                  className={cn(
+                    "h-11 w-full rounded-2xl border border-white/10 bg-[#16161a] px-4 text-sm text-white outline-none cursor-pointer appearance-none",
+                    isRtl ? "text-right" : "text-left"
+                  )}
                 >
                   {businessTypes.map((item) => (
                     <option key={item.key} value={item.key}>
@@ -1265,18 +1395,18 @@ export default function AdminDashboardPage() {
                 </select>
               </div>
 
-              <div className="flex gap-2 justify-end pt-2">
+              <div className={cn("flex gap-2 pt-2", isRtl ? "justify-end" : "justify-start")}>
                 <Button variant="ghost" type="button" onClick={() => setShowCreateModal(false)}>
-                  إلغاء
+                  {isRtl ? "إلغاء" : "Cancel"}
                 </Button>
                 <Button type="submit" disabled={creatingClient}>
                   {creatingClient ? (
                     <>
-                      <Loader2 className="h-4 w-4 animate-spin ml-2" />
-                      <span>جاري الإنشاء...</span>
+                      <Loader2 className="h-4 w-4 animate-spin mx-2" />
+                      <span>{isRtl ? "جاري الإنشاء..." : "Creating..."}</span>
                     </>
                   ) : (
-                    <span>تأكيد وإنشاء الحساب</span>
+                    <span>{isRtl ? "تأكيد وإنشاء الحساب" : "Confirm and Create Account"}</span>
                   )}
                 </Button>
               </div>
@@ -1288,16 +1418,20 @@ export default function AdminDashboardPage() {
       {/* MODAL 2: Reset Client Password */}
       {resettingClientId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="w-full max-w-md rounded-3xl border border-white/10 bg-ink-950 p-6 text-right space-y-4" dir="rtl">
-            <h4 className="text-lg font-bold text-white flex items-center justify-start gap-2">
+          <div className={cn("w-full max-w-md rounded-3xl border border-white/10 bg-ink-950 p-6 space-y-4", isRtl ? "text-right" : "text-left")} dir={isRtl ? "rtl" : "ltr"}>
+            <h4 className={cn("text-lg font-bold text-white flex items-center gap-2", isRtl ? "justify-start" : "justify-start flex-row-reverse")}>
               <Key className="h-5 w-5 text-amber-400" />
-              <span>تغيير كلمة مرور المشترك</span>
+              <span>{isRtl ? "تغيير كلمة مرور المشترك" : "Change Subscriber Password"}</span>
             </h4>
-            <p className="text-xs text-white/50">أدخل كلمة المرور الجديدة للحساب. ننصح باختيار كلمة مرور قوية.</p>
+            <p className="text-xs text-white/50">
+              {isRtl 
+                ? "أدخل كلمة المرور الجديدة للحساب. ننصح باختيار كلمة مرور قوية." 
+                : "Enter the new account password. We recommend a strong, random password."}
+            </p>
 
             <form onSubmit={handleResetPassword} className="space-y-4">
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-white/70 block">كلمة المرور الجديدة</label>
+                <label className="text-xs font-semibold text-white/70 block">{isRtl ? "كلمة المرور الجديدة" : "New Password"}</label>
                 <Input 
                   type="password" 
                   value={newPassword} 
@@ -1307,18 +1441,18 @@ export default function AdminDashboardPage() {
                 />
               </div>
 
-              <div className="flex gap-2 justify-end pt-2">
+              <div className={cn("flex gap-2 pt-2", isRtl ? "justify-end" : "justify-start")}>
                 <Button variant="ghost" type="button" onClick={() => setResettingClientId(null)}>
-                  إلغاء
+                  {isRtl ? "إلغاء" : "Cancel"}
                 </Button>
                 <Button type="submit" disabled={processingPasswordReset}>
                   {processingPasswordReset ? (
                     <>
-                      <Loader2 className="h-4 w-4 animate-spin ml-2" />
-                      <span>جاري التحديث...</span>
+                      <Loader2 className="h-4 w-4 animate-spin mx-2" />
+                      <span>{isRtl ? "جاري التحديث..." : "Updating..."}</span>
                     </>
                   ) : (
-                    <span>حفظ التعديل</span>
+                    <span>{isRtl ? "حفظ التعديل" : "Save Changes"}</span>
                   )}
                 </Button>
               </div>
@@ -1329,43 +1463,47 @@ export default function AdminDashboardPage() {
 
       {/* MODAL 3: Edit Client Persona */}
       {editingClientPrompt && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-200" dir="rtl">
-          <div className="w-full max-w-2xl rounded-3xl border border-white/10 bg-ink-950 p-6 text-right space-y-4">
-            <h4 className="text-lg font-bold text-white flex items-center justify-start gap-2">
-              <Bot className="h-5 w-5 text-cyanx-400" />
-              <span>تعديل سلوك العميل والذكاء الاصطناعي (AI Persona)</span>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className={cn("w-full max-w-2xl rounded-3xl border border-white/10 bg-ink-950 p-6 space-y-4", isRtl ? "text-right" : "text-left")} dir={isRtl ? "rtl" : "ltr"}>
+            <h4 className={cn("text-lg font-bold text-white flex items-center gap-2", isRtl ? "justify-start" : "justify-start flex-row-reverse")}>
+              <Bot className="h-5 w-5 text-cyan-400" />
+              <span>{isRtl ? "تعديل سلوك العميل والذكاء الاصطناعي (AI Persona)" : "Edit Client AI Persona Behavior"}</span>
             </h4>
-            <p className="text-xs text-white/50">
-              قم بتخصيص السلوك العام والمكالمات ونبرة الرد لوكيل الذكاء الاصطناعي الخاص بالعميل <span className="text-cyanx-400 font-bold">@{editingClientPrompt.username}</span>.
+            <p className="text-xs text-white/50 font-medium">
+              {isRtl 
+                ? `قم بتخصيص السلوك العام والمكالمات ونبرة الرد لوكيل الذكاء الاصطناعي الخاص بالعميل @${editingClientPrompt.username}.`
+                : `Customize the general behavior parameters and reply tone of the AI agent for @${editingClientPrompt.username}.`}
             </p>
 
             <form onSubmit={handleSaveClientPrompt} className="space-y-4">
-              <div className="space-y-1 text-right">
-                <label className="text-xs font-semibold text-white/70 block text-right">البرومبت الشخصي (AI Persona Override)</label>
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-white/70 block">{isRtl ? "البرومبت الشخصي (AI Persona Override)" : "AI Persona Override Prompt"}</label>
                 <Textarea 
                   value={clientPromptText} 
                   onChange={(e) => setClientPromptText(e.target.value)}
-                  placeholder="مثال: أنت موظف خدمة عملاء ودود لمتجر عطور، تجيب باختصار وترحب بالعميل بلهجة سعودية..." 
-                  className="min-h-72 text-right text-sm leading-6 bg-white/[0.03] border-white/10"
+                  placeholder={isRtl ? "مثال: أنت موظف خدمة عملاء ودود لمتجر عطور، تجيب باختصار وترحب بالعميل بلهجة سعودية..." : "e.g. You are a friendly customer service agent for a perfume store, answer briefly and use a helpful tone..."} 
+                  className={cn("min-h-72 text-sm leading-6 bg-white/[0.03] border-white/10", isRtl ? "text-right" : "text-left")}
                   required 
                 />
-                <span className="text-[10px] text-white/30 block mt-1 text-right">
-                  ملاحظة: هذا النص يحدد السلوك المحلي للوكيل للمتجر المحدد فقط، مع الاحتفاظ بقواعد الأمان الشاملة للمنصة.
+                <span className="text-[10px] text-white/30 block mt-1">
+                  {isRtl 
+                    ? "ملاحظة: هذا النص يحدد السلوك المحلي للوكيل للمتجر المحدد فقط، مع الاحتفاظ بقواعد الأمان الشاملة للمنصة." 
+                    : "Note: This prompt overrides behavior for this specific subscriber only, while global platform safety checks remain active."}
                 </span>
               </div>
 
-              <div className="flex gap-2 justify-end pt-2">
+              <div className={cn("flex gap-2 pt-2", isRtl ? "justify-end" : "justify-start")}>
                 <Button variant="ghost" type="button" onClick={() => setEditingClientPrompt(null)}>
-                  إلغاء
+                  {isRtl ? "إلغاء" : "Cancel"}
                 </Button>
                 <Button type="submit" disabled={savingClientPrompt}>
                   {savingClientPrompt ? (
                     <>
-                      <Loader2 className="h-4 w-4 animate-spin ml-2" />
-                      <span>جاري الحفظ...</span>
+                      <Loader2 className="h-4 w-4 animate-spin mx-2" />
+                      <span>{isRtl ? "جاري الحفظ..." : "Saving..."}</span>
                     </>
                   ) : (
-                    <span>حفظ وتطبيق البرومبت</span>
+                    <span>{isRtl ? "حفظ وتطبيق البرومبت" : "Save & Apply Persona"}</span>
                   )}
                 </Button>
               </div>

@@ -6,8 +6,12 @@ import { GitBranch, Zap, Plus, Settings2, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
+import { useLanguageStore } from "@/store/use-language-store";
 
 export default function WorkflowsPage() {
+  const language = useLanguageStore((state) => state.language);
+  const isRtl = language === "ar";
+
   const { data: workflows = [], isLoading } = useQuery({
     queryKey: ["workflows"],
     queryFn: async () => {
@@ -17,23 +21,28 @@ export default function WorkflowsPage() {
   });
 
   return (
-    <AppShell title="الأتمتة ومسارات العمل" subtitle="أنشئ ردود تلقائية وتسلسلات بناءً على كلمات مفتاحية أو أحداث معينة.">
+    <AppShell 
+      title={isRtl ? "الأتمتة ومسارات العمل" : "Automation & Workflows"} 
+      subtitle={isRtl ? "أنشئ ردود تلقائية وتسلسلات بناءً على كلمات مفتاحية أو أحداث معينة." : "Create automated replies and sequences based on keywords or specific events."}
+    >
       <div className="space-y-6">
         <div className="flex justify-end">
           <Button>
             <Plus className="h-4 w-4 mr-2" />
-            إنشاء مسار عمل جديد
+            {isRtl ? "إنشاء مسار عمل جديد" : "Create New Workflow"}
           </Button>
         </div>
 
         <GradientCard>
           <div className="space-y-4">
             {isLoading ? (
-              <div className="text-center py-8 text-white/50">جاري التحميل...</div>
+              <div className="text-center py-8 text-white/50">
+                {isRtl ? "جاري التحميل..." : "Loading..."}
+              </div>
             ) : workflows.length === 0 ? (
               <div className="text-center py-12 text-white/50 border border-dashed border-white/10 rounded-3xl bg-white/[0.02]">
                 <GitBranch className="h-8 w-8 mx-auto mb-3 text-white/20" />
-                لا توجد مسارات عمل مفعّلة حالياً.
+                {isRtl ? "لا توجد مسارات عمل مفعّلة حالياً." : "No active workflows found."}
               </div>
             ) : (
               workflows.map((wf: any) => (
@@ -44,7 +53,9 @@ export default function WorkflowsPage() {
                     </div>
                     <div>
                       <div className="font-semibold text-white">{wf.name}</div>
-                      <div className="text-xs text-white/50 mt-1">المحفز: {wf.trigger} • {wf.steps_count} خطوات</div>
+                      <div className="text-xs text-white/50 mt-1">
+                        {isRtl ? `المحفز: ${wf.trigger} • ${wf.steps_count} خطوات` : `Trigger: ${wf.trigger} • ${wf.steps_count} steps`}
+                      </div>
                     </div>
                   </div>
                   <div className="flex gap-2">
@@ -69,14 +80,20 @@ export default function WorkflowsPage() {
                     </div>
                     <div>
                       <div className="font-semibold text-white flex items-center gap-2">
-                        رسالة الترحيب الأولى 
-                        <span className="bg-amber-500/20 text-amber-400 px-2 py-0.5 rounded-full text-[10px]">جاهز كعينة</span>
+                        {isRtl ? "رسالة الترحيب الأولى" : "First Welcome Message"}
+                        <span className="bg-amber-500/20 text-amber-400 px-2 py-0.5 rounded-full text-[10px]">
+                          {isRtl ? "جاهز كعينة" : "Sample Template"}
+                        </span>
                       </div>
-                      <div className="text-xs text-white/50 mt-1">المحفز: أول رسالة من العميل • خطوتين</div>
+                      <div className="text-xs text-white/50 mt-1">
+                        {isRtl ? "المحفز: أول رسالة من العميل • خطوتين" : "Trigger: First customer message • 2 steps"}
+                      </div>
                     </div>
                   </div>
                   <div className="flex gap-2">
-                    <div className="bg-primary-500/20 text-primary-400 px-3 py-1.5 rounded-full text-xs font-semibold">مفعّل</div>
+                    <div className="bg-primary-500/20 text-primary-400 px-3 py-1.5 rounded-full text-xs font-semibold">
+                      {isRtl ? "مفعّل" : "Active"}
+                    </div>
                   </div>
                 </div>
               </>
@@ -87,3 +104,4 @@ export default function WorkflowsPage() {
     </AppShell>
   );
 }
+

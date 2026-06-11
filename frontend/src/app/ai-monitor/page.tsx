@@ -28,6 +28,7 @@ import { Input } from "@/components/ui/input";
 import { apiClient } from "@/lib/api-client";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/store/use-auth-store";
+import { useLanguageStore } from "@/store/use-language-store";
 
 type TraceToolCall = {
   round?: number;
@@ -113,19 +114,10 @@ type VerificationPayload = {
   };
 };
 
-const STATUS_FILTERS = [
-  { value: "all", label: "الكل" },
-  { value: "SAFE_TO_SEND", label: "آمن" },
-  { value: "NEEDS_MORE_DATA", label: "بيانات ناقصة" },
-  { value: "TOOL_RESULT_REQUIRED", label: "يحتاج أداة" },
-  { value: "HUMAN_HANDOFF_REQUIRED", label: "تحويل بشري" },
-  { value: "BLOCKED_UNGROUNDED_ANSWER", label: "محظور" },
-] as const;
-
-function formatDate(value?: string | null) {
-  if (!value) return "غير معروف";
+function formatDate(value?: string | null, isRtl = true) {
+  if (!value) return isRtl ? "غير معروف" : "Unknown";
   try {
-    return new Intl.DateTimeFormat("ar-JO", {
+    return new Intl.DateTimeFormat(isRtl ? "ar-JO" : "en-US", {
       dateStyle: "medium",
       timeStyle: "short",
     }).format(new Date(value));
@@ -147,44 +139,44 @@ function compactJson(value: unknown) {
   }
 }
 
-function shortValue(value: unknown) {
-  if (typeof value === "boolean") return value ? "نعم" : "لا";
+function shortValue(value: unknown, isRtl = true) {
+  if (typeof value === "boolean") return value ? (isRtl ? "نعم" : "Yes") : (isRtl ? "لا" : "No");
   if (typeof value === "number") return String(value);
   if (typeof value === "string") return value;
-  if (Array.isArray(value)) return `${value.length} عنصر`;
+  if (Array.isArray(value)) return isRtl ? `${value.length} عنصر` : `${value.length} item(s)`;
   if (value && typeof value === "object") return JSON.stringify(value);
-  return "فارغ";
+  return isRtl ? "فارغ" : "Empty";
 }
 
-function statusMeta(status: string) {
+function getStatusMeta(status: string, isRtl: boolean) {
   switch (status) {
     case "SAFE_TO_SEND":
       return {
-        label: "آمن للإرسال",
+        label: isRtl ? "آمن للإرسال" : "Safe to Send",
         icon: CheckCircle2,
         className: "border-emerald-400/25 bg-emerald-500/10 text-emerald-200",
       };
     case "NEEDS_MORE_DATA":
       return {
-        label: "يحتاج بيانات",
+        label: isRtl ? "يحتاج بيانات" : "Needs More Data",
         icon: Database,
         className: "border-amber-400/25 bg-amber-500/10 text-amber-200",
       };
     case "TOOL_RESULT_REQUIRED":
       return {
-        label: "أداة مطلوبة",
+        label: isRtl ? "أداة مطلوبة" : "Tool Required",
         icon: Wrench,
         className: "border-cyan-400/25 bg-cyan-500/10 text-cyan-200",
       };
     case "HUMAN_HANDOFF_REQUIRED":
       return {
-        label: "تحويل بشري",
+        label: isRtl ? "تحويل بشري" : "Human Handoff",
         icon: ShieldAlert,
         className: "border-orange-400/25 bg-orange-500/10 text-orange-200",
       };
     case "BLOCKED_UNGROUNDED_ANSWER":
       return {
-        label: "محظور",
+        label: isRtl ? "محظور" : "Blocked (Ungrounded)",
         icon: XCircle,
         className: "border-red-400/25 bg-red-500/10 text-red-200",
       };
@@ -197,20 +189,20 @@ function statusMeta(status: string) {
   }
 }
 
-function actionLabel(action?: string) {
+function getActionLabel(action?: string, isRtl = true) {
   switch (action) {
     case "sent":
-      return "أُرسل كما هو";
+      return isRtl ? "أُرسل كما هو" : "Sent as is";
     case "modified":
-      return "تم تعديله";
+      return isRtl ? "تم تعديله" : "Modified";
     case "blocked":
-      return "تم حجبه";
+      return isRtl ? "تم حجبه" : "Blocked";
     case "handoff":
-      return "تحويل بشري";
+      return isRtl ? "تحويل بشري" : "Handoff";
     case "clarification":
-      return "طلب توضيح";
+      return isRtl ? "طلب توضيح" : "Clarification";
     default:
-      return action || "غير محدد";
+      return action || (isRtl ? "غير محدد" : "Not specified");
   }
 }
 
@@ -220,8 +212,8 @@ function riskClass(score: number) {
   return "text-emerald-200";
 }
 
-function StatusBadge({ status }: { status: string }) {
-  const meta = statusMeta(status);
+function LocalStatusBadge({ status, isRtl }: { status: string; isRtl: boolean }) {
+  const meta = getStatusMeta(status, isRtl);
   const Icon = meta.icon;
   return (
     <Badge className={cn("whitespace-nowrap", meta.className)}>
@@ -231,54 +223,58 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-function SummaryChips({ data }: { data?: Record<string, unknown> }) {
+function SummaryChips({ data, isRtl }: { data?: Record<string, unknown>; isRtl: boolean }) {
   const entries = Object.entries(data || {});
   if (!entries.length) {
-    return <span className="text-xs text-white/35">لا توجد خلاصة</span>;
+    return <span className="text-xs text-white/35">{isRtl ? "لا توجد خلاصة" : "No summary"}</span>;
   }
 
   return (
-    <div className="flex flex-wrap justify-end gap-2">
+    <div className={cn("flex flex-wrap gap-2", isRtl ? "justify-end" : "justify-start")}>
       {entries.map(([key, value]) => (
         <span
           key={key}
           className="max-w-full rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-xs text-white/65"
         >
           <span className="text-white/38">{key}: </span>
-          <span className="break-words">{shortValue(value)}</span>
+          <span className="break-words">{shortValue(value, isRtl)}</span>
         </span>
       ))}
     </div>
   );
 }
 
-function ToolList({ title, tools }: { title: string; tools?: TraceToolCall[] }) {
+function ToolList({ title, tools, isRtl }: { title: string; tools?: TraceToolCall[]; isRtl: boolean }) {
   const items = Array.isArray(tools) ? tools : [];
   if (!items.length) return null;
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-end gap-2 text-sm font-semibold text-white">
+      <div className={cn("flex items-center gap-2 text-sm font-semibold text-white", isRtl ? "justify-end" : "justify-start flex-row-reverse")}>
         <span>{title}</span>
-        <Wrench className="h-4 w-4 text-cyanx-400" />
+        <Wrench className="h-4 w-4 text-cyan-400" />
       </div>
       <div className="space-y-2">
         {items.map((tool, index) => (
-          <div key={`${tool.name || "tool"}-${index}`} className="rounded-2xl border border-white/10 bg-white/[0.035] p-3 text-right">
+          <div key={`${tool.name || "tool"}-${index}`} className={cn("rounded-2xl border border-white/10 bg-white/[0.035] p-3", isRtl ? "text-right" : "text-left")}>
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="text-xs text-white/38">Round {tool.round || 1}</span>
               <span className="font-mono text-sm font-semibold text-cyan-100">{tool.name || "unknown_tool"}</span>
             </div>
             <div className="mt-3 grid gap-3 lg:grid-cols-2">
               <div className="rounded-xl bg-black/18 p-3">
-                <div className="mb-2 text-[11px] font-semibold text-white/38">المدخلات</div>
+                <div className={cn("mb-2 text-[11px] font-semibold text-white/38", isRtl ? "text-right" : "text-left")}>
+                  {isRtl ? "المدخلات" : "Inputs"}
+                </div>
                 <pre className="max-h-32 overflow-auto whitespace-pre-wrap break-words text-left text-[11px] leading-5 text-white/60">
                   {compactJson(tool.args)}
                 </pre>
               </div>
               <div className="rounded-xl bg-black/18 p-3">
-                <div className="mb-2 text-[11px] font-semibold text-white/38">خلاصة النتيجة</div>
-                <SummaryChips data={tool.result_summary} />
+                <div className={cn("mb-2 text-[11px] font-semibold text-white/38", isRtl ? "text-right" : "text-left")}>
+                  {isRtl ? "خلاصة النتيجة" : "Result Summary"}
+                </div>
+                <SummaryChips data={tool.result_summary} isRtl={isRtl} />
               </div>
             </div>
           </div>
@@ -288,7 +284,7 @@ function ToolList({ title, tools }: { title: string; tools?: TraceToolCall[] }) 
   );
 }
 
-function TraceTimeline({ log }: { log: VerificationLog }) {
+function TraceTimeline({ log, isRtl }: { log: VerificationLog; isRtl: boolean }) {
   const trace = log.ai_trace || {};
   const repair = trace.repair || {};
   const factGuard = trace.fact_guard || {};
@@ -299,105 +295,109 @@ function TraceTimeline({ log }: { log: VerificationLog }) {
   return (
     <div className="space-y-5 border-t border-white/10 pt-5">
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-4 text-right">
-          <div className="mb-3 flex items-center justify-end gap-2 text-xs font-semibold text-white/45">
-            <span>التوجيه</span>
+        <div className={cn("rounded-2xl border border-white/10 bg-white/[0.035] p-4", isRtl ? "text-right" : "text-left")}>
+          <div className={cn("mb-3 flex items-center gap-2 text-xs font-semibold text-white/45", isRtl ? "justify-end" : "justify-start flex-row-reverse")}>
+            <span>{isRtl ? "التوجيه" : "Routing Intent"}</span>
             <GitBranch className="h-4 w-4 text-primary-400" />
           </div>
-          <div className="text-lg font-semibold text-white">{trace.intent || "غير معروف"}</div>
+          <div className="text-lg font-semibold text-white">{trace.intent || (isRtl ? "غير معروف" : "Unknown")}</div>
           <div className="mt-2 text-xs leading-5 text-white/45">
-            {(trace.allowed_tools || []).length ? (trace.allowed_tools || []).join("، ") : "بدون أدوات"}
+            {(trace.allowed_tools || []).length ? (trace.allowed_tools || []).join(", ") : (isRtl ? "بدون أدوات" : "No tools")}
           </div>
         </div>
 
-        <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-4 text-right">
-          <div className="mb-3 flex items-center justify-end gap-2 text-xs font-semibold text-white/45">
-            <span>الأدوات</span>
-            <Database className="h-4 w-4 text-cyanx-400" />
+        <div className={cn("rounded-2xl border border-white/10 bg-white/[0.035] p-4", isRtl ? "text-right" : "text-left")}>
+          <div className={cn("mb-3 flex items-center gap-2 text-xs font-semibold text-white/45", isRtl ? "justify-end" : "justify-start flex-row-reverse")}>
+            <span>{isRtl ? "الأدوات" : "Tools"}</span>
+            <Database className="h-4 w-4 text-cyan-400" />
           </div>
           <div className="text-lg font-semibold text-white">{toolCalls.length}</div>
           <div className="mt-2 text-xs leading-5 text-white/45">
-            {trace.tool_rounds || 0} من {trace.max_tool_rounds || 0} جولات
+            {isRtl 
+              ? `${trace.tool_rounds || 0} من ${trace.max_tool_rounds || 0} جولات` 
+              : `${trace.tool_rounds || 0} of ${trace.max_tool_rounds || 0} rounds`}
           </div>
         </div>
 
-        <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-4 text-right">
-          <div className="mb-3 flex items-center justify-end gap-2 text-xs font-semibold text-white/45">
-            <span>حارس الحقائق</span>
+        <div className={cn("rounded-2xl border border-white/10 bg-white/[0.035] p-4", isRtl ? "text-right" : "text-left")}>
+          <div className={cn("mb-3 flex items-center gap-2 text-xs font-semibold text-white/45", isRtl ? "justify-end" : "justify-start flex-row-reverse")}>
+            <span>{isRtl ? "حارس الحقائق" : "Fact Guard"}</span>
             <ShieldCheck className="h-4 w-4 text-primary-400" />
           </div>
           <div className={cn("text-lg font-semibold", factGuard.triggered ? "text-amber-200" : "text-white")}>
-            {factGuard.triggered ? "تدخل" : "سليم"}
+            {factGuard.triggered ? (isRtl ? "تدخل" : "Triggered") : (isRtl ? "سليم" : "Clean")}
           </div>
-          <div className="mt-2 text-xs leading-5 text-white/45">
-            {(factGuard.reasons || [])[0] || "لم يغير الحقائق الحساسة"}
+          <div className="mt-2 text-xs leading-5 text-white/45 font-medium">
+            {(factGuard.reasons || [])[0] || (isRtl ? "لم يغير الحقائق الحساسة" : "No sensitive fact changes")}
           </div>
         </div>
 
-        <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-4 text-right">
-          <div className="mb-3 flex items-center justify-end gap-2 text-xs font-semibold text-white/45">
-            <span>الإصلاح</span>
+        <div className={cn("rounded-2xl border border-white/10 bg-white/[0.035] p-4", isRtl ? "text-right" : "text-left")}>
+          <div className={cn("mb-3 flex items-center gap-2 text-xs font-semibold text-white/45", isRtl ? "justify-end" : "justify-start flex-row-reverse")}>
+            <span>{isRtl ? "الإصلاح" : "Self Repair"}</span>
             <Wrench className="h-4 w-4 text-amber-300" />
           </div>
           <div className={cn("text-lg font-semibold", repair.attempted ? "text-amber-200" : "text-white")}>
-            {repair.attempted ? "تمت محاولة" : "لم يحتج"}
+            {repair.attempted ? (isRtl ? "تمت محاولة" : "Attempted") : (isRtl ? "لم يحتج" : "Not needed")}
           </div>
           <div className="mt-2 text-xs leading-5 text-white/45">
-            {afterRepair?.verdict ? `النتيجة: ${afterRepair.verdict}` : "لا يوجد تحقق ثان"}
+            {afterRepair?.verdict ? (isRtl ? `النتيجة: ${afterRepair.verdict}` : `Result: ${afterRepair.verdict}`) : (isRtl ? "لا يوجد تحقق ثان" : "No secondary check")}
           </div>
         </div>
       </div>
 
       <div className="grid gap-4 xl:grid-cols-2">
-        <ToolList title="أدوات الجولة الأولى" tools={toolCalls} />
-        <ToolList title="أدوات الإصلاح" tools={retryTools} />
+        <ToolList title={isRtl ? "أدوات الجولة الأولى" : "First Round Tools"} tools={toolCalls} isRtl={isRtl} />
+        <ToolList title={isRtl ? "أدوات الإصلاح" : "Repair Tools"} tools={retryTools} isRtl={isRtl} />
       </div>
 
       {(log.reasons?.length || log.flagged_claims?.length || factGuard.triggered || repair.retry_fact_guard?.triggered) ? (
         <div className="grid gap-4 lg:grid-cols-3">
-          <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-4 text-right">
-            <div className="mb-3 flex items-center justify-end gap-2 text-sm font-semibold text-white">
-              <span>أسباب التحقق</span>
+          <div className={cn("rounded-2xl border border-white/10 bg-white/[0.035] p-4", isRtl ? "text-right" : "text-left")}>
+            <div className={cn("mb-3 flex items-center gap-2 text-sm font-semibold text-white", isRtl ? "justify-end" : "justify-start flex-row-reverse")}>
+              <span>{isRtl ? "أسباب التحقق" : "Verification Reasons"}</span>
               <AlertTriangle className="h-4 w-4 text-amber-300" />
             </div>
             <div className="space-y-2 text-xs leading-5 text-white/60">
-              {(log.reasons || []).length ? log.reasons.map((reason) => <div key={reason}>{reason}</div>) : <div>لا توجد أسباب مسجلة</div>}
+              {(log.reasons || []).length ? log.reasons.map((reason) => <div key={reason}>{reason}</div>) : <div>{isRtl ? "لا توجد أسباب مسجلة" : "No reasons recorded"}</div>}
             </div>
           </div>
 
-          <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-4 text-right">
-            <div className="mb-3 flex items-center justify-end gap-2 text-sm font-semibold text-white">
-              <span>ادعاءات مرفوضة</span>
+          <div className={cn("rounded-2xl border border-white/10 bg-white/[0.035] p-4", isRtl ? "text-right" : "text-left")}>
+            <div className={cn("mb-3 flex items-center gap-2 text-sm font-semibold text-white", isRtl ? "justify-end" : "justify-start flex-row-reverse")}>
+              <span>{isRtl ? "ادعاءات مرفوضة" : "Flagged Claims"}</span>
               <XCircle className="h-4 w-4 text-red-300" />
             </div>
             <div className="space-y-2 text-xs leading-5 text-white/60">
-              {(log.flagged_claims || []).length ? log.flagged_claims.map((claim) => <div key={claim}>{claim}</div>) : <div>لا توجد ادعاءات مرفوضة</div>}
+              {(log.flagged_claims || []).length ? log.flagged_claims.map((claim) => <div key={claim}>{claim}</div>) : <div>{isRtl ? "لا توجد ادعاءات مرفوضة" : "No flagged claims"}</div>}
             </div>
           </div>
 
-          <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-4 text-right">
-            <div className="mb-3 flex items-center justify-end gap-2 text-sm font-semibold text-white">
-              <span>تغيرات الحقائق</span>
+          <div className={cn("rounded-2xl border border-white/10 bg-white/[0.035] p-4", isRtl ? "text-right" : "text-left")}>
+            <div className={cn("mb-3 flex items-center gap-2 text-sm font-semibold text-white", isRtl ? "justify-end" : "justify-start flex-row-reverse")}>
+              <span>{isRtl ? "تغيرات الحقائق" : "Fact Guard Actions"}</span>
               <ShieldAlert className="h-4 w-4 text-orange-300" />
             </div>
             <div className="space-y-2 text-xs leading-5 text-white/60">
               {[...(factGuard.added_numbers || []), ...(factGuard.missing_numbers || []), ...(factGuard.added_products || []), ...(factGuard.missing_products || [])].length ? (
                 <>
-                  {(factGuard.added_numbers || []).map((item) => <div key={`add-number-${item}`}>أضيف رقم: {item}</div>)}
-                  {(factGuard.missing_numbers || []).map((item) => <div key={`missing-number-${item}`}>حذف رقم: {item}</div>)}
-                  {(factGuard.added_products || []).map((item) => <div key={`add-product-${item}`}>أضيف منتج: {item}</div>)}
-                  {(factGuard.missing_products || []).map((item) => <div key={`missing-product-${item}`}>حذف منتج: {item}</div>)}
+                  {(factGuard.added_numbers || []).map((item) => <div key={`add-number-${item}`}>{isRtl ? `أضيف رقم: ${item}` : `Added number: ${item}`}</div>)}
+                  {(factGuard.missing_numbers || []).map((item) => <div key={`missing-number-${item}`}>{isRtl ? `حذف رقم: ${item}` : `Removed number: ${item}`}</div>)}
+                  {(factGuard.added_products || []).map((item) => <div key={`add-product-${item}`}>{isRtl ? `أضيف منتج: ${item}` : `Added product: ${item}`}</div>)}
+                  {(factGuard.missing_products || []).map((item) => <div key={`missing-product-${item}`}>{isRtl ? `حذف منتج: ${item}` : `Removed product: ${item}`}</div>)}
                 </>
               ) : (
-                <div>لا توجد تغييرات حساسة</div>
+                <div>{isRtl ? "لا توجد تغييرات حساسة" : "No sensitive modifications"}</div>
               )}
             </div>
           </div>
         </div>
       ) : null}
 
-      <details className="rounded-2xl border border-white/10 bg-black/16 p-4 text-right">
-        <summary className="cursor-pointer text-sm font-semibold text-white/70">عرض trace الخام</summary>
+      <details className={cn("rounded-2xl border border-white/10 bg-black/16 p-4", isRtl ? "text-right" : "text-left")}>
+        <summary className="cursor-pointer text-sm font-semibold text-white/70">
+          {isRtl ? "عرض trace الخام" : "View Raw Trace Payload"}
+        </summary>
         <pre className="mt-4 max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-black/24 p-4 text-left text-xs leading-5 text-white/62">
           {compactJson(trace)}
         </pre>
@@ -410,79 +410,90 @@ function LogCard({
   log,
   expanded,
   onToggle,
+  isRtl,
 }: {
   log: VerificationLog;
   expanded: boolean;
   onToggle: () => void;
+  isRtl: boolean;
 }) {
   const trace = log.ai_trace || {};
   const toolCount = (trace.tool_calls || []).length + (trace.repair?.supplemental_tools || []).length;
 
   return (
-    <div className="rounded-3xl border border-white/10 bg-white/[0.035] p-5 text-right">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2">
+    <div className={cn("rounded-3xl border border-white/10 bg-white/[0.035] p-5", isRtl ? "text-right" : "text-left")}>
+      <div className={cn("flex flex-wrap items-start gap-3", isRtl ? "justify-between" : "justify-between flex-row-reverse")}>
+        <div className={cn("flex flex-wrap items-center gap-2", isRtl ? "flex-row" : "flex-row-reverse")}>
           <Button type="button" variant="secondary" size="sm" onClick={onToggle}>
             <Eye className="h-4 w-4" />
-            {expanded ? "إخفاء التفاصيل" : "التفاصيل"}
+            {expanded ? (isRtl ? "إخفاء التفاصيل" : "Hide Details") : (isRtl ? "التفاصيل" : "View Details")}
           </Button>
           <Badge className="border-white/10 bg-white/[0.04] text-white/55">
-            {formatDate(log.created_at)}
+            {formatDate(log.created_at, isRtl)}
           </Badge>
         </div>
 
-        <div className="flex flex-wrap items-center justify-end gap-2">
+        <div className={cn("flex flex-wrap items-center gap-2", isRtl ? "justify-end" : "justify-start flex-row-reverse")}>
           <Badge className={cn("border-white/10 bg-white/[0.04]", riskClass(log.risk_score))}>
             Risk {Number(log.risk_score || 0).toFixed(2)}
           </Badge>
           <Badge className="border-cyan-400/20 bg-cyan-500/10 text-cyan-100">
-            {actionLabel(log.final_action)}
+            {getActionLabel(log.final_action, isRtl)}
           </Badge>
-          <StatusBadge status={log.verifier_status} />
+          <LocalStatusBadge status={log.verifier_status} isRtl={isRtl} />
         </div>
       </div>
 
       <div className="mt-4 grid gap-4 xl:grid-cols-2">
         <div className="rounded-2xl border border-white/10 bg-black/12 p-4">
-          <div className="mb-2 flex items-center justify-end gap-2 text-xs font-semibold text-white/38">
-            <span>رسالة العميل</span>
+          <div className={cn("mb-2 flex items-center gap-2 text-xs font-semibold text-white/38", isRtl ? "justify-end" : "justify-start flex-row-reverse")}>
+            <span>{isRtl ? "رسالة العميل" : "Customer Message"}</span>
             <Activity className="h-4 w-4" />
           </div>
-          <p className="max-h-36 overflow-auto whitespace-pre-wrap break-words text-sm leading-6 text-white/78">
-            {log.customer_message || "لا توجد رسالة"}
+          <p className={cn("max-h-36 overflow-auto whitespace-pre-wrap break-words text-sm leading-6 text-white/78", isRtl ? "text-right" : "text-left")}>
+            {log.customer_message || (isRtl ? "لا توجد رسالة" : "No message body")}
           </p>
         </div>
 
         <div className="rounded-2xl border border-white/10 bg-black/12 p-4">
-          <div className="mb-2 flex items-center justify-end gap-2 text-xs font-semibold text-white/38">
-            <span>الرد النهائي</span>
+          <div className={cn("mb-2 flex items-center gap-2 text-xs font-semibold text-white/38", isRtl ? "justify-end" : "justify-start flex-row-reverse")}>
+            <span>{isRtl ? "الرد النهائي" : "Final Answer"}</span>
             <Sparkles className="h-4 w-4" />
           </div>
-          <p className="max-h-36 overflow-auto whitespace-pre-wrap break-words text-sm leading-6 text-white/78">
-            {log.final_answer || "لا يوجد رد نهائي"}
+          <p className={cn("max-h-36 overflow-auto whitespace-pre-wrap break-words text-sm leading-6 text-white/78", isRtl ? "text-right" : "text-left")}>
+            {log.final_answer || (isRtl ? "لا يوجد رد نهائي" : "No final answer")}
           </p>
         </div>
       </div>
 
-      <div className="mt-4 flex flex-wrap justify-end gap-2">
-        <Badge className="border-white/10 bg-white/[0.04] text-white/58">Intent: {trace.intent || "غير معروف"}</Badge>
-        <Badge className="border-white/10 bg-white/[0.04] text-white/58">Tools: {toolCount}</Badge>
-        <Badge className="border-white/10 bg-white/[0.04] text-white/58">Model: {trace.model || "غير معروف"}</Badge>
+      <div className={cn("mt-4 flex flex-wrap gap-2", isRtl ? "justify-end" : "justify-start")}>
+        <Badge className="border-white/10 bg-white/[0.04] text-white/58">
+          {isRtl ? `التوجيه: ${trace.intent || "غير معروف"}` : `Intent: ${trace.intent || "Unknown"}`}
+        </Badge>
+        <Badge className="border-white/10 bg-white/[0.04] text-white/58">
+          {isRtl ? `الأدوات: ${toolCount}` : `Tools: ${toolCount}`}
+        </Badge>
+        <Badge className="border-white/10 bg-white/[0.04] text-white/58">
+          {isRtl ? `الموديل: ${trace.model || "غير معروف"}` : `Model: ${trace.model || "Unknown"}`}
+        </Badge>
         {trace.fact_guard?.triggered ? (
-          <Badge className="border-amber-400/25 bg-amber-500/10 text-amber-200">Fact guard</Badge>
+          <Badge className="border-amber-400/25 bg-amber-500/10 text-amber-200">Fact Guard</Badge>
         ) : null}
         {trace.repair?.attempted ? (
-          <Badge className="border-cyan-400/25 bg-cyan-500/10 text-cyan-200">Repair pass</Badge>
+          <Badge className="border-cyan-400/25 bg-cyan-500/10 text-cyan-200">Repair Pass</Badge>
         ) : null}
       </div>
 
-      {expanded ? <TraceTimeline log={log} /> : null}
+      {expanded ? <TraceTimeline log={log} isRtl={isRtl} /> : null}
     </div>
   );
 }
 
 export default function AIMonitorPage() {
   const { token } = useAuthStore();
+  const language = useLanguageStore((state) => state.language);
+  const isRtl = language === "ar";
+
   const [payload, setPayload] = useState<VerificationPayload | null>(null);
   const [statusFilter, setStatusFilter] = useState("all");
   const [query, setQuery] = useState("");
@@ -490,6 +501,15 @@ export default function AIMonitorPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
+
+  const STATUS_FILTERS = useMemo(() => [
+    { value: "all", label: isRtl ? "الكل" : "All" },
+    { value: "SAFE_TO_SEND", label: isRtl ? "آمن" : "Safe" },
+    { value: "NEEDS_MORE_DATA", label: isRtl ? "بيانات ناقصة" : "Needs Data" },
+    { value: "TOOL_RESULT_REQUIRED", label: isRtl ? "يحتاج أداة" : "Needs Tool" },
+    { value: "HUMAN_HANDOFF_REQUIRED", label: isRtl ? "تحويل بشري" : "Handoff" },
+    { value: "BLOCKED_UNGROUNDED_ANSWER", label: isRtl ? "محظور" : "Blocked" },
+  ], [isRtl]);
 
   const loadLogs = useCallback(
     async (mode: "initial" | "refresh" = "refresh") => {
@@ -509,13 +529,13 @@ export default function AIMonitorPage() {
         setExpandedId((current) => current ?? res.data.logs?.[0]?.id ?? null);
       } catch (err) {
         console.error(err);
-        setError("تعذر تحميل سجلات مراقبة الذكاء.");
+        setError(isRtl ? "تعذر تحميل سجلات مراقبة الذكاء." : "Failed to load AI verification logs.");
       } finally {
         setLoading(false);
         setRefreshing(false);
       }
     },
-    [statusFilter, token],
+    [statusFilter, token, isRtl],
   );
 
   useEffect(() => {
@@ -581,7 +601,10 @@ export default function AIMonitorPage() {
 
   if (loading) {
     return (
-      <AppShell title="مراقبة الذكاء" subtitle="سجل قرارات الوكيل، أدواته، وحواجز السلامة قبل إرسال الرد للعميل.">
+      <AppShell 
+        title={isRtl ? "مراقبة الذكاء" : "AI Monitor"} 
+        subtitle={isRtl ? "سجل قرارات الوكيل، أدواته، وحواجز السلامة قبل إرسال الرد للعميل." : "AI agent decisions, tool logs, and safety guardrails summary."}
+      >
         <div className="flex h-96 items-center justify-center">
           <Loader2 className="h-8 w-8 animate-spin text-primary-400" />
         </div>
@@ -590,16 +613,19 @@ export default function AIMonitorPage() {
   }
 
   return (
-    <AppShell title="مراقبة الذكاء" subtitle="قراءة تشغيلية لكل رد: التوجيه، الأدوات، التحقق، الإصلاح، والنتيجة النهائية.">
+    <AppShell 
+      title={isRtl ? "مراقبة الذكاء" : "AI Monitor"} 
+      subtitle={isRtl ? "قراءة تشغيلية لكل رد: التوجيه، الأدوات، التحقق، الإصلاح، والنتيجة النهائية." : "Operational diagnostics: intent routing, tools usage, verification, self-repair, and outcomes."}
+    >
       <div className="space-y-6">
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           <GradientCard>
             <div className="flex items-center justify-between">
               <BrainCircuit className="h-5 w-5 text-primary-400" />
-              <span className="text-xs font-semibold text-white/42">إجمالي</span>
+              <span className="text-xs font-semibold text-white/42">{isRtl ? "إجمالي" : "Total"}</span>
             </div>
             <div className="mt-5 text-3xl font-semibold text-white">{metrics.total}</div>
-            <div className="mt-1 text-sm text-white/55">عمليات تحقق</div>
+            <div className="mt-1 text-sm text-white/55">{isRtl ? "عمليات تحقق" : "Verifications"}</div>
           </GradientCard>
 
           <GradientCard>
@@ -608,27 +634,27 @@ export default function AIMonitorPage() {
               <span className="text-xs font-semibold text-white/42">{metrics.safeRate}</span>
             </div>
             <div className="mt-5 text-3xl font-semibold text-white">{metrics.safe}</div>
-            <div className="mt-1 text-sm text-white/55">ردود آمنة</div>
+            <div className="mt-1 text-sm text-white/55">{isRtl ? "ردود آمنة" : "Safe Replies"}</div>
           </GradientCard>
 
           <GradientCard>
             <div className="flex items-center justify-between">
-              <Gauge className="h-5 w-5 text-cyanx-400" />
-              <span className="text-xs font-semibold text-white/42">آخر {logs.length}</span>
+              <Gauge className="h-5 w-5 text-cyan-400" />
+              <span className="text-xs font-semibold text-white/42">{isRtl ? `آخر ${logs.length}` : `Last ${logs.length}`}</span>
             </div>
             <div className={cn("mt-5 text-3xl font-semibold", riskClass(metrics.averageRisk))}>
               {metrics.averageRisk.toFixed(2)}
             </div>
-            <div className="mt-1 text-sm text-white/55">متوسط الخطر</div>
+            <div className="mt-1 text-sm text-white/55">{isRtl ? "متوسط الخطر" : "Avg Risk Score"}</div>
           </GradientCard>
 
           <GradientCard>
             <div className="flex items-center justify-between">
               <Wrench className="h-5 w-5 text-amber-300" />
-              <span className="text-xs font-semibold text-white/42">{metrics.repairedSafe} نجح</span>
+              <span className="text-xs font-semibold text-white/42">{isRtl ? `${metrics.repairedSafe} نجح` : `${metrics.repairedSafe} Success`}</span>
             </div>
             <div className="mt-5 text-3xl font-semibold text-white">{metrics.repairAttempts}</div>
-            <div className="mt-1 text-sm text-white/55">محاولات إصلاح</div>
+            <div className="mt-1 text-sm text-white/55">{isRtl ? "محاولات إصلاح" : "Repair Passes"}</div>
           </GradientCard>
 
           <GradientCard>
@@ -637,7 +663,7 @@ export default function AIMonitorPage() {
               <span className="text-xs font-semibold text-white/42">{metrics.blockedRate}</span>
             </div>
             <div className="mt-5 text-3xl font-semibold text-white">{metrics.blocked}</div>
-            <div className="mt-1 text-sm text-white/55">حالات تدخل</div>
+            <div className="mt-1 text-sm text-white/55">{isRtl ? "حالات تدخل" : "Safety Actions"}</div>
           </GradientCard>
         </div>
 
@@ -646,21 +672,21 @@ export default function AIMonitorPage() {
             <GradientCard>
               <div className="mb-5 flex items-center justify-between">
                 <Filter className="h-5 w-5 text-primary-400" />
-                <h2 className="text-lg font-semibold text-white">الفلاتر</h2>
+                <h2 className="text-lg font-semibold text-white">{isRtl ? "الفلاتر" : "Filters"}</h2>
               </div>
 
               <div className="space-y-4">
                 <div className="relative">
-                  <Search className="pointer-events-none absolute right-3 top-3 h-4 w-4 text-white/35" />
+                  <Search className={cn("pointer-events-none absolute top-3 h-4 w-4 text-white/35", isRtl ? "right-3" : "left-3")} />
                   <Input
                     value={query}
                     onChange={(event) => setQuery(event.target.value)}
-                    placeholder="ابحث في الرسائل أو الجلسات"
-                    className="pr-10"
+                    placeholder={isRtl ? "ابحث في الرسائل أو الجلسات" : "Search logs or sessions..."}
+                    className={cn(isRtl ? "pr-10 text-right" : "pl-10 text-left")}
                   />
                 </div>
 
-                <div className="flex flex-wrap justify-end gap-2">
+                <div className={cn("flex flex-wrap gap-2", isRtl ? "justify-end" : "justify-start")}>
                   {STATUS_FILTERS.map((item) => (
                     <button
                       key={item.value}
@@ -683,26 +709,35 @@ export default function AIMonitorPage() {
 
                 <Button type="button" variant="secondary" className="w-full" onClick={() => void loadLogs()} disabled={refreshing}>
                   {refreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                  تحديث السجلات
+                  {isRtl ? "تحديث السجلات" : "Refresh Log Grid"}
                 </Button>
               </div>
             </GradientCard>
 
             <GradientCard>
               <div className="mb-5 flex items-center justify-between">
-                <Activity className="h-5 w-5 text-cyanx-400" />
-                <h2 className="text-lg font-semibold text-white">نبض النظام</h2>
+                <Activity className="h-5 w-5 text-cyan-400" />
+                <h2 className="text-lg font-semibold text-white">{isRtl ? "نبض النظام" : "System Pulse"}</h2>
               </div>
-              <div className="space-y-3 text-right">
+              <div className={cn("space-y-3", isRtl ? "text-right" : "text-left")}>
                 {[
-                  ["استخدام الأدوات", `${metrics.toolUsage} من ${logs.length}`],
-                  ["حارس الحقائق تدخل", String(metrics.factGuardHits)],
-                  ["الردود غير الآمنة", String(metrics.blocked)],
-                  ["نسبة الأمان", metrics.safeRate],
+                  [isRtl ? "استخدام الأدوات" : "Tool Usage Rate", isRtl ? `${metrics.toolUsage} من ${logs.length}` : `${metrics.toolUsage} of ${logs.length}`],
+                  [isRtl ? "حارس الحقائق تدخل" : "Fact Guard Escapes", String(metrics.factGuardHits)],
+                  [isRtl ? "الردود غير الآمنة" : "Blocked Unsafe Answers", String(metrics.blocked)],
+                  [isRtl ? "نسبة الأمان" : "Safety Pass Rate", metrics.safeRate],
                 ].map(([label, value]) => (
                   <div key={label} className="flex items-center justify-between rounded-2xl bg-white/[0.04] px-4 py-3 text-sm">
-                    <span className="font-semibold text-white">{value}</span>
-                    <span className="text-white/52">{label}</span>
+                    {isRtl ? (
+                      <>
+                        <span className="font-semibold text-white">{value}</span>
+                        <span className="text-white/52">{label}</span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="text-white/52">{label}</span>
+                        <span className="font-semibold text-white">{value}</span>
+                      </>
+                    )}
                   </div>
                 ))}
               </div>
@@ -711,14 +746,16 @@ export default function AIMonitorPage() {
 
           <div className="space-y-4">
             {error ? (
-              <div className="rounded-2xl border border-red-400/20 bg-red-500/10 p-4 text-right text-sm font-semibold text-red-100">
+              <div className={cn("rounded-2xl border border-red-400/20 bg-red-500/10 p-4 text-sm font-semibold text-red-100", isRtl ? "text-right" : "text-left")}>
                 {error}
               </div>
             ) : null}
 
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <span className="text-sm text-white/45">{filteredLogs.length} نتيجة معروضة</span>
-              <h2 className="text-xl font-semibold text-white">آخر قرارات الوكيل</h2>
+              <span className="text-sm text-white/45">
+                {isRtl ? `${filteredLogs.length} نتيجة معروضة` : `${filteredLogs.length} verifications displayed`}
+              </span>
+              <h2 className="text-xl font-semibold text-white">{isRtl ? "آخر قرارات الوكيل" : "Recent Decisions Stack"}</h2>
             </div>
 
             {filteredLogs.length ? (
@@ -729,13 +766,14 @@ export default function AIMonitorPage() {
                     log={log}
                     expanded={expandedId === log.id}
                     onToggle={() => setExpandedId((current) => (current === log.id ? null : log.id))}
+                    isRtl={isRtl}
                   />
                 ))}
               </div>
             ) : (
               <div className="flex min-h-80 flex-col items-center justify-center rounded-3xl border border-white/10 bg-white/[0.025] text-center">
                 <BrainCircuit className="h-10 w-10 text-white/30" />
-                <p className="mt-4 text-sm text-white/50">لا توجد سجلات تحقق مطابقة الآن.</p>
+                <p className="mt-4 text-sm text-white/50">{isRtl ? "لا توجد سجلات تحقق مطابقة الآن." : "No matching verification logs found."}</p>
               </div>
             )}
           </div>

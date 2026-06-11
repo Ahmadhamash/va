@@ -4,6 +4,7 @@ import { CircleCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { GradientCard } from "@/components/gradient-card";
 import { cn } from "@/lib/utils";
+import { useLanguageStore } from "@/store/use-language-store";
 
 interface PlanCardProps {
   id: string;
@@ -28,6 +29,9 @@ export function PlanCard({
   isLoading = false,
   onSelect
 }: PlanCardProps) {
+  const language = useLanguageStore((state) => state.language);
+  const isRtl = language === "ar";
+
   return (
     <GradientCard className={cn(highlighted && "border-primary-400/40 shadow-glow", "flex flex-col justify-between h-full")}>
       <div>
@@ -38,18 +42,18 @@ export function PlanCard({
           </div>
           {isActive ? (
             <span className="rounded-full bg-primary-500 px-3 py-1 text-xs font-bold text-ink-950">
-              الباقة الحالية
+              {isRtl ? "الباقة الحالية" : "Active Plan"}
             </span>
           ) : highlighted ? (
             <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-white">
-              الأكثر شعبية
+              {isRtl ? "الأكثر شعبية" : "Most Popular"}
             </span>
           ) : null}
         </div>
         
         <div className="mt-7 text-4xl font-semibold text-white">
           ${price}
-          <span className="text-sm font-normal text-white/40">/شهرياً</span>
+          <span className="text-sm font-normal text-white/40">{isRtl ? "/شهرياً" : "/month"}</span>
         </div>
 
         <div className="mt-6 space-y-3">
@@ -71,9 +75,10 @@ export function PlanCard({
         disabled={isActive || isLoading}
         onClick={onSelect}
       >
-        {isActive ? "باقة مفعلة" : isLoading ? "جاري الترقية..." : "ترقية الاشتراك"}
+        {isActive ? (isRtl ? "باقة مفعلة" : "Active Plan") : isLoading ? (isRtl ? "جاري الترقية..." : "Upgrading...") : (isRtl ? "ترقية الاشتراك" : "Upgrade Plan")}
       </Button>
     </GradientCard>
   );
 }
+
 

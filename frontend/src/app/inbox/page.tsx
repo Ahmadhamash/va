@@ -10,6 +10,7 @@ import { Loader2 } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
 import { useSearchParams } from "next/navigation";
+import { useLanguageStore } from "@/store/use-language-store";
 
 export default function InboxPage() {
   const [selectedId, setSelectedId] = useState("");
@@ -23,6 +24,9 @@ export default function InboxPage() {
   const initialFilter = (["ALL", "AI_HANDLING", "NEEDS_HUMAN", "HUMAN_ACTIVE", "CLOSED"].includes(rawStatus)
     ? rawStatus
     : "ALL") as ConversationStatus | "ALL";
+
+  const language = useLanguageStore((state) => state.language);
+  const isRtl = language === "ar";
 
   const { data: conversations = [], isLoading: loading } = useQuery({
     queryKey: ["conversations", limit],
@@ -124,7 +128,10 @@ export default function InboxPage() {
   }
 
   return (
-    <AppShell title="المحادثات" subtitle="صندوق موحد لرسائل واتساب وفيسبوك وإنستغرام مع الذكاء والتحويل البشري.">
+    <AppShell 
+      title={isRtl ? "المحادثات" : "Conversations"} 
+      subtitle={isRtl ? "صندوق موحد لرسائل واتساب وفيسبوك وإنستغرام مع الذكاء والتحويل البشري." : "Unified inbox for WhatsApp, Facebook, and Instagram messages with AI and human handoff."}
+    >
       <div className="grid gap-5 xl:grid-cols-[390px_1fr] xl:h-[calc(100vh-170px)] xl:min-h-[620px]">
         {loading ? (
           <div className="flex h-96 items-center justify-center col-span-2">
@@ -144,7 +151,7 @@ export default function InboxPage() {
             />
             {conversations.length === 0 ? (
               <div className="flex h-96 flex-col items-center justify-center rounded-3xl border border-white/10 bg-white/[0.02] text-white/45">
-                <p>لا توجد محادثات نشطة حالياً.</p>
+                <p>{isRtl ? "لا توجد محادثات نشطة حالياً." : "No active conversations found."}</p>
               </div>
             ) : messagesLoading || !selectedConversation ? (
               <div className="flex h-96 items-center justify-center">
@@ -164,3 +171,4 @@ export default function InboxPage() {
     </AppShell>
   );
 }
+
