@@ -5,7 +5,7 @@ from httpx import AsyncClient, ASGITransport
 from main import app
 from database import get_db
 from middleware.auth_middleware import get_current_user
-from models import User, ChatSession
+from models import User, ChatSession, Message
 
 @pytest.mark.asyncio
 async def test_chat_client_role_read_only(client: AsyncClient, db_session):
@@ -69,4 +69,55 @@ async def test_chat_client_role_read_only(client: AsyncClient, db_session):
     assert "Client role is read-only" in res_msg.text
 
     # Clear overrides
+    app.dependency_overrides.clear()
+
+
+@pytest.mark.asyncio
+async def test_client_viewing_messages_clears_unread_count(client: AsyncClient, db_session):
+    client_user_id = uuid.uuid4()
+    client_user = User(
+        id=client_user_id,
+        username="client_read_user",
+        email="client-read@example.com",
+        hashed_password="hashed_password_placeholder",
+        role="client",
+        business_name="Test Business",
+    )
+    session = ChatSession(
+        id=uuid.uuid4(),
+        user_id=client_user_id,
+        title="Unread Session",
+        channel="whatsapp",
+    )
+    message = Message(
+        id=uuid.uuid4(),
+        session_id=session.id,
+        role="user",
+        content="hello",
+        media_type="text",
+    )
+    db_session.add_all([client_user, session, message])
+    await db_session.commit()
+
+    current_user = User(
+        id=client_user_id,
+        username="client_read_user",
+        email="client-read@example.com",
+        hashed_password="hashed_password_placeholder",
+        role="client",
+        business_name="Test Business",
+    )
+    app.dependency_overrides[get_current_user] = lambda: current_user
+
+    before = await client.get("/api/chat/inbox-conversations")
+    assert before.status_code == status.HTTP_200_OK
+    assert before.json()[0]["unreadCount"] == 1
+
+    messages = await client.get(f"/api/chat/sessions/{session.id}/messages")
+    assert messages.status_code == status.HTTP_200_OK
+
+    after = await client.get("/api/chat/inbox-conversations")
+    assert after.status_code == status.HTTP_200_OK
+    assert after.json()[0]["unreadCount"] == 0
+
     app.dependency_overrides.clear()

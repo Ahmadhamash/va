@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { AppShell } from "@/components/app-shell";
 import { ChatWindow } from "@/components/chat-window";
 import { ConversationList } from "@/components/conversation-list";
@@ -52,7 +52,7 @@ export default function InboxPage() {
       
       const res = await apiClient.get(`/conversations/${selectedId}`);
       if (res.data.conversation) {
-        return { ...baseConversation, messages: res.data.conversation.messages };
+        return { ...baseConversation, messages: res.data.conversation.messages, unreadCount: 0 };
       }
       return baseConversation;
     },
@@ -60,11 +60,28 @@ export default function InboxPage() {
     refetchInterval: 3000,
   });
 
+  const clearUnreadCount = useCallback((id: string) => {
+    const clearInList = (prev: Conversation[] | undefined) => {
+      if (!prev) return prev;
+      let changed = false;
+      const next = prev.map((conversation) => {
+        if (conversation.id !== id || !conversation.unreadCount) return conversation;
+        changed = true;
+        return { ...conversation, unreadCount: 0 };
+      });
+      return changed ? next : prev;
+    };
+
+    queryClient.setQueriesData<Conversation[]>({ queryKey: ["conversations"] }, clearInList);
+    queryClient.setQueryData<Conversation[]>(["topbar-conversations"], clearInList);
+  }, [queryClient]);
+
   useEffect(() => {
     if (conversationDetails) {
-      setSelectedConversation(conversationDetails);
+      setSelectedConversation({ ...conversationDetails, unreadCount: 0 });
+      clearUnreadCount(conversationDetails.id);
     }
-  }, [conversationDetails]);
+  }, [conversationDetails, clearUnreadCount]);
 
   function handleStatusChange(id: string, newStatus: ConversationStatus) {
     queryClient.setQueryData(["conversations", limit], (prev: Conversation[] | undefined) => {
@@ -84,7 +101,8 @@ export default function InboxPage() {
           ? {
               ...c,
               lastMessage: message.body,
-              lastMessageAt: message.createdAt
+              lastMessageAt: message.createdAt,
+              unreadCount: 0
             }
           : c
       );

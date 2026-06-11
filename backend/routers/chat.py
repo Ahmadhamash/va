@@ -578,12 +578,12 @@ async def session_messages(
             m.risk_score = None
             m.verifier_status = None
 
-    if current_user.role in _CONVERSATION_STAFF_ROLES:
-        metadata = dict(session.metadata_ or {})
-        metadata["last_viewed_at"] = _utcnow_iso()
-        session.metadata_ = metadata
-        await db.commit()
-    return rows
+    response_rows = [MessageOut.model_validate(m) for m in rows]
+    metadata = dict(session.metadata_ or {})
+    metadata["last_viewed_at"] = _utcnow_iso()
+    session.metadata_ = metadata
+    await db.commit()
+    return response_rows
 
 
 @router.get("/sessions/{session_id}/notes")

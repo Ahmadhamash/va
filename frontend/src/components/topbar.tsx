@@ -35,8 +35,7 @@ export function Topbar({
     refetchInterval: 15000,
   });
   const notificationCount = useMemo(() => {
-    return conversations.filter((item: any) => item.status === "NEEDS_HUMAN").length
-      + conversations.reduce((sum: number, item: any) => sum + (item.unreadCount || 0), 0);
+    return conversations.reduce((sum: number, item: any) => sum + (item.unreadCount || 0), 0);
   }, [conversations]);
 
   function submitSearch(event: FormEvent<HTMLFormElement>) {
