@@ -186,7 +186,7 @@ export default function VoiceSettingsPage() {
     return (
       <AppShell title="إعدادات الصوت" subtitle="اختيار صوت الوكيل ومعاينته.">
         <div className="flex h-96 items-center justify-center">
-          <Loader2 className="h-8 w-8 animate-spin text-emeraldx-400" />
+          <Loader2 className="h-8 w-8 animate-spin text-primary-400" />
         </div>
       </AppShell>
     );
@@ -204,7 +204,7 @@ export default function VoiceSettingsPage() {
         <div className="space-y-6">
           <GradientCard>
             <div className="mb-5 flex items-center justify-between">
-              <Mic className="h-5 w-5 text-emeraldx-400" />
+              <Mic className="h-5 w-5 text-primary-400" />
               <h3 className="text-xl font-semibold text-white">تفعيل الصوت</h3>
             </div>
             <div className="grid gap-3 md:grid-cols-4">
@@ -215,7 +215,7 @@ export default function VoiceSettingsPage() {
                   onClick={() => setSettings({ ...settings, voice_mode: mode.id })}
                   className={`rounded-2xl border p-4 text-right transition ${
                     settings.voice_mode === mode.id
-                      ? "border-emeraldx-400/40 bg-emeraldx-500/12 text-white shadow-glow"
+                      ? "border-primary-400/40 bg-primary-500/12 text-white shadow-glow"
                       : "border-white/10 bg-white/[0.035] text-white/65"
                   }`}
                 >
@@ -233,7 +233,7 @@ export default function VoiceSettingsPage() {
 
           <GradientCard>
             <div className="mb-5 flex items-center justify-between">
-              <Volume2 className="h-5 w-5 text-emeraldx-400" />
+              <Volume2 className="h-5 w-5 text-primary-400" />
               <h3 className="text-xl font-semibold text-white">مزود الصوت</h3>
             </div>
             <div className="grid gap-3 md:grid-cols-2">
@@ -245,7 +245,7 @@ export default function VoiceSettingsPage() {
                   onClick={() => setSettings({ ...settings, tts_provider: provider, preferred_voice: provider === "openai" ? "alloy" : voices.elevenlabs[0]?.value || settings.preferred_voice })}
                   className={`rounded-2xl border p-4 text-right transition disabled:cursor-not-allowed disabled:opacity-45 ${
                     settings.tts_provider === provider
-                      ? "border-emeraldx-400/40 bg-emeraldx-500/12 text-white"
+                      ? "border-primary-400/40 bg-primary-500/12 text-white"
                       : "border-white/10 bg-white/[0.035] text-white/65"
                   }`}
                 >
@@ -265,7 +265,7 @@ export default function VoiceSettingsPage() {
             </div>
             <div className="grid gap-3 md:grid-cols-2">
               {activeVoices.map((voice) => (
-                <div key={voice.value} className={`rounded-2xl border p-4 text-right ${settings.preferred_voice === voice.value ? "border-emeraldx-400/40 bg-emeraldx-500/12" : "border-white/10 bg-white/[0.035]"}`}>
+                <div key={voice.value} className={`rounded-2xl border p-4 text-right ${settings.preferred_voice === voice.value ? "border-primary-400/40 bg-primary-500/12" : "border-white/10 bg-white/[0.035]"}`}>
                   <button type="button" className="w-full text-right" onClick={() => setSettings({ ...settings, preferred_voice: voice.value })}>
                     <div className="font-semibold text-white">{voice.label}</div>
                     <div className="mt-1 text-xs text-white/42">{voice.dialect} · {voice.gender}</div>
@@ -294,7 +294,7 @@ export default function VoiceSettingsPage() {
                 step="0.1"
                 value={settings.speech_speed}
                 onChange={(e) => setSettings({ ...settings, speech_speed: Number(e.target.value) })}
-                className="w-full accent-emeraldx-500"
+                className="w-full accent-primary-500"
               />
             </div>
             <Button className="mt-4 w-full" onClick={() => preview()} disabled={!!previewing}>

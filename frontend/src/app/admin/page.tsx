@@ -102,7 +102,7 @@ function manyChatStatusLabel(status: ManyChatSetupStatus) {
 
 function manyChatStatusClass(status: ManyChatSetupStatus) {
   if (status === "completed") {
-    return "bg-emeraldx-500/10 border border-emeraldx-500/20 text-emeraldx-400";
+    return "bg-primary-500/10 border border-primary-500/20 text-primary-400";
   }
   if (status === "pending_setup") {
     return "bg-amber-500/10 border border-amber-500/20 text-amber-300";
@@ -530,7 +530,7 @@ export default function AdminDashboardPage() {
       <div className="space-y-6" dir="rtl">
         {notice && (
           <div className={`rounded-3xl border px-5 py-4 text-sm font-semibold text-right animate-pulse ${
-            notice.type === "success" ? "border-emeraldx-400/20 bg-emeraldx-500/10 text-emeraldx-400" : "border-red-400/20 bg-red-500/10 text-red-400"
+            notice.type === "success" ? "border-primary-400/20 bg-primary-500/10 text-primary-400" : "border-red-400/20 bg-red-500/10 text-red-400"
           }`}>
             {notice.message}
           </div>
@@ -567,13 +567,13 @@ export default function AdminDashboardPage() {
                 </div>
 
                 <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-5 text-right relative overflow-hidden">
-                  <div className="absolute top-0 right-0 w-24 h-24 bg-emeraldx-500/5 rounded-full blur-2xl" />
+                  <div className="absolute top-0 right-0 w-24 h-24 bg-primary-500/5 rounded-full blur-2xl" />
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-semibold text-white/40">المحادثات في المنصة</span>
-                    <MessageSquare className="h-5 w-5 text-emeraldx-400" />
+                    <MessageSquare className="h-5 w-5 text-primary-400" />
                   </div>
                   <div className="mt-4 text-3xl font-extrabold text-white">{stats.sessions}</div>
-                  <div className="mt-1 text-[10px] text-emeraldx-400 font-semibold">{stats.messages} رسالة متبادلة</div>
+                  <div className="mt-1 text-[10px] text-primary-400 font-semibold">{stats.messages} رسالة متبادلة</div>
                 </div>
 
                 <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-5 text-right relative overflow-hidden">
@@ -746,7 +746,7 @@ export default function AdminDashboardPage() {
                                 </td>
                                 <td className="p-4 text-center">
                                   <span className={`inline-block rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
-                                    client.is_active ? "bg-emeraldx-500/10 border border-emeraldx-500/20 text-emeraldx-400" : "bg-red-500/10 border border-red-500/20 text-red-400"
+                                    client.is_active ? "bg-primary-500/10 border border-primary-500/20 text-primary-400" : "bg-red-500/10 border border-red-500/20 text-red-400"
                                   }`}>
                                     {client.is_active ? "نشط" : "معطل"}
                                   </span>
@@ -1050,7 +1050,7 @@ export default function AdminDashboardPage() {
                 {/* Cost Breakdown Info */}
                 <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-5 space-y-4">
                   <h3 className="font-bold text-white text-base flex items-center justify-start gap-2">
-                    <TrendingUp className="h-5 w-5 text-emeraldx-400" />
+                    <TrendingUp className="h-5 w-5 text-primary-400" />
                     <span>تحليل تكاليف الـ LLM لكل 1,000 رسالة</span>
                   </h3>
                   <div className="text-xs text-white/60 space-y-3 leading-5">
@@ -1149,7 +1149,7 @@ export default function AdminDashboardPage() {
                             <span className="font-mono text-white">${totalCost1K.toFixed(4)}</span>
                             <span>تكلفة 1,000 استعلام من هذا الحجم:</span>
                           </div>
-                          <div className="flex justify-between text-emeraldx-400 border-t border-white/5 pt-2 font-bold">
+                          <div className="flex justify-between text-primary-400 border-t border-white/5 pt-2 font-bold">
                             <span className="font-mono">${platformProfit1K.toFixed(2)}</span>
                             <span>صافي الربح التقريبي لكل 1,000 رسالة (بافتراض اشتراك 1 سنت للرسالة):</span>
                           </div>
@@ -1178,19 +1178,19 @@ export default function AdminDashboardPage() {
                         <td className="p-3">رسالة قصيرة (200 مدخلات، 50 مخرجات)</td>
                         <td className="p-3 text-center font-mono">$0.00175</td>
                         <td className="p-3 text-center font-mono">$0.00006</td>
-                        <td className="p-3 text-center text-emeraldx-400 font-bold">96.5%</td>
+                        <td className="p-3 text-center text-primary-400 font-bold">96.5%</td>
                       </tr>
                       <tr>
                         <td className="p-3">رسالة متوسطة مع سياق بسيط (500 مدخلات، 100 مخرجات)</td>
                         <td className="p-3 text-center font-mono">$0.00400</td>
                         <td className="p-3 text-center font-mono">$0.00014</td>
-                        <td className="p-3 text-center text-emeraldx-400 font-bold">96.6%</td>
+                        <td className="p-3 text-center text-primary-400 font-bold">96.6%</td>
                       </tr>
                       <tr>
                         <td className="p-3">رسالة طويلة مع سياق قاعدة معرفة كاملة (2,000 مدخلات، 200 مخرجات)</td>
                         <td className="p-3 text-center font-mono">$0.01300</td>
                         <td className="p-3 text-center font-mono">$0.00042</td>
-                        <td className="p-3 text-center text-emeraldx-400 font-bold">96.8%</td>
+                        <td className="p-3 text-center text-primary-400 font-bold">96.8%</td>
                       </tr>
                     </tbody>
                   </table>

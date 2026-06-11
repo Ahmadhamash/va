@@ -14,7 +14,7 @@ export function EmptyState({
 }) {
   return (
     <div className="rounded-3xl border border-dashed border-white/12 bg-white/[0.04] p-10 text-center">
-      <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-white/8 text-emeraldx-400">
+      <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-white/8 text-primary-400">
         <Icon className="h-7 w-7" />
       </div>
       <h3 className="mt-5 text-xl font-semibold text-white">{title}</h3>

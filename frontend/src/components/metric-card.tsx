@@ -15,7 +15,7 @@ export function MetricCard({
   return (
     <GradientCard>
       <div className="flex items-center justify-between gap-3">
-        <div className="rounded-2xl bg-white/8 p-3 text-emeraldx-400">
+        <div className="rounded-2xl bg-white/8 p-3 text-primary-400">
           <Icon className="h-5 w-5" />
         </div>
         <span className="text-xs font-semibold text-white/42">{hint}</span>

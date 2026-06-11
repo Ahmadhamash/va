@@ -45,7 +45,7 @@ export default function BookingsPage() {
                       </div>
                     </div>
                     <div className="flex gap-2">
-                      <button className="rounded-full bg-emeraldx-500/10 px-3 py-1.5 text-xs font-semibold text-emeraldx-400 flex items-center gap-1 hover:bg-emeraldx-500/20">
+                      <button className="rounded-full bg-primary-500/10 px-3 py-1.5 text-xs font-semibold text-primary-400 flex items-center gap-1 hover:bg-primary-500/20">
                         <CheckCircle2 className="h-4 w-4" /> تأكيد
                       </button>
                       <button className="rounded-full bg-red-500/10 px-3 py-1.5 text-xs font-semibold text-red-400 flex items-center gap-1 hover:bg-red-500/20">
@@ -69,7 +69,7 @@ export default function BookingsPage() {
               {["الأحد - الخميس", "الجمعة", "السبت"].map((day, i) => (
                 <div key={i} className="rounded-2xl border border-white/10 bg-black/20 p-3 text-sm">
                   <div className="font-semibold text-white/80">{day}</div>
-                  <div className="text-xs text-emeraldx-400 mt-1">{i === 1 ? "مغلق" : "09:00 ص - 05:00 م"}</div>
+                  <div className="text-xs text-primary-400 mt-1">{i === 1 ? "مغلق" : "09:00 ص - 05:00 م"}</div>
                 </div>
               ))}
             </div>

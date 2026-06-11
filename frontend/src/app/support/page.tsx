@@ -69,7 +69,7 @@ export default function SupportPage() {
   return (
     <AppShell title="مركز الموظفين" subtitle="المحادثات التي تحتاج تدخل بشري من فريق المنصة.">
       {notice && (
-        <div className="mb-6 rounded-2xl border border-emeraldx-400/20 bg-emeraldx-500/10 px-4 py-3 text-sm text-emeraldx-400">
+        <div className="mb-6 rounded-2xl border border-primary-400/20 bg-primary-500/10 px-4 py-3 text-sm text-primary-400">
           {notice}
         </div>
       )}
@@ -78,7 +78,7 @@ export default function SupportPage() {
         <div className="mb-5 flex items-center justify-between">
           <span className="text-xs text-white/40">{user?.role === "support_agent" ? "قائمتي" : "كل المحادثات"}</span>
           <h2 className="flex items-center gap-2 text-xl font-semibold text-white">
-            <Inbox className="h-5 w-5 text-emeraldx-400" />
+            <Inbox className="h-5 w-5 text-primary-400" />
             التحويل البشري
           </h2>
         </div>

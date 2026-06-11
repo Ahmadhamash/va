@@ -39,7 +39,7 @@ export default function WorkflowsPage() {
               workflows.map((wf: any) => (
                 <div key={wf.id} className="flex flex-wrap items-center justify-between gap-4 rounded-3xl border border-white/10 bg-white/5 p-5 transition hover:bg-white/10">
                   <div className="flex items-center gap-4">
-                    <div className="grid h-12 w-12 place-items-center rounded-2xl bg-emeraldx-500/10 text-emeraldx-400">
+                    <div className="grid h-12 w-12 place-items-center rounded-2xl bg-primary-500/10 text-primary-400">
                       <Zap className="h-6 w-6" />
                     </div>
                     <div>
@@ -76,7 +76,7 @@ export default function WorkflowsPage() {
                     </div>
                   </div>
                   <div className="flex gap-2">
-                    <div className="bg-emeraldx-500/20 text-emeraldx-400 px-3 py-1.5 rounded-full text-xs font-semibold">مفعّل</div>
+                    <div className="bg-primary-500/20 text-primary-400 px-3 py-1.5 rounded-full text-xs font-semibold">مفعّل</div>
                   </div>
                 </div>
               </>

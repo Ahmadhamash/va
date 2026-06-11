@@ -94,7 +94,7 @@ export default function TeamPage() {
   return (
     <AppShell title="فريق العمل" subtitle="موظفو المنصة الذين يستلمون المحادثات عند التحويل البشري.">
       {notice && (
-        <div className="mb-6 rounded-2xl border border-emeraldx-400/20 bg-emeraldx-500/10 px-4 py-3 text-sm text-emeraldx-400">
+        <div className="mb-6 rounded-2xl border border-primary-400/20 bg-primary-500/10 px-4 py-3 text-sm text-primary-400">
           {notice}
         </div>
       )}
@@ -104,7 +104,7 @@ export default function TeamPage() {
           <div className="mb-5 flex items-center justify-between">
             <span className="text-xs text-white/40">{agents.length} موظف</span>
             <h2 className="flex items-center gap-2 text-xl font-semibold text-white">
-              <Users className="h-5 w-5 text-emeraldx-400" />
+              <Users className="h-5 w-5 text-primary-400" />
               موظفو الدعم
             </h2>
           </div>
@@ -118,7 +118,7 @@ export default function TeamPage() {
               {agents.map((agent) => (
                 <div key={agent.id} className="rounded-2xl border border-white/10 bg-white/[0.035] p-4 text-right">
                   <div className="flex items-start justify-between gap-3">
-                    <span className={`rounded-full px-2 py-1 text-xs ${agent.is_available ? "bg-emeraldx-500/10 text-emeraldx-400" : "bg-white/8 text-white/45"}`}>
+                    <span className={`rounded-full px-2 py-1 text-xs ${agent.is_available ? "bg-primary-500/10 text-primary-400" : "bg-white/8 text-white/45"}`}>
                       {agent.is_available ? "متاح" : "غير متاح"}
                     </span>
                     <div>
@@ -145,7 +145,7 @@ export default function TeamPage() {
 
         <GradientCard>
           <h2 className="mb-5 flex items-center gap-2 text-xl font-semibold text-white">
-            <UserPlus className="h-5 w-5 text-emeraldx-400" />
+            <UserPlus className="h-5 w-5 text-primary-400" />
             إضافة موظف
           </h2>
 

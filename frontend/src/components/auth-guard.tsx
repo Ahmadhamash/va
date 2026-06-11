@@ -107,10 +107,14 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     };
   }, [hydrated, token, pathname, publicPath, router, setAuth, logout, setLoading]);
 
-  if (!hydrated || (!publicPath && !user && !token)) {
+  if (publicPath) {
+    return <>{children}</>;
+  }
+
+  if (!hydrated || (!user && !token)) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-ink-950">
-        <Loader2 className="h-8 w-8 animate-spin text-emeraldx-400" />
+        <Loader2 className="h-8 w-8 animate-spin text-primary-400" />
       </div>
     );
   }

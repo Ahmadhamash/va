@@ -20,8 +20,8 @@ function StatusIndicator({ status }: { status: ConversationStatus }) {
   if (status === "AI_HANDLING") {
     return (
       <span className="relative flex h-2 w-2">
-        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emeraldx-400 opacity-75"></span>
-        <span className="relative inline-flex rounded-full h-2 w-2 bg-emeraldx-500"></span>
+        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary-400 opacity-75"></span>
+        <span className="relative inline-flex rounded-full h-2 w-2 bg-primary-500"></span>
       </span>
     );
   }
@@ -57,7 +57,7 @@ function ChannelIcon({ channel }: { channel: ChannelProvider }) {
             : channel === "WIDGET"
               ? Code
               : MessageCircle;
-  return <Icon className="h-4 w-4 text-emeraldx-400" />;
+  return <Icon className="h-4 w-4 text-primary-400" />;
 }
 
 export function ConversationList({
@@ -109,7 +109,7 @@ export function ConversationList({
               onClick={() => setFilter(item.value)}
               className={cn(
                 "rounded-full px-3 py-1.5 text-xs font-semibold transition",
-                filter === item.value ? "bg-emeraldx-500 text-ink-950" : "bg-white/7 text-white/58 hover:bg-white/10 hover:text-white"
+                filter === item.value ? "bg-primary-500 text-ink-950" : "bg-white/7 text-white/58 hover:bg-white/10 hover:text-white"
               )}
               type="button"
             >
@@ -127,7 +127,7 @@ export function ConversationList({
             className={cn(
               "mb-2 w-full rounded-3xl border p-4 text-right transition-all duration-300 transform hover:translate-x-[-2px]",
               selectedId === conversation.id
-                ? "border-emeraldx-400/40 bg-emeraldx-500/10 shadow-sm"
+                ? "border-primary-400/40 bg-primary-500/10 shadow-sm"
                 : "border-white/8 bg-white/[0.035] hover:bg-white/[0.07] hover:shadow-md"
             )}
           >
@@ -153,7 +153,7 @@ export function ConversationList({
             <div className="mt-3 flex items-center justify-between gap-2">
               <StatusBadge status={conversation.status} />
               {(conversation.unreadCount || 0) > 0 ? (
-                <span className="min-w-6 rounded-full bg-emeraldx-500 px-2 py-0.5 text-center text-xs font-bold text-ink-950">
+                <span className="min-w-6 rounded-full bg-primary-500 px-2 py-0.5 text-center text-xs font-bold text-ink-950">
                   {conversation.unreadCount}
                 </span>
               ) : conversation.deliveryStatus ? (

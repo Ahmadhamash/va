@@ -190,7 +190,7 @@ export default function SettingsPage() {
             <CardHeader>
               <CardTitle className="flex items-center justify-end gap-2 text-right">
                 <span className="text-white">ملف النشاط التجاري</span>
-                <Building2 className="h-5 w-5 text-emeraldx-400" />
+                <Building2 className="h-5 w-5 text-primary-400" />
               </CardTitle>
               <CardDescription className="text-right">
                 بيانات نشاطك التجاري تساعد الذكاء الاصطناعي على تقديم ردود بالغة الدقة.
@@ -231,7 +231,7 @@ export default function SettingsPage() {
                       <select
                         value={businessType}
                         onChange={(e) => setBusinessType(e.target.value)}
-                        className="h-11 w-full rounded-2xl border border-white/10 bg-[#16161a] px-4 pr-10 text-right text-sm text-white outline-none transition focus:border-emeraldx-400/60 focus:ring-2 focus:ring-emeraldx-400/15 cursor-pointer appearance-none"
+                        className="h-11 w-full rounded-2xl border border-white/10 bg-[#16161a] px-4 pr-10 text-right text-sm text-white outline-none transition focus:border-primary-400/60 focus:ring-2 focus:ring-primary-400/15 cursor-pointer appearance-none"
                       >
                         <option value="retail">🛍️ متجر تجزئة / تجارة إلكترونية</option>
                         <option value="restaurant">🍽️ مطعم / كافيه</option>
@@ -350,20 +350,20 @@ export default function SettingsPage() {
           {loadingSub ? (
             <Card className="h-48 flex items-center justify-center">
               <div className="text-center">
-                <Loader2 className="h-6 w-6 animate-spin text-emeraldx-400 mx-auto mb-2" />
+                <Loader2 className="h-6 w-6 animate-spin text-primary-400 mx-auto mb-2" />
                 <span className="text-xs text-white/50">جاري تحميل بيانات الاشتراك...</span>
               </div>
             </Card>
           ) : (
             <GradientCard className="text-right">
               <div className="flex items-center justify-between border-b border-white/10 pb-4 mb-4">
-                <span className="rounded-full bg-emeraldx-500/10 border border-emeraldx-500/20 px-2.5 py-0.5 text-[10px] font-bold text-emeraldx-400 flex items-center gap-1">
+                <span className="rounded-full bg-primary-500/10 border border-primary-500/20 px-2.5 py-0.5 text-[10px] font-bold text-primary-400 flex items-center gap-1">
                   <ShieldCheck className="h-3 w-3" />
                   {activeSub ? "نشط" : "غير مفعل"}
                 </span>
                 <div className="flex items-center gap-2">
                   <span className="font-bold text-white text-sm">الاشتراك الحالي</span>
-                  <CreditCard className="h-4 w-4 text-emeraldx-400" />
+                  <CreditCard className="h-4 w-4 text-primary-400" />
                 </div>
               </div>
 
@@ -504,7 +504,7 @@ export default function SettingsPage() {
               <div className="rounded-3xl border border-white/5 bg-white/[0.015] p-4 text-right">
                 <div className="mb-2 flex items-center justify-end gap-2 text-xs font-semibold text-white/80">
                   <span>ملاحظة أمان وسلامة البيانات</span>
-                  <ShieldCheck className="h-4 w-4 text-emeraldx-400" />
+                  <ShieldCheck className="h-4 w-4 text-primary-400" />
                 </div>
                 <p className="text-[11px] leading-5 text-white/40">
                   منصة chatter مصممة لمساعدة العملاء والاستجابة الفورية لاستفساراتهم الواردة. نلتزم بحماية الخصوصية المطلقة للبيانات والمعلومات المشتركة عبر القنوات.

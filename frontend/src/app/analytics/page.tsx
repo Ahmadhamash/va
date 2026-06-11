@@ -37,7 +37,7 @@ export default function AnalyticsPage() {
     return (
       <AppShell title="التحليلات والأداء" subtitle="بيانات وإحصائيات فورية توضح فاعلية الذكاء الاصطناعي وتوفير الجهد البشري.">
         <div className="flex h-96 items-center justify-center">
-          <Loader2 className="h-8 w-8 animate-spin text-emeraldx-400" />
+          <Loader2 className="h-8 w-8 animate-spin text-primary-400" />
         </div>
       </AppShell>
     );
@@ -72,7 +72,7 @@ export default function AnalyticsPage() {
           <div className="flex gap-2">
             <button
               type="button"
-              className="rounded-full px-4 py-2 text-xs font-semibold bg-emeraldx-500 text-ink-950 shadow-glow"
+              className="rounded-full px-4 py-2 text-xs font-semibold bg-primary-500 text-ink-950 shadow-glow"
             >
               قاعدة البيانات الحالية
             </button>
@@ -98,7 +98,7 @@ export default function AnalyticsPage() {
                   <h2 className="text-lg font-bold text-white">نشاط وحجم المحادثات الفعلي</h2>
                   <p className="mt-1 text-xs text-white/45">مخطط بياني حقيقي يمثل المحادثات مقسمة حسب أيام الأسبوع.</p>
                 </div>
-                <TrendingUp className="h-5 w-5 text-emeraldx-400" />
+                <TrendingUp className="h-5 w-5 text-primary-400" />
               </div>
               
               {/* Premium Bar Chart Graphic */}
@@ -109,13 +109,13 @@ export default function AnalyticsPage() {
                     <div key={item.name} className="flex flex-col items-center flex-1 group">
                       <div className="relative w-full flex justify-center">
                         {/* Hover Tooltip */}
-                        <div className="absolute bottom-full mb-2 bg-emeraldx-500 text-ink-950 text-[10px] font-bold px-2 py-1 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap shadow-glow">
+                        <div className="absolute bottom-full mb-2 bg-primary-500 text-ink-950 text-[10px] font-bold px-2 py-1 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap shadow-glow">
                           {item.value} محادثة
                         </div>
                       </div>
                       <div className="w-full bg-white/5 rounded-t-xl overflow-hidden h-44 flex items-end">
                         <div
-                          className="w-full bg-gradient-to-t from-cyanx-400 to-emeraldx-400 group-hover:from-cyanx-300 group-hover:to-emeraldx-300 transition-all duration-500 rounded-t-xl"
+                          className="w-full bg-gradient-to-t from-cyanx-400 to-primary-400 group-hover:from-cyanx-300 group-hover:to-primary-300 transition-all duration-500 rounded-t-xl"
                           style={{ height: `${percentage || 5}%` }}
                         />
                       </div>
@@ -137,10 +137,10 @@ export default function AnalyticsPage() {
                   <div>
                     <div className="flex justify-between text-xs mb-1.5">
                       <span className="text-white/40">إيجابي ({data.sentiment.positive}%)</span>
-                      <span className="text-emeraldx-400 font-bold">راضي ومستفيد</span>
+                      <span className="text-primary-400 font-bold">راضي ومستفيد</span>
                     </div>
                     <div className="h-2 w-full bg-white/5 rounded-full overflow-hidden">
-                      <div className="h-full bg-emeraldx-500 rounded-full" style={{ width: `${data.sentiment.positive}%` }} />
+                      <div className="h-full bg-primary-500 rounded-full" style={{ width: `${data.sentiment.positive}%` }} />
                     </div>
                   </div>
                   <div>
@@ -193,7 +193,7 @@ export default function AnalyticsPage() {
                   <div key={item.topic} className="flex items-center justify-between rounded-2xl bg-white/[0.035] border border-white/5 px-4 py-3 text-right">
                     <div className="flex items-center gap-1.5">
                       <span className="text-[10px] text-white/35">({item.count} محادثة)</span>
-                      <span className="text-xs font-semibold text-emeraldx-400">%{item.percentage}</span>
+                      <span className="text-xs font-semibold text-primary-400">%{item.percentage}</span>
                     </div>
                     <span className="text-xs text-white/80 font-medium">{item.topic}</span>
                   </div>
@@ -213,7 +213,7 @@ export default function AnalyticsPage() {
                       <span className="font-semibold text-white">{item.name} · {item.value}%</span>
                     </div>
                     <div className="h-2 rounded-full bg-white/5">
-                      <div className="h-full rounded-full bg-gradient-to-l from-violetrx-500 to-emeraldx-400" style={{ width: `${item.value}%` }} />
+                      <div className="h-full rounded-full bg-gradient-to-l from-violetrx-500 to-primary-400" style={{ width: `${item.value}%` }} />
                     </div>
                   </div>
                 ))}
@@ -221,9 +221,9 @@ export default function AnalyticsPage() {
             </GradientCard>
 
             {/* AI report summary */}
-            <div className="rounded-3xl border border-emeraldx-400/10 bg-emeraldx-500/5 p-5 text-right flex items-start gap-3">
+            <div className="rounded-3xl border border-primary-400/10 bg-primary-500/5 p-5 text-right flex items-start gap-3">
               <div className="flex-1">
-                <h4 className="text-xs font-bold text-emeraldx-400 flex items-center justify-end gap-1.5 mb-1">
+                <h4 className="text-xs font-bold text-primary-400 flex items-center justify-end gap-1.5 mb-1">
                   <span>تقرير كفاءة الوكيل</span>
                   <Award className="h-4 w-4" />
                 </h4>

@@ -302,7 +302,7 @@ function TraceTimeline({ log }: { log: VerificationLog }) {
         <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-4 text-right">
           <div className="mb-3 flex items-center justify-end gap-2 text-xs font-semibold text-white/45">
             <span>التوجيه</span>
-            <GitBranch className="h-4 w-4 text-emeraldx-400" />
+            <GitBranch className="h-4 w-4 text-primary-400" />
           </div>
           <div className="text-lg font-semibold text-white">{trace.intent || "غير معروف"}</div>
           <div className="mt-2 text-xs leading-5 text-white/45">
@@ -324,7 +324,7 @@ function TraceTimeline({ log }: { log: VerificationLog }) {
         <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-4 text-right">
           <div className="mb-3 flex items-center justify-end gap-2 text-xs font-semibold text-white/45">
             <span>حارس الحقائق</span>
-            <ShieldCheck className="h-4 w-4 text-emeraldx-400" />
+            <ShieldCheck className="h-4 w-4 text-primary-400" />
           </div>
           <div className={cn("text-lg font-semibold", factGuard.triggered ? "text-amber-200" : "text-white")}>
             {factGuard.triggered ? "تدخل" : "سليم"}
@@ -583,7 +583,7 @@ export default function AIMonitorPage() {
     return (
       <AppShell title="مراقبة الذكاء" subtitle="سجل قرارات الوكيل، أدواته، وحواجز السلامة قبل إرسال الرد للعميل.">
         <div className="flex h-96 items-center justify-center">
-          <Loader2 className="h-8 w-8 animate-spin text-emeraldx-400" />
+          <Loader2 className="h-8 w-8 animate-spin text-primary-400" />
         </div>
       </AppShell>
     );
@@ -595,7 +595,7 @@ export default function AIMonitorPage() {
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           <GradientCard>
             <div className="flex items-center justify-between">
-              <BrainCircuit className="h-5 w-5 text-emeraldx-400" />
+              <BrainCircuit className="h-5 w-5 text-primary-400" />
               <span className="text-xs font-semibold text-white/42">إجمالي</span>
             </div>
             <div className="mt-5 text-3xl font-semibold text-white">{metrics.total}</div>
@@ -645,7 +645,7 @@ export default function AIMonitorPage() {
           <div className="space-y-6">
             <GradientCard>
               <div className="mb-5 flex items-center justify-between">
-                <Filter className="h-5 w-5 text-emeraldx-400" />
+                <Filter className="h-5 w-5 text-primary-400" />
                 <h2 className="text-lg font-semibold text-white">الفلاتر</h2>
               </div>
 
@@ -672,7 +672,7 @@ export default function AIMonitorPage() {
                       className={cn(
                         "rounded-2xl px-3 py-2 text-xs font-semibold transition",
                         statusFilter === item.value
-                          ? "bg-emeraldx-500 text-ink-950 shadow-glow"
+                          ? "bg-primary-500 text-ink-950 shadow-glow"
                           : "bg-white/7 text-white/60 hover:bg-white/10 hover:text-white",
                       )}
                     >

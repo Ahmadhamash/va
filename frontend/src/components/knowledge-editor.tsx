@@ -25,7 +25,7 @@ export function KnowledgeEditor() {
 
   return (
     <div className="space-y-4">
-      {notice ? <div className="rounded-2xl bg-emeraldx-500/10 px-4 py-3 text-sm font-semibold text-emeraldx-400">{notice}</div> : null}
+      {notice ? <div className="rounded-2xl bg-primary-500/10 px-4 py-3 text-sm font-semibold text-primary-400">{notice}</div> : null}
       <div className="grid gap-4 md:grid-cols-2">
         <Input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="عنوان المعلومة أو السؤال" />
         <Input value={category} onChange={(event) => setCategory(event.target.value)} placeholder="التصنيف" />

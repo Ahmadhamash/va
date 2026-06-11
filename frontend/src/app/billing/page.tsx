@@ -109,14 +109,14 @@ export default function BillingPage() {
   return (
     <AppShell title="الباقات والاشتراكات" subtitle="اختر الخطة المناسبة لحجم عملك للبدء بتشغيل الوكيل الذكي على قنوات التواصل ومضاعفة مبيعاتك.">
       {notice && (
-        <div className="mb-6 rounded-3xl border border-emeraldx-400/20 bg-emeraldx-500/10 px-5 py-4 text-sm font-semibold text-emeraldx-400 text-right animate-pulse">
+        <div className="mb-6 rounded-3xl border border-primary-400/20 bg-primary-500/10 px-5 py-4 text-sm font-semibold text-primary-400 text-right animate-pulse">
           {notice}
         </div>
       )}
 
       {loading ? (
         <div className="flex h-64 items-center justify-center">
-          <Loader2 className="h-8 w-8 animate-spin text-emeraldx-400" />
+          <Loader2 className="h-8 w-8 animate-spin text-primary-400" />
           <span className="mr-3 text-sm text-white/50">جاري تحميل بيانات الباقات...</span>
         </div>
       ) : (
@@ -124,20 +124,20 @@ export default function BillingPage() {
           {/* Active Subscription Summary */}
           {activeSub ? (
             <div className="rounded-3xl border border-white/10 bg-white/[0.02] p-6 text-right flex flex-col md:flex-row-reverse md:items-center md:justify-between gap-5 relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-emeraldx-500/5 rounded-full blur-3xl pointer-events-none" />
+              <div className="absolute top-0 right-0 w-32 h-32 bg-primary-500/5 rounded-full blur-3xl pointer-events-none" />
               
               <div className="flex items-center justify-start md:justify-end gap-3.5">
                 <div className="text-right">
                   <span className="text-[10px] text-white/40 font-semibold block mb-0.5">الاشتراك الفعال حالياً</span>
                   <div className="flex items-center justify-end gap-2">
                     <span className="text-lg font-bold text-white">باقة {activeSub.tier?.name}</span>
-                    <span className="rounded-full bg-emeraldx-500/10 border border-emeraldx-500/20 px-2.5 py-0.5 text-[10px] font-bold text-emeraldx-400 flex items-center gap-1">
+                    <span className="rounded-full bg-primary-500/10 border border-primary-500/20 px-2.5 py-0.5 text-[10px] font-bold text-primary-400 flex items-center gap-1">
                       <ShieldCheck className="h-3 w-3" />
                       نشط
                     </span>
                   </div>
                 </div>
-                <div className="grid h-12 w-12 place-items-center rounded-2xl bg-white/8 text-emeraldx-400">
+                <div className="grid h-12 w-12 place-items-center rounded-2xl bg-white/8 text-primary-400">
                   <CreditCard className="h-6 w-6" />
                 </div>
               </div>
@@ -155,7 +155,7 @@ export default function BillingPage() {
                 </div>
                 <div>
                   <span className="text-[10px] text-white/40 font-semibold block mb-0.5">حالة الفوترة</span>
-                  <span className="text-xs font-semibold text-emeraldx-400">مدفوع عبر الرصيد التجريبي</span>
+                  <span className="text-xs font-semibold text-primary-400">مدفوع عبر الرصيد التجريبي</span>
                 </div>
               </div>
             </div>

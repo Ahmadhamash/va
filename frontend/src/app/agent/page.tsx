@@ -131,14 +131,14 @@ export default function AgentSettingsPage() {
       <div className="grid gap-6 xl:grid-cols-[1fr_420px]">
         <div className="space-y-6">
           {notice && (
-            <div className="rounded-2xl border border-emeraldx-400/20 bg-emeraldx-500/10 px-5 py-4 text-sm font-semibold text-emeraldx-400">
+            <div className="rounded-2xl border border-primary-400/20 bg-primary-500/10 px-5 py-4 text-sm font-semibold text-primary-400">
               {notice}
             </div>
           )}
 
           <GradientCard>
             <div className="mb-5 flex items-center justify-between">
-              <Sparkles className="h-5 w-5 text-emeraldx-400" />
+              <Sparkles className="h-5 w-5 text-primary-400" />
               <h2 className="text-xl font-semibold text-white">هوية الوكيل</h2>
             </div>
             <div className="grid gap-4 md:grid-cols-2">
@@ -155,7 +155,7 @@ export default function AgentSettingsPage() {
 
           <GradientCard>
             <div className="mb-5 flex items-center justify-between">
-              <MessageCircle className="h-5 w-5 text-emeraldx-400" />
+              <MessageCircle className="h-5 w-5 text-primary-400" />
               <h2 className="text-xl font-semibold text-white">لهجة الوكيل</h2>
             </div>
             <div className="grid gap-3 md:grid-cols-5">
@@ -166,7 +166,7 @@ export default function AgentSettingsPage() {
                   onClick={() => setDialect(item.id)}
                   className={`rounded-2xl border p-4 text-right transition ${
                     dialect === item.id
-                      ? "border-emeraldx-400/40 bg-emeraldx-500/12 text-white shadow-glow"
+                      ? "border-primary-400/40 bg-primary-500/12 text-white shadow-glow"
                       : "border-white/10 bg-white/[0.035] text-white/65 hover:border-white/18 hover:bg-white/[0.06]"
                   }`}
                 >
@@ -179,7 +179,7 @@ export default function AgentSettingsPage() {
 
           <GradientCard>
             <div className="mb-5 flex items-center justify-between">
-              <Bot className="h-5 w-5 text-emeraldx-400" />
+              <Bot className="h-5 w-5 text-primary-400" />
               <h2 className="text-xl font-semibold text-white">النبرة والالتزام</h2>
             </div>
             <div className="grid gap-3 md:grid-cols-3">
@@ -189,7 +189,7 @@ export default function AgentSettingsPage() {
                   type="button"
                   onClick={() => setTone(item.id)}
                   className={`rounded-2xl border p-4 text-right transition ${
-                    tone === item.id ? "border-emeraldx-400/40 bg-emeraldx-500/12 text-white" : "border-white/10 bg-white/[0.035] text-white/65"
+                    tone === item.id ? "border-primary-400/40 bg-primary-500/12 text-white" : "border-white/10 bg-white/[0.035] text-white/65"
                   }`}
                 >
                   <div className="font-semibold">{item.label}</div>
@@ -216,7 +216,7 @@ export default function AgentSettingsPage() {
 
           <GradientCard>
             <div className="mb-5 flex items-center justify-between">
-              <Handshake className="h-5 w-5 text-emeraldx-400" />
+              <Handshake className="h-5 w-5 text-primary-400" />
               <h2 className="text-xl font-semibold text-white">التحويل البشري</h2>
             </div>
             <div className="space-y-3">
@@ -229,7 +229,7 @@ export default function AgentSettingsPage() {
 
           <GradientCard>
             <div className="mb-5 flex items-center justify-between">
-              <ShieldCheck className="h-5 w-5 text-emeraldx-400" />
+              <ShieldCheck className="h-5 w-5 text-primary-400" />
               <h2 className="text-xl font-semibold text-white">عبارات ممنوعة</h2>
             </div>
             <div className="flex gap-2">

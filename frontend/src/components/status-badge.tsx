@@ -41,7 +41,7 @@ export function StatusBadge({ status }: StatusBadgeProps) {
     <Badge
       className={cn(
         "border-transparent",
-        ["READY", "CONNECTED", "ACTIVE"].includes(status) && "bg-emeraldx-500/14 text-emeraldx-400",
+        ["READY", "CONNECTED", "ACTIVE"].includes(status) && "bg-primary-500/14 text-primary-400",
         status === "DEMO_MODE" && "bg-cyanx-500/14 text-cyanx-400",
         ["NEEDS_HUMAN", "HUMAN_ACTIVE"].includes(status) && "bg-violetrx-500/16 text-violet-200",
         ["DISCONNECTED", "SETUP_REQUIRED", "PENDING_VERIFICATION", "PAUSED"].includes(status) &&

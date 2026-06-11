@@ -41,7 +41,7 @@ export function ToggleSetting({
       <span
         className={cn(
           "relative h-7 w-12 shrink-0 rounded-full transition",
-          checked ? "bg-emeraldx-500" : "bg-white/14"
+          checked ? "bg-primary-500" : "bg-white/14"
         )}
       >
         <span

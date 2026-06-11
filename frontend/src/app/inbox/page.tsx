@@ -128,7 +128,7 @@ export default function InboxPage() {
       <div className="grid gap-5 xl:grid-cols-[390px_1fr] xl:h-[calc(100vh-170px)] xl:min-h-[620px]">
         {loading ? (
           <div className="flex h-96 items-center justify-center col-span-2">
-            <Loader2 className="h-8 w-8 animate-spin text-emeraldx-400" />
+            <Loader2 className="h-8 w-8 animate-spin text-primary-400" />
           </div>
         ) : (
           <>
@@ -148,7 +148,7 @@ export default function InboxPage() {
               </div>
             ) : messagesLoading || !selectedConversation ? (
               <div className="flex h-96 items-center justify-center">
-                <Loader2 className="h-8 w-8 animate-spin text-emeraldx-400" />
+                <Loader2 className="h-8 w-8 animate-spin text-primary-400" />
               </div>
             ) : (
               <ChatWindow

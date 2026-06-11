@@ -12,16 +12,16 @@ const config: Config = {
     extend: {
       colors: {
         ink: {
-          950: "#050711",
-          900: "#080b18",
-          850: "#0c1022",
-          800: "#10172a",
-          700: "#1d2942"
+          950: "var(--ink-950, #050711)",
+          900: "var(--ink-900, #080b18)",
+          850: "var(--ink-850, #0c1022)",
+          800: "var(--ink-800, #10172a)",
+          700: "var(--ink-700, #1d2942)"
         },
-        emeraldx: {
-          400: "#60a5fa",
-          500: "#2563eb",
-          600: "#1d4ed8"
+        primary: {
+          400: "var(--primary-400, #60a5fa)",
+          500: "var(--primary-500, #2563eb)",
+          600: "var(--primary-600, #1d4ed8)"
         },
         violetrx: {
           400: "#9f7aea",
@@ -37,8 +37,8 @@ const config: Config = {
         violet: "0 0 70px rgba(124, 58, 237, 0.16)"
       },
       borderRadius: {
-        "2xl": "1rem",
-        "3xl": "1.5rem"
+        "2xl": "0.75rem",
+        "3xl": "1rem"
       }
     }
   },

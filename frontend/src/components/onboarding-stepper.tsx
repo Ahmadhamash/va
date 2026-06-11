@@ -14,14 +14,14 @@ export function OnboardingStepper({ current }: { current: number }) {
             key={step}
             className={cn(
               "rounded-2xl border p-3 transition",
-              active && "border-emeraldx-400/60 bg-emeraldx-500/12",
-              done && "border-emeraldx-400/20 bg-emeraldx-500/8",
+              active && "border-primary-400/60 bg-primary-500/12",
+              done && "border-primary-400/20 bg-primary-500/8",
               !active && !done && "border-white/10 bg-white/[0.04]"
             )}
           >
             <div className="flex items-center justify-between gap-2">
               <span className="text-xs font-semibold text-white/55">0{index + 1}</span>
-              {done ? <CircleCheck className="h-4 w-4 text-emeraldx-400" /> : null}
+              {done ? <CircleCheck className="h-4 w-4 text-primary-400" /> : null}
             </div>
             <div className={cn("mt-2 text-sm font-semibold", active || done ? "text-white" : "text-white/40")}>
               {step}

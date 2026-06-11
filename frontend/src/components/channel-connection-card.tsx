@@ -21,6 +21,7 @@ import { GradientCard } from "@/components/gradient-card";
 import { StatusBadge } from "@/components/status-badge";
 import type { ChannelConnection } from "@/lib/types";
 import { useAuthStore } from "@/store/use-auth-store";
+import { useLanguageStore } from "@/store/use-language-store";
 
 const channelIcons: Record<string, typeof MessageCircle> = {
   WHATSAPP: MessageCircle,
@@ -30,30 +31,6 @@ const channelIcons: Record<string, typeof MessageCircle> = {
   WEBHOOK: Webhook,
   WIDGET: Code,
 };
-
-const platformNames: Record<string, string> = {
-  WHATSAPP: "واتساب",
-  FACEBOOK: "فيسبوك",
-  MESSENGER: "Messenger",
-  INSTAGRAM: "Instagram",
-  WEBHOOK: "Webhook",
-  WIDGET: "Widget",
-};
-
-const directConnectCards = [
-  {
-    platform: "messenger",
-    title: "Facebook Messenger",
-    description: "اربط الصفحة من Meta OAuth ونجهز التوكن والويبهوك قدر الإمكان.",
-    icon: Facebook,
-  },
-  {
-    platform: "instagram",
-    title: "Instagram",
-    description: "اربط حساب Instagram Professional المرتبط بصفحة فيسبوك.",
-    icon: Instagram,
-  },
-] as const;
 
 function endpointUrl(channel: any) {
   if (typeof window === "undefined") return "";
@@ -75,6 +52,9 @@ export function ChannelConnectionCard({
   onDelete?: (channelId: string) => void;
 }) {
   const token = useAuthStore((s) => s.token);
+  const language = useLanguageStore((state) => state.language);
+  const isRtl = language === "ar";
+
   const [expandedChannelId, setExpandedChannelId] = useState<string | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [connectingPlatform, setConnectingPlatform] = useState<string | null>(null);
@@ -84,6 +64,34 @@ export function ChannelConnectionCard({
     () => channels.filter((channel) => channel.status === "CONNECTED").length,
     [channels],
   );
+
+  const directConnectCards = useMemo(() => [
+    {
+      platform: "messenger" as const,
+      title: isRtl ? "فيسبوك ماسنجر" : "Facebook Messenger",
+      description: isRtl
+        ? "اربط الصفحة من Meta OAuth ونجهز التوكن والويبهوك قدر الإمكان."
+        : "Connect the page via Meta OAuth to setup token and webhooks automatically.",
+      icon: Facebook,
+    },
+    {
+      platform: "instagram" as const,
+      title: isRtl ? "إنستغرام" : "Instagram",
+      description: isRtl
+        ? "اربط حساب Instagram Professional المرتبط بصفحة فيسبوك."
+        : "Connect the Instagram Professional account linked to a Facebook page.",
+      icon: Instagram,
+    },
+  ], [isRtl]);
+
+  const platformNames = useMemo<Record<string, string>>(() => ({
+    WHATSAPP: isRtl ? "واتساب" : "WhatsApp",
+    FACEBOOK: isRtl ? "فيسبوك" : "Facebook",
+    MESSENGER: isRtl ? "ماسنجر" : "Messenger",
+    INSTAGRAM: isRtl ? "إنستغرام" : "Instagram",
+    WEBHOOK: isRtl ? "ويبهوك" : "Webhook",
+    WIDGET: isRtl ? "ويدجت موقع" : "Widget",
+  }), [isRtl]);
 
   const handleCopy = async (text: string, key: string) => {
     await navigator.clipboard.writeText(text);
@@ -101,14 +109,15 @@ export function ChannelConnectionCard({
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error(data.detail || data.error || "تعذر بدء الربط المباشر.");
+        throw new Error(data.detail || data.error || (isRtl ? "تعذر بدء الربط المباشر." : "Could not initialize direct connect."));
       }
       if (!data.configured) {
         setMessage({
           type: "warn",
           text:
-            data.reason ||
-            "ربط Meta المباشر يحتاج META_APP_ID و META_APP_SECRET و redirect URI عام. الخيار اليدوي جاهز تحت.",
+            data.reason || (isRtl
+              ? "ربط Meta المباشر يحتاج META_APP_ID و META_APP_SECRET و redirect URI عام. الخيار اليدوي جاهز تحت."
+              : "Meta Direct Connect requires META_APP_ID, META_APP_SECRET and a public redirect URI. Manual setup is available below."),
         });
         return;
       }
@@ -116,28 +125,40 @@ export function ChannelConnectionCard({
     } catch (error) {
       setMessage({
         type: "warn",
-        text: error instanceof Error ? error.message : "صار خطأ أثناء تجهيز ربط Meta.",
+        text: error instanceof Error ? error.message : (isRtl ? "صار خطأ أثناء تجهيز ربط Meta." : "An error occurred during Meta setup."),
       });
     } finally {
       setConnectingPlatform(null);
     }
   };
 
+  const footerItems = useMemo(() => isRtl 
+    ? ["ربط مباشر عند توفر Meta permissions", "خيار يدوي دائم", "تحويل بشري عند الحاجة"]
+    : ["Direct connect with Meta permissions", "Manual integration fallback", "Human handoff when needed"],
+    [isRtl]
+  );
+
   return (
-    <GradientCard className="border-emeraldx-400/20">
+    <GradientCard className="border-primary-400/20">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="grid h-14 w-14 place-items-center rounded-2xl bg-emeraldx-500 text-white shadow-glow">
+          <div className="grid h-14 w-14 place-items-center rounded-2xl bg-primary-500 text-white shadow-glow">
             <MessageCircle className="h-7 w-7" />
           </div>
-          <div className="text-right">
-            <div className="mb-2 inline-flex items-center gap-1.5 rounded-full bg-emeraldx-500/10 px-2 py-1 text-xs font-semibold text-emeraldx-400">
+          <div className="rtl:text-right ltr:text-left">
+            <div className="mb-2 inline-flex items-center gap-1.5 rounded-full bg-primary-500/10 px-2 py-1 text-xs font-semibold text-primary-400">
               <CheckCircle2 className="h-3.5 w-3.5" />
-              {connectedCount > 0 ? `${connectedCount} قناة متصلة` : "جاهز للربط"}
+              {connectedCount > 0 
+                ? (isRtl ? `${connectedCount} قنوات متصلة` : `${connectedCount} Connected Channels`) 
+                : (isRtl ? "جاهز للربط" : "Ready to Connect")}
             </div>
-            <h3 className="text-xl font-semibold text-white">قنوات العملاء</h3>
+            <h3 className="text-xl font-semibold text-white">
+              {isRtl ? "قنوات العملاء" : "Customer Channels"}
+            </h3>
             <p className="mt-1 max-w-2xl text-sm leading-7 text-white/58">
-              Messenger و Instagram صار إلهم Flow مباشر داخل المنصة قدر ما تسمح Meta. والربط اليدوي باقي موجود لكل قناة.
+              {isRtl
+                ? "Messenger و Instagram صار إلهم Flow مباشر داخل المنصة قدر ما تسمح Meta. والربط اليدوي باقي موجود لكل قناة."
+                : "Messenger and Instagram now have a direct Meta flow inside the platform. Webhook manual configuration is still supported."}
             </p>
           </div>
         </div>
@@ -145,7 +166,7 @@ export function ChannelConnectionCard({
         <Link href="/onboarding">
           <Button>
             <Plus className="h-4 w-4" />
-            ربط يدوي
+            {isRtl ? "ربط يدوي" : "Manual Connection"}
           </Button>
         </Link>
       </div>
@@ -155,9 +176,9 @@ export function ChannelConnectionCard({
           const Icon = card.icon;
           const isLoading = connectingPlatform === card.platform;
           return (
-            <div key={card.platform} className="rounded-2xl border border-white/10 bg-white/[0.045] p-4 text-right">
-              <div className="flex items-start justify-between gap-3">
-                <div className="grid h-11 w-11 place-items-center rounded-2xl bg-emeraldx-500/12 text-emeraldx-400">
+            <div key={card.platform} className="rounded-2xl border border-white/10 bg-white/[0.045] p-4 rtl:text-right ltr:text-left">
+              <div className="flex items-start gap-3">
+                <div className="grid h-11 w-11 place-items-center rounded-2xl bg-primary-500/12 text-primary-400 shrink-0">
                   <Icon className="h-5 w-5" />
                 </div>
                 <div className="flex-1">
@@ -173,7 +194,9 @@ export function ChannelConnectionCard({
                 onClick={() => startMetaOAuth(card.platform)}
               >
                 <ExternalLink className="h-4 w-4" />
-                {isLoading ? "جاري التجهيز..." : "ربط مباشر من Meta"}
+                {isLoading 
+                  ? (isRtl ? "جاري التجهيز..." : "Preparing...") 
+                  : (isRtl ? "ربط مباشر من Meta" : "Direct Meta Connection")}
               </Button>
             </div>
           );
@@ -182,9 +205,9 @@ export function ChannelConnectionCard({
 
       {message && (
         <div
-          className={`mt-4 flex items-start gap-3 rounded-2xl border px-4 py-3 text-right text-sm ${
+          className={`mt-4 flex items-start gap-3 rounded-2xl border px-4 py-3 text-sm rtl:text-right ltr:text-left ${
             message.type === "ok"
-              ? "border-emeraldx-400/20 bg-emeraldx-500/10 text-emeraldx-400"
+              ? "border-primary-400/20 bg-primary-500/10 text-primary-400"
               : "border-amber-400/20 bg-amber-500/10 text-amber-300"
           }`}
         >
@@ -194,16 +217,18 @@ export function ChannelConnectionCard({
       )}
 
       <div className="mt-6 space-y-4">
-        <div className="flex items-center justify-between gap-3">
-          <span className="text-sm text-white/45">الإعداد اليدوي والقنوات الحالية</span>
-          <span className="text-xs text-white/32">WhatsApp / Messenger / Instagram / Widget / Webhook</span>
+        <div className="flex items-center justify-between gap-3 text-xs sm:text-sm">
+          <span className="text-white/45">{isRtl ? "الإعداد اليدوي والقنوات الحالية" : "Manual Setup & Current Channels"}</span>
+          <span className="text-[10px] sm:text-xs text-white/32">WhatsApp / Messenger / Instagram / Widget / Webhook</span>
         </div>
 
         {channels.length === 0 ? (
           <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-white/15 bg-white/[0.025] py-10 text-center">
             <MessageCircle className="mb-3 h-10 w-10 text-white/20" />
-            <p className="text-sm text-white/45">لسه ما في قنوات مربوطة.</p>
-            <p className="mt-1 text-xs text-white/30">استخدم الربط المباشر، أو افتح الربط اليدوي لإضافة قناة.</p>
+            <p className="text-sm text-white/45">{isRtl ? "لسه ما في قنوات مربوطة." : "No channels connected yet."}</p>
+            <p className="mt-1 text-xs text-white/30">
+              {isRtl ? "استخدم الربط المباشر، أو افتح الربط اليدوي لإضافة قناة." : "Use Meta direct connection or configure custom webhooks."}
+            </p>
           </div>
         ) : (
           <div className="grid gap-3 lg:grid-cols-3">
@@ -218,20 +243,20 @@ export function ChannelConnectionCard({
                 <div key={channel.id} className="space-y-3">
                   <div className="rounded-2xl border border-white/10 bg-white/[0.045] p-4">
                     <div className="flex items-start justify-between gap-3">
-                      <div className="grid h-11 w-11 place-items-center rounded-2xl bg-white/8 text-emeraldx-400">
+                      <div className="grid h-11 w-11 place-items-center rounded-2xl bg-white/8 text-primary-400">
                         <Icon className="h-5 w-5" />
                       </div>
                       <StatusBadge status={channel.status} />
                     </div>
 
-                    <div className="mt-4 text-right">
+                    <div className="mt-4 rtl:text-right ltr:text-left">
                       <div className="text-base font-semibold text-white">
                         {platformNames[channel.provider] || channel.provider}
                       </div>
                       <div className="mt-1 text-xs text-white/40">
                         {anyChannel.configured_keys?.length
-                          ? `${anyChannel.configured_keys.length} إعداد محفوظ`
-                          : "بانتظار بيانات الربط"}
+                          ? (isRtl ? `${anyChannel.configured_keys.length} إعداد محفوظ` : `${anyChannel.configured_keys.length} settings configured`)
+                          : (isRtl ? "بانتظار بيانات الربط" : "Awaiting credentials")}
                       </div>
                     </div>
 
@@ -242,13 +267,13 @@ export function ChannelConnectionCard({
                         className="inline-flex items-center gap-1 rounded-full bg-white/8 px-3 py-1.5 text-xs font-semibold text-white/70 transition hover:bg-white/12"
                       >
                         {isExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-                        الإعدادات
+                        {isRtl ? "الإعدادات" : "Settings"}
                       </button>
                       <button
                         type="button"
                         onClick={() => onDelete?.(channel.id)}
                         className="rounded-full bg-red-500/10 px-3 py-1.5 text-red-400 transition hover:bg-red-500 hover:text-white"
-                        aria-label="حذف القناة"
+                        aria-label={isRtl ? "حذف القناة" : "Delete channel"}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
@@ -256,14 +281,16 @@ export function ChannelConnectionCard({
                   </div>
 
                   {isExpanded && (
-                    <div className="space-y-3 rounded-2xl border border-white/10 bg-white/[0.025] p-4 text-right">
+                    <div className="space-y-3 rounded-2xl border border-white/10 bg-white/[0.025] p-4 rtl:text-right ltr:text-left">
                       <div className="text-xs font-bold text-white/80">
-                        {channel.provider === "WIDGET" ? "تفاصيل تركيب الـ Widget" : "تفاصيل الويبهوك"}
+                        {channel.provider === "WIDGET" 
+                          ? (isRtl ? "تفاصيل تركيب الـ Widget" : "Widget Embedding Details") 
+                          : (isRtl ? "تفاصيل الويبهوك" : "Webhook URL Details")}
                       </div>
 
                       <div className="space-y-1">
-                        <span className="block text-[11px] text-white/40">الرابط</span>
-                        <div className="flex items-center gap-2 rounded-xl border border-white/5 bg-black/20 px-2.5 py-2 text-[11px]">
+                        <span className="block text-[11px] text-white/40">{isRtl ? "الرابط" : "URL"}</span>
+                        <div className="flex items-center gap-2 rounded-xl border border-white/5 bg-black/20 px-2.5 py-2 text-[11px] ltr:flex-row-reverse">
                           <button
                             type="button"
                             onClick={() => handleCopy(url, `${channel.id}_url`)}
@@ -272,7 +299,7 @@ export function ChannelConnectionCard({
                             <Copy className="h-3.5 w-3.5" />
                           </button>
                           <span className="min-w-0 flex-1 select-all overflow-x-auto whitespace-nowrap font-mono text-white/70">
-                            {copiedKey === `${channel.id}_url` ? "تم النسخ" : url}
+                            {copiedKey === `${channel.id}_url` ? (isRtl ? "تم النسخ" : "Copied") : url}
                           </span>
                         </div>
                       </div>
@@ -280,7 +307,7 @@ export function ChannelConnectionCard({
                       {channel.provider !== "WEBHOOK" && channel.provider !== "WIDGET" && (
                         <div className="space-y-1">
                           <span className="block text-[11px] text-white/40">Verify Token</span>
-                          <div className="flex items-center gap-2 rounded-xl border border-white/5 bg-black/20 px-2.5 py-2 text-[11px]">
+                          <div className="flex items-center gap-2 rounded-xl border border-white/5 bg-black/20 px-2.5 py-2 text-[11px] ltr:flex-row-reverse">
                             <button
                               type="button"
                               onClick={() => handleCopy(verifyToken, `${channel.id}_token`)}
@@ -289,7 +316,7 @@ export function ChannelConnectionCard({
                               <Copy className="h-3.5 w-3.5" />
                             </button>
                             <span className="min-w-0 flex-1 select-all overflow-x-auto whitespace-nowrap font-mono text-white/70">
-                              {copiedKey === `${channel.id}_token` ? "تم النسخ" : verifyToken}
+                              {copiedKey === `${channel.id}_token` ? (isRtl ? "تم النسخ" : "Copied") : verifyToken}
                             </span>
                           </div>
                         </div>
@@ -303,9 +330,9 @@ export function ChannelConnectionCard({
         )}
       </div>
 
-      <div className="mt-5 flex flex-wrap gap-3">
-        {["ربط مباشر عند توفر Meta permissions", "خيار يدوي دائم", "تحويل بشري عند الحاجة"].map((item) => (
-          <div key={item} className="flex items-center gap-2 rounded-2xl bg-white/7 px-3 py-2 text-sm text-white/68">
+      <div className="mt-5 flex flex-wrap gap-3 rtl:justify-start ltr:justify-end">
+        {footerItems.map((item) => (
+          <div key={item} className="flex items-center gap-2 rounded-2xl bg-white/7 px-3 py-2 text-xs sm:text-sm text-white/68">
             <ShieldCheck className="h-4 w-4 text-cyanx-400" />
             {item}
           </div>

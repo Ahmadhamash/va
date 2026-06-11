@@ -393,7 +393,7 @@ export default function KnowledgeBasePage() {
     return (
       <AppShell title="قاعدة المعرفة" subtitle="المنتجات والسياسات التي يعتمد عليها الوكيل.">
         <div className="flex h-96 items-center justify-center">
-          <Loader2 className="h-8 w-8 animate-spin text-emeraldx-400" />
+          <Loader2 className="h-8 w-8 animate-spin text-primary-400" />
         </div>
       </AppShell>
     );
@@ -402,7 +402,7 @@ export default function KnowledgeBasePage() {
   return (
     <AppShell title="قاعدة المعرفة" subtitle="إدارة منتجاتك، سياساتك، والمعلومات التي يستند إليها الذكاء الاصطناعي لخدمة العملاء.">
       {notice && (
-        <div className="mb-6 flex animate-in fade-in slide-in-from-top-2 items-center gap-2 rounded-2xl border border-emeraldx-400/20 bg-emeraldx-500/10 px-4 py-3 text-sm font-medium text-emeraldx-400 shadow-lg">
+        <div className="mb-6 flex animate-in fade-in slide-in-from-top-2 items-center gap-2 rounded-2xl border border-primary-400/20 bg-primary-500/10 px-4 py-3 text-sm font-medium text-primary-400 shadow-lg">
           <CheckCircle2 className="h-4 w-4" />
           {notice}
         </div>
@@ -420,7 +420,7 @@ export default function KnowledgeBasePage() {
           <GradientCard>
             <div className="mb-5 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Settings2 className="h-5 w-5 text-emeraldx-400" />
+                <Settings2 className="h-5 w-5 text-primary-400" />
                 <h2 className="text-xl font-semibold text-white">تخصيص الحقول حسب النشاط</h2>
               </div>
             </div>
@@ -432,7 +432,7 @@ export default function KnowledgeBasePage() {
                   onClick={() => saveBusinessType(type.id)}
                   className={`rounded-2xl border p-4 text-right transition-all duration-200 hover:-translate-y-0.5 ${
                     businessType === type.id
-                      ? "border-emeraldx-400/40 bg-emeraldx-500/12 text-white shadow-glow"
+                      ? "border-primary-400/40 bg-primary-500/12 text-white shadow-glow"
                       : "border-white/10 bg-white/[0.035] text-white/65 hover:border-white/18 hover:bg-white/[0.06]"
                   }`}
                 >
@@ -447,7 +447,7 @@ export default function KnowledgeBasePage() {
             <GradientCard className="h-fit">
               <div className="mb-5 flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <Plus className="h-5 w-5 text-emeraldx-400" />
+                  <Plus className="h-5 w-5 text-primary-400" />
                   <h2 className="text-lg font-semibold text-white">إضافة منتج جديد</h2>
                 </div>
               </div>
@@ -505,7 +505,7 @@ export default function KnowledgeBasePage() {
 
                 <label className="group flex cursor-pointer items-center justify-between rounded-xl border border-dashed border-white/20 bg-white/[0.02] px-4 py-3 text-sm text-white/55 transition hover:bg-white/[0.04]">
                   <span className="truncate pr-2 text-xs">{imageFile ? imageFile.name : "تحميل صورة للمنتج (اختياري)"}</span>
-                  <div className="grid h-8 w-8 place-items-center rounded-lg bg-white/5 text-white/70 transition group-hover:bg-emeraldx-500 group-hover:text-ink-950">
+                  <div className="grid h-8 w-8 place-items-center rounded-lg bg-white/5 text-white/70 transition group-hover:bg-primary-500 group-hover:text-ink-950">
                     <ImagePlus className="h-4 w-4" />
                   </div>
                   <input type="file" accept="image/*" className="hidden" onChange={(e) => setImageFile(e.target.files?.[0] || null)} />
@@ -521,7 +521,7 @@ export default function KnowledgeBasePage() {
             <GradientCard className="h-fit">
               <div className="mb-5 flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <Package className="h-5 w-5 text-emeraldx-400" />
+                  <Package className="h-5 w-5 text-primary-400" />
                   <h2 className="text-xl font-semibold text-white">المنتجات الحالية</h2>
                 </div>
                 <div className="rounded-full bg-white/10 px-2.5 py-0.5 text-xs font-semibold text-white/80">
@@ -555,16 +555,16 @@ export default function KnowledgeBasePage() {
                               <p className="mt-0.5 text-[10px] text-white/40">{product.category || "بدون فئة"}</p>
                             </div>
                           </div>
-                          <div className="mt-2 text-sm font-bold text-emeraldx-400">
+                          <div className="mt-2 text-sm font-bold text-primary-400">
                             {product.price || "-"} {product.currency}
                           </div>
                         </div>
                       </div>
                       
                       <div className="flex items-center justify-between border-t border-white/5 bg-white/[0.02] px-3 py-2">
-                        <button type="button" onClick={() => toggleProduct(product.id)} className={`flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-medium transition ${product.available ? "bg-emeraldx-500/15 text-emeraldx-400 hover:bg-emeraldx-500/25" : "bg-white/10 text-white/50 hover:bg-white/15"}`}>
+                        <button type="button" onClick={() => toggleProduct(product.id)} className={`flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-medium transition ${product.available ? "bg-primary-500/15 text-primary-400 hover:bg-primary-500/25" : "bg-white/10 text-white/50 hover:bg-white/15"}`}>
                           {product.available ? (
-                            <><span className="h-1.5 w-1.5 rounded-full bg-emeraldx-400" /> متاح</>
+                            <><span className="h-1.5 w-1.5 rounded-full bg-primary-400" /> متاح</>
                           ) : (
                             <><span className="h-1.5 w-1.5 rounded-full bg-white/40" /> مخفي</>
                           )}
@@ -618,7 +618,7 @@ export default function KnowledgeBasePage() {
                           <h3 className="font-semibold text-white">{candidate.name || "بدون اسم"}</h3>
                           <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-white/50">{candidate.description || "الوصف غير واضح، ستحتاج لإكماله قبل الحفظ."}</p>
                           {candidate.price && (
-                            <div className="mt-2 text-xs font-bold text-emeraldx-400">{candidate.price} {candidate.currency}</div>
+                            <div className="mt-2 text-xs font-bold text-primary-400">{candidate.price} {candidate.currency}</div>
                           )}
                         </div>
                       </div>
@@ -637,7 +637,7 @@ export default function KnowledgeBasePage() {
           <div className="grid gap-6 lg:grid-cols-2">
             <GradientCard>
               <div className="mb-5 flex items-center gap-2">
-                <CheckCircle2 className="h-5 w-5 text-emeraldx-400" />
+                <CheckCircle2 className="h-5 w-5 text-primary-400" />
                 <h2 className="text-xl font-semibold text-white">إضافة سياسة أو معلومة</h2>
               </div>
               <p className="mb-6 text-xs leading-5 text-white/50">
@@ -648,7 +648,7 @@ export default function KnowledgeBasePage() {
                 <div>
                   <label className="mb-1.5 block text-xs font-medium text-white/70">تصنيف المعلومة</label>
                   <select
-                    className="w-full h-10 px-3 text-right bg-white/[0.03] border border-white/10 rounded-xl text-sm text-white/80 focus:border-emeraldx-400 focus:outline-none"
+                    className="w-full h-10 px-3 text-right bg-white/[0.03] border border-white/10 rounded-xl text-sm text-white/80 focus:border-primary-400 focus:outline-none"
                     value={policyForm.category}
                     onChange={(e) => setPolicyForm({ ...policyForm, category: e.target.value })}
                   >
@@ -690,7 +690,7 @@ export default function KnowledgeBasePage() {
             <GradientCard>
               <div className="mb-5 flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <Info className="h-5 w-5 text-emeraldx-400" />
+                  <Info className="h-5 w-5 text-primary-400" />
                   <h2 className="text-xl font-semibold text-white">السياسات الحالية</h2>
                 </div>
                 <span className="text-xs font-medium text-white/40">{knowledge.length} معلومات مسجلة</span>
@@ -712,7 +712,7 @@ export default function KnowledgeBasePage() {
                           onClick={() => setOpenGroups(prev => ({ ...prev, [category]: !isOpen }))}
                           className="flex w-full items-center justify-between bg-white/[0.02] px-4 py-3 text-right text-xs font-semibold text-white/70 hover:bg-white/[0.04]"
                         >
-                          <span className="text-xs text-emeraldx-400 font-medium">({items.length})</span>
+                          <span className="text-xs text-primary-400 font-medium">({items.length})</span>
                           <span className="font-bold">{category}</span>
                         </button>
                         
@@ -751,7 +751,7 @@ export default function KnowledgeBasePage() {
           <div className="grid gap-6 lg:grid-cols-2">
             <GradientCard>
               <div className="mb-5 flex items-center gap-2">
-                <Upload className="h-5 w-5 text-emeraldx-400" />
+                <Upload className="h-5 w-5 text-primary-400" />
                 <h2 className="text-xl font-semibold text-white">استيراد محادثات الواتساب</h2>
               </div>
               <p className="mb-6 text-xs leading-5 text-white/50">
@@ -788,7 +788,7 @@ export default function KnowledgeBasePage() {
             <GradientCard>
               <div className="mb-5 flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <CheckCircle2 className="h-5 w-5 text-emeraldx-400" />
+                  <CheckCircle2 className="h-5 w-5 text-primary-400" />
                   <h2 className="text-xl font-semibold text-white">إحصائيات التدريب</h2>
                 </div>
               </div>

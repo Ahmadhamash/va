@@ -45,7 +45,7 @@ export default function PoliciesPage() {
           <textarea
             value={policies.refund_policy}
             onChange={(e) => setPolicies({ ...policies, refund_policy: e.target.value })}
-            className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white focus:border-emeraldx-500 focus:outline-none h-28"
+            className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white focus:border-primary-500 focus:outline-none h-28"
           />
         </GradientCard>
 
@@ -62,7 +62,7 @@ export default function PoliciesPage() {
           <textarea
             value={policies.shipping_policy}
             onChange={(e) => setPolicies({ ...policies, shipping_policy: e.target.value })}
-            className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white focus:border-emeraldx-500 focus:outline-none h-24"
+            className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white focus:border-primary-500 focus:outline-none h-24"
           />
         </GradientCard>
 
@@ -79,7 +79,7 @@ export default function PoliciesPage() {
           <textarea
             value={policies.escalation_rules}
             onChange={(e) => setPolicies({ ...policies, escalation_rules: e.target.value })}
-            className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white focus:border-emeraldx-500 focus:outline-none h-24"
+            className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white focus:border-primary-500 focus:outline-none h-24"
           />
         </GradientCard>
 

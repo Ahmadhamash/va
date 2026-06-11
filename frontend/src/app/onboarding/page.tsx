@@ -110,7 +110,7 @@ function manyChatStatusMeta(status: ManyChatSetupStatus) {
       label: "مكتمل",
       title: "تم تفعيل ManyChat",
       body: "تم إعداد البوت وربطه بالحسابات المطلوبة. يمكنك الآن متابعة المحادثات من القنوات المتصلة.",
-      className: "border-emeraldx-400/20 bg-emeraldx-500/10 text-emeraldx-400",
+      className: "border-primary-400/20 bg-primary-500/10 text-primary-400",
       icon: CheckCircle2,
     };
   }
@@ -295,7 +295,7 @@ export default function OnboardingPage() {
         <div
           className={`flex items-start gap-3 rounded-2xl border px-4 py-3 text-sm ${
             notice.type === "ok"
-              ? "border-emeraldx-400/20 bg-emeraldx-500/10 text-emeraldx-400"
+              ? "border-primary-400/20 bg-primary-500/10 text-primary-400"
               : "border-amber-400/20 bg-amber-500/10 text-amber-300"
           }`}
         >
@@ -315,7 +315,7 @@ export default function OnboardingPage() {
               <div>
                 <div className="flex items-center justify-end gap-2">
                   <h2 className="text-2xl font-semibold text-white">تهيئة ManyChat اليدوية</h2>
-                  <MessageCircle className="h-5 w-5 text-emeraldx-400" />
+                  <MessageCircle className="h-5 w-5 text-primary-400" />
                 </div>
                 <p className="mt-2 max-w-2xl text-sm leading-7 text-white/50">
                   أضف حساب الإدارة كمسؤول في صفحة فيسبوك، ثم أرسل بيانات الصفحة. سنكمل الربط داخل ManyChat من حساب الوكالة ونطبق قالب البوت المناسب.
@@ -325,7 +325,7 @@ export default function OnboardingPage() {
 
             <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <span className="rounded-full border border-emeraldx-400/20 bg-emeraldx-500/10 px-3 py-1 text-xs font-semibold text-emeraldx-400">
+                <span className="rounded-full border border-primary-400/20 bg-primary-500/10 px-3 py-1 text-xs font-semibold text-primary-400">
                   انسخ هذا الحساب
                 </span>
                 <div>
@@ -397,7 +397,7 @@ export default function OnboardingPage() {
                     onChange={(event) =>
                       setManychatForm((current) => ({ ...current, admin_added_confirmed: event.target.checked }))
                     }
-                    className="h-4 w-4 accent-emeraldx-400"
+                    className="h-4 w-4 accent-primary-400"
                     required
                   />
                 </label>
@@ -457,11 +457,11 @@ export default function OnboardingPage() {
                 }}
                 className={`rounded-2xl border p-4 text-right transition ${
                   active
-                    ? "border-emeraldx-400/40 bg-emeraldx-500/10 text-white shadow-glow"
+                    ? "border-primary-400/40 bg-primary-500/10 text-white shadow-glow"
                     : "border-white/10 bg-white/[0.035] text-white/65 hover:border-white/18 hover:bg-white/[0.06]"
                 }`}
               >
-                <Icon className="mb-3 h-5 w-5 text-emeraldx-400" />
+                <Icon className="mb-3 h-5 w-5 text-primary-400" />
                 <div className="font-semibold">{platform.label}</div>
                 <div className="mt-1 text-xs text-white/40">{platform.hint}</div>
               </button>
@@ -470,7 +470,7 @@ export default function OnboardingPage() {
         </div>
 
         {(selected === "messenger" || selected === "instagram") && (
-          <div className="mt-6 rounded-2xl border border-emeraldx-400/20 bg-emeraldx-500/[0.045] p-4 text-right">
+          <div className="mt-6 rounded-2xl border border-primary-400/20 bg-primary-500/[0.045] p-4 text-right">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h3 className="font-semibold text-white">ربط مباشر من Meta</h3>
@@ -533,7 +533,7 @@ export default function OnboardingPage() {
               return (
                 <div key={channel.id} className="rounded-2xl border border-white/10 bg-white/[0.035] p-4 text-right">
                   <div className="mb-3 flex items-center justify-between">
-                    <span className="rounded-full bg-emeraldx-500/10 px-2 py-1 text-xs text-emeraldx-400">
+                    <span className="rounded-full bg-primary-500/10 px-2 py-1 text-xs text-primary-400">
                       {channel.status}
                     </span>
                     <h3 className="font-semibold text-white">{channel.name}</h3>

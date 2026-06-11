@@ -29,7 +29,7 @@ export function PlanCard({
   onSelect
 }: PlanCardProps) {
   return (
-    <GradientCard className={cn(highlighted && "border-emeraldx-400/40 shadow-glow", "flex flex-col justify-between h-full")}>
+    <GradientCard className={cn(highlighted && "border-primary-400/40 shadow-glow", "flex flex-col justify-between h-full")}>
       <div>
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -37,7 +37,7 @@ export function PlanCard({
             <p className="mt-2 text-sm leading-6 text-white/52">{description}</p>
           </div>
           {isActive ? (
-            <span className="rounded-full bg-emeraldx-500 px-3 py-1 text-xs font-bold text-ink-950">
+            <span className="rounded-full bg-primary-500 px-3 py-1 text-xs font-bold text-ink-950">
               الباقة الحالية
             </span>
           ) : highlighted ? (
@@ -55,7 +55,7 @@ export function PlanCard({
         <div className="mt-6 space-y-3">
           {features.map((feature) => (
             <div key={feature} className="flex items-center gap-2 text-sm text-white/68">
-              <CircleCheck className="mt-0.5 h-4 w-4 shrink-0 text-emeraldx-400" />
+              <CircleCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary-400" />
               {feature}
             </div>
           ))}

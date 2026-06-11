@@ -151,10 +151,10 @@ export function AgentPreview({
       <div className="flex items-center justify-between border-b border-white/10 bg-white/[0.04] p-4">
         <div className="flex items-center gap-3">
           <div className="relative">
-            <div className="grid h-10 w-10 place-items-center rounded-2xl bg-emeraldx-500 text-white shadow-glow">
+            <div className="grid h-10 w-10 place-items-center rounded-2xl bg-primary-500 text-white shadow-glow">
               <Bot className="h-5 w-5" />
             </div>
-            <span className={cn("absolute -bottom-1 -left-1 h-3.5 w-3.5 rounded-full border-2 border-ink-950", agentStatus === "ONLINE" ? "bg-emeraldx-400" : "bg-amber-500")} />
+            <span className={cn("absolute -bottom-1 -left-1 h-3.5 w-3.5 rounded-full border-2 border-ink-950", agentStatus === "ONLINE" ? "bg-primary-400" : "bg-amber-500")} />
           </div>
           <div className="text-right">
             <h3 className="text-sm font-semibold text-white">{agentName}</h3>
@@ -184,7 +184,7 @@ export function AgentPreview({
           const customer = msg.sender === "CUSTOMER";
           return (
             <div key={msg.id} className={cn("flex w-full", customer ? "justify-end" : "justify-start")}>
-              <div className={cn("max-w-[80%] rounded-2xl px-3.5 py-2.5 text-right text-xs leading-5", customer ? "rounded-br-none border border-white/5 bg-white/[0.07] text-white/90" : "rounded-bl-none bg-emeraldx-500 font-medium text-white")}>
+              <div className={cn("max-w-[80%] rounded-2xl px-3.5 py-2.5 text-right text-xs leading-5", customer ? "rounded-br-none border border-white/5 bg-white/[0.07] text-white/90" : "rounded-bl-none bg-primary-500 font-medium text-white")}>
                 {msg.body}
               </div>
             </div>

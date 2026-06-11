@@ -156,7 +156,7 @@ export function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose?: () =>
         </div>
 
         <Link href="/" className="flex items-center gap-3">
-          <span className="grid h-12 w-12 place-items-center rounded-2xl bg-emeraldx-500 text-white shadow-glow">
+          <span className="grid h-12 w-12 place-items-center rounded-2xl bg-primary-500 text-white shadow-glow">
             <MessageCircle className="h-6 w-6" />
           </span>
           <span>
@@ -165,8 +165,8 @@ export function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose?: () =>
           </span>
         </Link>
 
-        <div className="mt-8 rounded-2xl border border-emeraldx-400/20 bg-emeraldx-500/10 p-4">
-          <div className="flex items-center gap-2 text-sm font-semibold text-emeraldx-400">
+        <div className="mt-8 rounded-2xl border border-primary-400/20 bg-primary-500/10 p-4">
+          <div className="flex items-center gap-2 text-sm font-semibold text-primary-400">
             <Sparkles className="h-4 w-4" />
             {roleLabel}
           </div>
@@ -207,8 +207,8 @@ export function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose?: () =>
                         "group flex items-center gap-3 rounded-2xl px-3 py-2.5 text-sm font-medium transition",
                         isActive
                           ? cn(
-                              "bg-emeraldx-500/10 text-white",
-                              isRtl ? "border-r-2 border-emeraldx-500" : "border-l-2 border-emeraldx-500",
+                              "bg-primary-500/10 text-white",
+                              isRtl ? "border-r-2 border-primary-500" : "border-l-2 border-primary-500",
                             )
                           : "text-white/58 hover:bg-white/8 hover:text-white",
                       )}
@@ -216,7 +216,7 @@ export function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose?: () =>
                       <Icon
                         className={cn(
                           "h-4 w-4 transition",
-                          isActive ? "text-emeraldx-400" : "text-white/38 group-hover:text-emeraldx-400",
+                          isActive ? "text-primary-400" : "text-white/38 group-hover:text-primary-400",
                         )}
                       />
                       {labels.nav[item.labelKey]}
