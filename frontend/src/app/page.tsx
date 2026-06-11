@@ -137,66 +137,6 @@ function PhoneMockup() {
   );
 }
 
-function CombinedMockup() {
-  return (
-    <div className="relative mx-auto w-full max-w-lg lg:h-[450px]">
-      {/* Behind: Dashboard mockup */}
-      <motion.div
-        initial={{ opacity: 0, x: 20, y: 40 }}
-        animate={{ opacity: 1, x: 0, y: 0 }}
-        transition={{ duration: 0.8, delay: 0.2 }}
-        className="absolute left-0 top-0 w-[85%] hidden sm:block opacity-80 hover:opacity-100 transition-opacity duration-300"
-      >
-        <div className="rounded-3xl border border-white/10 bg-ink-900/95 p-4 shadow-2xl shadow-black/60">
-          <div className="mb-4 flex items-center justify-between border-b border-white/8 pb-3">
-            <div className="flex items-center gap-2">
-              <span className="h-3 w-3 rounded-full bg-red-500/80" />
-              <span className="h-3 w-3 rounded-full bg-amber-500/80" />
-              <span className="h-3 w-3 rounded-full bg-green-500/80" />
-              <span className="ms-2 text-[10px] font-semibold text-white/40">chatter inbox</span>
-            </div>
-            <div className="rounded-full bg-primary-500/10 px-3 py-1 text-xs font-semibold text-primary-400">
-              الرد التلقائي: مفعّل
-            </div>
-          </div>
-
-          <div className="grid grid-cols-[100px_1fr] gap-3 text-xs">
-            <div className="space-y-2 border-e border-white/5 pe-3 text-right">
-              <div className="h-7 rounded-xl bg-primary-500/10 text-primary-400 flex items-center justify-center font-semibold">المحادثات</div>
-              <div className="h-7 rounded-xl bg-white/5 flex items-center justify-center text-white/40">قاعدة المعرفة</div>
-              <div className="h-7 rounded-xl bg-white/5 flex items-center justify-center text-white/40">التحليلات</div>
-            </div>
-
-            <div className="space-y-3 text-right">
-              <div className="rounded-xl border border-white/5 bg-white/[0.03] p-3">
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-white">أحمد علي</span>
-                  <span className="text-[10px] text-primary-400 font-semibold bg-primary-500/10 px-2 py-0.5 rounded-full">واتساب</span>
-                </div>
-                <p className="mt-1 text-xs text-white/50 truncate">كم يستغرق الشحن للرياض؟</p>
-                <div className="mt-2 text-[10px] text-primary-400 bg-primary-500/10 inline-block px-2 py-0.5 rounded">تم الرد بواسطة الوكيل الذكي</div>
-              </div>
-
-              <div className="rounded-xl bg-white/[0.01] p-3 opacity-50">
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-white">رائد صالح</span>
-                  <span className="text-[10px] text-violet-400 font-semibold bg-violet-500/10 px-2 py-0.5 rounded-full">إنستقرام</span>
-                </div>
-                <p className="mt-1 text-xs text-white/50 truncate">متى تفتحون المحل؟</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </motion.div>
-
-      {/* Front: Phone mockup overlapping */}
-      <div className="relative z-10 sm:absolute sm:-right-4 sm:top-12 w-full sm:w-[75%] max-w-sm">
-        <PhoneMockup />
-      </div>
-    </div>
-  );
-}
-
 export default function LandingPage() {
   const [mounted, setMounted] = useState(false);
   const user = useAuthStore((s) => s.user);
@@ -236,9 +176,9 @@ export default function LandingPage() {
 
       <section className="relative mx-auto max-w-7xl px-4 pb-14 pt-8 sm:px-6 lg:px-8 lg:min-h-[calc(100vh-120px)] flex items-center">
         <div className="grid gap-8 lg:grid-cols-12 items-center w-full">
-          {/* Left Column: Combined Mockup (RTL: left side) */}
-          <div className="order-2 lg:order-1 lg:col-span-5 w-full">
-            <CombinedMockup />
+          {/* Left Column: Phone Mockup only (RTL: left side) */}
+          <div className="order-2 lg:order-1 lg:col-span-5 w-full flex items-center justify-center">
+            <PhoneMockup />
           </div>
 
           {/* Right Column: Text Content (RTL: right side) */}
