@@ -7,14 +7,7 @@ import { StatusBadge } from "@/components/status-badge";
 import type { ChannelProvider, Conversation, ConversationStatus } from "@/lib/types";
 import { cn, formatTime } from "@/lib/utils";
 import { useAuthStore } from "@/store/use-auth-store";
-
-const filters: Array<{ label: string; value: "ALL" | ConversationStatus }> = [
-  { label: "الكل", value: "ALL" },
-  { label: "الذكاء يتابع", value: "AI_HANDLING" },
-  { label: "يحتاج موظف", value: "NEEDS_HUMAN" },
-  { label: "مع الموظف", value: "HUMAN_ACTIVE" },
-  { label: "مغلق", value: "CLOSED" }
-];
+import { useLanguageStore } from "@/store/use-language-store";
 
 function StatusIndicator({ status }: { status: ConversationStatus }) {
   if (status === "AI_HANDLING") {
@@ -82,7 +75,18 @@ export function ConversationList({
   const [query, setQuery] = useState(initialQuery);
   const [filter, setFilter] = useState<"ALL" | ConversationStatus>(initialFilter);
   const { user } = useAuthStore();
+  const language = useLanguageStore((state) => state.language);
+  const isRtl = language === "ar";
+
   const showBusinessName = user?.role === "admin" || user?.role === "support_agent";
+
+  const filters = useMemo(() => [
+    { label: isRtl ? "الكل" : "All", value: "ALL" as const },
+    { label: isRtl ? "الذكاء يتابع" : "AI Handling", value: "AI_HANDLING" as const },
+    { label: isRtl ? "يحتاج موظف" : "Needs Handoff", value: "NEEDS_HUMAN" as const },
+    { label: isRtl ? "مع الموظف" : "Active Handoff", value: "HUMAN_ACTIVE" as const },
+    { label: isRtl ? "مغلق" : "Closed", value: "CLOSED" as const }
+  ], [isRtl]);
 
   const visible = useMemo(() => {
     return conversations.filter((conversation) => {
@@ -99,8 +103,13 @@ export function ConversationList({
     <div className="flex h-full min-h-[680px] xl:min-h-0 flex-col rounded-3xl border border-white/10 bg-white/[0.045]">
       <div className="border-b border-white/10 p-4">
         <div className="relative">
-          <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/30" />
-          <Input className="pr-9 text-right" placeholder="ابحث في المحادثات" value={query} onChange={(event) => setQuery(event.target.value)} />
+          <Search className="pointer-events-none absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/30" />
+          <Input 
+            className="ps-9 text-start" 
+            placeholder={isRtl ? "ابحث في المحادثات" : "Search conversations..."} 
+            value={query} 
+            onChange={(event) => setQuery(event.target.value)} 
+          />
         </div>
         <div className="mt-3 flex flex-wrap gap-2">
           {filters.map((item) => (
@@ -125,14 +134,14 @@ export function ConversationList({
             key={conversation.id}
             onClick={() => onSelect(conversation.id)}
             className={cn(
-              "mb-2 w-full rounded-3xl border p-4 text-right transition-all duration-300 transform hover:translate-x-[-2px]",
+              "mb-2 w-full rounded-2xl border p-4 text-right transition-all duration-300 transform hover:translate-x-[-2px] rtl:text-right ltr:text-left",
               selectedId === conversation.id
                 ? "border-primary-400/40 bg-primary-500/10 shadow-sm"
                 : "border-white/8 bg-white/[0.035] hover:bg-white/[0.07] hover:shadow-md"
             )}
           >
             <div className="flex items-start justify-between gap-3">
-              <div>
+              <div className="rtl:text-right ltr:text-left">
                 <div className="flex items-center gap-2 font-semibold text-white">
                   <ChannelIcon channel={conversation.channel} />
                   {conversation.customerName}
@@ -149,7 +158,7 @@ export function ConversationList({
               </div>
               <span className="text-xs text-white/35">{formatTime(conversation.lastMessageAt)}</span>
             </div>
-            <p className="mt-3 line-clamp-2 text-sm leading-6 text-white/52 text-right">{conversation.lastMessage}</p>
+            <p className="mt-3 line-clamp-2 text-sm leading-6 text-white/52 rtl:text-right ltr:text-left">{conversation.lastMessage}</p>
             <div className="mt-3 flex items-center justify-between gap-2">
               <StatusBadge status={conversation.status} />
               {(conversation.unreadCount || 0) > 0 ? (
@@ -162,7 +171,11 @@ export function ConversationList({
             </div>
           </button>
         ))}
-        {visible.length === 0 ? <div className="p-8 text-center text-sm text-white/45">لا توجد محادثات مطابقة.</div> : null}
+        {visible.length === 0 ? (
+          <div className="p-8 text-center text-sm text-white/45">
+            {isRtl ? "لا توجد محادثات مطابقة." : "No matching conversations found."}
+          </div>
+        ) : null}
         {canLoadMore ? (
           <button
             type="button"
@@ -170,7 +183,9 @@ export function ConversationList({
             disabled={loadingMore}
             className="mt-3 w-full rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white/60 transition hover:bg-white/10 disabled:opacity-50"
           >
-            {loadingMore ? "جاري التحميل..." : "تحميل المزيد"}
+            {loadingMore 
+              ? (isRtl ? "جاري التحميل..." : "Loading...") 
+              : (isRtl ? "تحميل المزيد" : "Load more")}
           </button>
         ) : null}
       </div>

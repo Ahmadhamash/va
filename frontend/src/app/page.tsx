@@ -234,69 +234,69 @@ export default function LandingPage() {
         </div>
       </header>
 
-      <section className="relative mx-auto flex max-w-7xl items-center px-4 pb-14 pt-8 sm:px-6 lg:min-h-[calc(100vh-120px)] lg:px-8">
-        <div className="relative z-10 max-w-2xl text-right">
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mb-6 inline-flex items-center gap-2 rounded-full border border-primary-400/20 bg-primary-500/10 px-3 py-1.5 text-sm font-semibold text-primary-400"
-          >
-            <Sparkles className="h-4 w-4" />
-            واتساب + Messenger + Instagram
-          </motion.div>
-          <motion.h1
-            initial={{ opacity: 0, y: 18 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-            className="max-w-4xl text-5xl font-semibold tracking-tight text-white sm:text-6xl lg:text-7xl"
-          >
-            chatter
-          </motion.h1>
-          <motion.p
-            initial={{ opacity: 0, y: 18 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-            className="mt-6 max-w-2xl text-lg leading-8 text-white/58"
-          >
-            وكيل خدمة عملاء عربي يرد من قاعدة معرفة مؤكدة، يربط قنوات العميل، ويحوّل المحادثة لموظف بشري وقت الحاجة.
-          </motion.p>
-          <motion.div
-            initial={{ opacity: 0, y: 18 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-            className="mt-9 flex flex-wrap justify-end gap-3"
-          >
-            <Link href={activeUser ? dashboardHref : "/login"}>
-              <PremiumButton className="h-14 px-7 text-base flex items-center gap-2">
-                <ArrowLeft className="h-5 w-5" />
-                {activeUser ? "ادخل لوحة التحكم" : "ابدأ الآن"}
-              </PremiumButton>
-            </Link>
-          </motion.div>
-
-          <div className="mt-10 grid gap-3 sm:grid-cols-3">
-            {[
-              ["بدون هلوسة", "الإجابات من قاعدة المعرفة فقط"],
-              ["ربط رسمي", "Meta OAuth مع خيار يدوي"],
-              ["تحويل بشري", "للحالات الحساسة والمشتكية"],
-            ].map(([title, text]) => (
-              <div key={title} className="rounded-2xl border border-white/10 bg-white/[0.055] p-4 text-right">
-                <div className="flex justify-end mb-2">
-                  <CircleCheck className="h-5 w-5 text-primary-400" />
-                </div>
-                <div className="mt-1 text-sm font-semibold text-white">{title}</div>
-                <div className="mt-1 text-xs leading-5 text-white/45">{text}</div>
-              </div>
-            ))}
-          </div>
-
-          <div className="mt-10 lg:hidden">
+      <section className="relative mx-auto max-w-7xl px-4 pb-14 pt-8 sm:px-6 lg:px-8 lg:min-h-[calc(100vh-120px)] flex items-center">
+        <div className="grid gap-8 lg:grid-cols-12 items-center w-full">
+          {/* Left Column: Combined Mockup (RTL: left side) */}
+          <div className="order-2 lg:order-1 lg:col-span-5 w-full">
             <CombinedMockup />
           </div>
-        </div>
 
-        <div className="absolute left-8 top-1/2 hidden w-[32rem] -translate-y-1/2 lg:block xl:left-16">
-          <CombinedMockup />
+          {/* Right Column: Text Content (RTL: right side) */}
+          <div className="order-1 lg:order-2 lg:col-span-7 text-right flex flex-col items-end">
+            <motion.div
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-6 inline-flex items-center gap-2 rounded-full border border-primary-400/20 bg-primary-500/10 px-3 py-1.5 text-sm font-semibold text-primary-400 animate-pulse"
+            >
+              <Sparkles className="h-4 w-4" />
+              واتساب + Messenger + Instagram
+            </motion.div>
+            <motion.h1
+              initial={{ opacity: 0, y: 18 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+              className="max-w-4xl text-5xl font-semibold tracking-tight text-white sm:text-6xl lg:text-7xl"
+            >
+              chatter
+            </motion.h1>
+            <motion.p
+              initial={{ opacity: 0, y: 18 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+              className="mt-6 max-w-2xl text-lg leading-8 text-white/58"
+            >
+              وكيل خدمة عملاء عربي يرد من قاعدة معرفة مؤكدة، يربط قنوات العميل، ويحوّل المحادثة لموظف بشري وقت الحاجة.
+            </motion.p>
+            <motion.div
+              initial={{ opacity: 0, y: 18 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3 }}
+              className="mt-9 flex flex-wrap justify-end gap-3"
+            >
+              <Link href={activeUser ? dashboardHref : "/login"}>
+                <PremiumButton className="h-14 px-7 text-base flex items-center gap-2">
+                  <ArrowLeft className="h-5 w-5" />
+                  {activeUser ? "ادخل لوحة التحكم" : "ابدأ الآن"}
+                </PremiumButton>
+              </Link>
+            </motion.div>
+
+            <div className="mt-10 grid gap-3 sm:grid-cols-3 w-full">
+              {[
+                ["بدون هلوسة", "الإجابات من قاعدة المعرفة فقط"],
+                ["ربط رسمي", "Meta OAuth مع خيار يدوي"],
+                ["تحويل بشري", "للحالات الحساسة والمشتكية"],
+              ].map(([title, text]) => (
+                <div key={title} className="rounded-2xl border border-white/10 bg-white/[0.055] p-4 text-right">
+                  <div className="flex justify-end mb-2">
+                    <CircleCheck className="h-5 w-5 text-primary-400" />
+                  </div>
+                  <div className="mt-1 text-sm font-semibold text-white">{title}</div>
+                  <div className="mt-1 text-xs leading-5 text-white/45">{text}</div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </section>
 
