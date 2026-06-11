@@ -722,14 +722,16 @@ export default function AIMonitorPage() {
             </div>
 
             {filteredLogs.length ? (
-              filteredLogs.map((log) => (
-                <LogCard
-                  key={log.id}
-                  log={log}
-                  expanded={expandedId === log.id}
-                  onToggle={() => setExpandedId((current) => (current === log.id ? null : log.id))}
-                />
-              ))
+              <div className="custom-scrollbar max-h-[70vh] space-y-4 overflow-y-auto pl-1 pr-2 xl:max-h-[calc(100vh-260px)]">
+                {filteredLogs.map((log) => (
+                  <LogCard
+                    key={log.id}
+                    log={log}
+                    expanded={expandedId === log.id}
+                    onToggle={() => setExpandedId((current) => (current === log.id ? null : log.id))}
+                  />
+                ))}
+              </div>
             ) : (
               <div className="flex min-h-80 flex-col items-center justify-center rounded-3xl border border-white/10 bg-white/[0.025] text-center">
                 <BrainCircuit className="h-10 w-10 text-white/30" />

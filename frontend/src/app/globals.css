@@ -3,7 +3,11 @@
 @tailwind utilities;
 
 :root {
-  color-scheme: light dark;
+  color-scheme: dark;
+}
+
+html.light {
+  color-scheme: light;
 }
 
 * {
@@ -27,10 +31,8 @@ body {
 
 html.light body {
   background:
-    radial-gradient(circle at 12% 3%, rgba(37, 99, 235, 0.12), transparent 28rem),
-    radial-gradient(circle at 92% 7%, rgba(34, 199, 232, 0.18), transparent 30rem),
-    linear-gradient(135deg, #f7fafc 0%, #eef4ff 46%, #f5f7ff 100%);
-  color: #102033;
+    linear-gradient(135deg, #d9e3ef 0%, #e8edf5 46%, #d7e1ec 100%);
+  color: #162033;
 }
 
 ::selection {
@@ -54,43 +56,47 @@ html.light body {
 
 html.light .glass-card,
 html.light [class*="bg-white/"] {
-  background-color: rgba(255, 255, 255, 0.78) !important;
+  background-color: rgba(248, 250, 252, 0.74) !important;
 }
 
 html.light [class*="border-white/"] {
-  border-color: rgba(15, 23, 42, 0.11) !important;
+  border-color: rgba(30, 41, 59, 0.14) !important;
 }
 
 html.light .text-white {
-  color: #101828 !important;
+  color: #111827 !important;
 }
 
 html.light [class*="text-white/"] {
-  color: rgba(15, 23, 42, 0.62) !important;
+  color: rgba(31, 41, 55, 0.66) !important;
 }
 
 html.light .bg-ink-950,
 html.light .bg-ink-900,
 html.light .bg-ink-850,
 html.light .bg-ink-800 {
-  background-color: rgba(255, 255, 255, 0.86) !important;
+  background-color: rgba(244, 247, 251, 0.93) !important;
 }
 
 html.light [class*="bg-ink-950/"],
 html.light [class*="bg-ink-900/"],
 html.light [class*="bg-ink-850/"],
 html.light [class*="bg-ink-800/"] {
-  background-color: rgba(255, 255, 255, 0.78) !important;
+  background-color: rgba(244, 247, 251, 0.86) !important;
+}
+
+html.light [class*="bg-black/"] {
+  background-color: rgba(15, 23, 42, 0.055) !important;
 }
 
 html.light .from-ink-900 {
-  --tw-gradient-from: #ffffff var(--tw-gradient-from-position) !important;
-  --tw-gradient-to: rgba(255, 255, 255, 0) var(--tw-gradient-to-position) !important;
+  --tw-gradient-from: #edf2f8 var(--tw-gradient-from-position) !important;
+  --tw-gradient-to: rgba(237, 242, 248, 0) var(--tw-gradient-to-position) !important;
   --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important;
 }
 
 html.light .to-ink-950 {
-  --tw-gradient-to: #eef4ff var(--tw-gradient-to-position) !important;
+  --tw-gradient-to: #dbe4ef var(--tw-gradient-to-position) !important;
 }
 
 html.light input,
@@ -105,7 +111,20 @@ html.light textarea::placeholder {
 
 html.light .shadow-black\/20,
 html.light .shadow-black\/40 {
-  --tw-shadow-color: rgba(15, 23, 42, 0.08) !important;
+  --tw-shadow-color: rgba(15, 23, 42, 0.10) !important;
+}
+
+html.light .shadow-glow {
+  --tw-shadow: 0 0 42px rgba(37, 99, 235, 0.14) !important;
+  --tw-shadow-colored: 0 0 42px var(--tw-shadow-color) !important;
+}
+
+html.light .bg-emeraldx-500 {
+  background-color: #1d4ed8 !important;
+}
+
+html.light .text-ink-950 {
+  color: #f8fafc !important;
 }
 
 /* Custom scrollbar */

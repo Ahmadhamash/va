@@ -2,7 +2,29 @@
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "react-hot-toast";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { directionForLanguage, useLanguageStore, type Language } from "@/store/use-language-store";
+
+function LanguageHydrator() {
+  const { language, setLanguage } = useLanguageStore();
+
+  useEffect(() => {
+    const stored = window.localStorage.getItem("chatter-language");
+    if (stored === "ar" || stored === "en") {
+      setLanguage(stored as Language);
+    }
+  }, [setLanguage]);
+
+  useEffect(() => {
+    const dir = directionForLanguage(language);
+    document.documentElement.lang = language;
+    document.documentElement.dir = dir;
+    document.body.dir = dir;
+    window.localStorage.setItem("chatter-language", language);
+  }, [language]);
+
+  return null;
+}
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
@@ -20,6 +42,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
+      <LanguageHydrator />
       {children}
       <Toaster 
         position="top-center" 

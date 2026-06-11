@@ -21,60 +21,66 @@ import {
   WalletCards,
   X,
   Zap,
+  type LucideIcon,
 } from "lucide-react";
 import { useAuthStore } from "@/store/use-auth-store";
+import { languageLabels, useLanguageStore } from "@/store/use-language-store";
 import { cn } from "@/lib/utils";
 
-const clientNavGroups = [
+type NavKey = keyof typeof languageLabels.ar.nav;
+type NavItem = { href: string; labelKey: NavKey; icon: LucideIcon };
+type NavGroup = { titleKey: NavKey; items: NavItem[] };
+
+const clientNavGroups: NavGroup[] = [
   {
-    title: "الأساسية",
+    titleKey: "basics",
     items: [
-      { href: "/dashboard", label: "الرئيسية", icon: Home },
-      { href: "/inbox", label: "المحادثات", icon: Inbox },
-      { href: "/analytics", label: "التحليلات", icon: BarChart3 },
+      { href: "/dashboard", labelKey: "dashboard", icon: Home },
+      { href: "/inbox", labelKey: "inbox", icon: Inbox },
+      { href: "/analytics", labelKey: "analytics", icon: BarChart3 },
     ],
   },
   {
-    title: "الذكاء الاصطناعي",
+    titleKey: "ai",
     items: [
-      { href: "/agent", label: "الوكيل الذكي", icon: Bot },
-      { href: "/ai-monitor", label: "مراقبة الذكاء", icon: BrainCircuit },
-      { href: "/knowledge", label: "قاعدة المعرفة", icon: WalletCards },
-      { href: "/workflows", label: "الأتمتة والردود", icon: Zap },
+      { href: "/agent", labelKey: "agent", icon: Bot },
+      { href: "/ai-monitor", labelKey: "monitor", icon: BrainCircuit },
+      { href: "/knowledge", labelKey: "knowledge", icon: WalletCards },
+      { href: "/workflows", labelKey: "workflows", icon: Zap },
     ],
   },
   {
-    title: "إدارة العمل",
+    titleKey: "business",
     items: [
-      { href: "/onboarding", label: "ربط القنوات", icon: MessageCircle },
-      { href: "/bookings", label: "الحجوزات", icon: Calendar },
-      { href: "/policies", label: "سياسات العمل", icon: Scale },
-      { href: "/billing", label: "الاشتراك والباقات", icon: CreditCard },
-      { href: "/settings/voice", label: "إعدادات الصوت", icon: Mic },
-      { href: "/settings", label: "الإعدادات العامة", icon: Settings },
+      { href: "/onboarding", labelKey: "onboarding", icon: MessageCircle },
+      { href: "/bookings", labelKey: "bookings", icon: Calendar },
+      { href: "/policies", labelKey: "policies", icon: Scale },
+      { href: "/billing", labelKey: "billing", icon: CreditCard },
+      { href: "/settings/voice", labelKey: "voice", icon: Mic },
+      { href: "/settings", labelKey: "settings", icon: Settings },
     ],
   },
 ];
 
-const adminNavGroups = [
+const adminNavGroups: NavGroup[] = [
   {
-    title: "إدارة المنصة",
+    titleKey: "platform",
     items: [
-      { href: "/admin", label: "لوحة الإشراف", icon: Home },
-      { href: "/team", label: "فريق العمل", icon: Users },
-      { href: "/support", label: "مركز الموظفين", icon: Inbox },
-      { href: "/settings", label: "الإعدادات", icon: Settings },
+      { href: "/admin", labelKey: "admin", icon: Home },
+      { href: "/team", labelKey: "team", icon: Users },
+      { href: "/support", labelKey: "support", icon: Inbox },
+      { href: "/settings", labelKey: "settings", icon: Settings },
     ],
   },
 ];
 
-const supportNavGroups = [
+const supportNavGroups: NavGroup[] = [
   {
-    title: "مركز الموظفين",
+    titleKey: "support",
     items: [
-      { href: "/inbox", label: "المحادثات", icon: Inbox },
-      { href: "/analytics", label: "التحليلات", icon: BarChart3 },
-      { href: "/settings", label: "حسابي", icon: Settings },
+      { href: "/inbox", labelKey: "inbox", icon: Inbox },
+      { href: "/analytics", labelKey: "analytics", icon: BarChart3 },
+      { href: "/settings", labelKey: "account", icon: Settings },
     ],
   },
 ];
@@ -89,6 +95,9 @@ export function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose?: () =>
   const router = useRouter();
   const pathname = usePathname();
   const { user, logout } = useAuthStore();
+  const language = useLanguageStore((state) => state.language);
+  const labels = languageLabels[language];
+  const isRtl = language === "ar";
   const navRef = useRef<HTMLElement>(null);
 
   function handleLogout() {
@@ -108,6 +117,11 @@ export function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose?: () =>
   };
 
   const navGroups = groupsForRole(user?.role);
+  const roleLabel = user?.role === "admin"
+    ? labels.platformAdmin
+    : user?.role === "support_agent"
+      ? labels.supportAgent
+      : user?.business_name || user?.username || labels.setupReady;
 
   return (
     <>
@@ -120,16 +134,22 @@ export function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose?: () =>
 
       <aside
         className={cn(
-          "fixed inset-y-0 right-0 z-50 w-72 border-l border-white/10 bg-ink-950/90 p-5 backdrop-blur-2xl transition-transform duration-300 lg:block lg:translate-x-0",
-          isOpen ? "translate-x-0" : "translate-x-full lg:translate-x-0",
+          "fixed inset-y-0 z-50 w-72 bg-ink-950/90 p-5 backdrop-blur-2xl transition-transform duration-300 lg:block lg:translate-x-0",
+          isRtl ? "right-0 border-l border-white/10" : "left-0 border-r border-white/10",
+          isOpen
+            ? "translate-x-0"
+            : isRtl
+              ? "translate-x-full lg:translate-x-0"
+              : "-translate-x-full lg:translate-x-0",
         )}
       >
         <div className="mb-5 flex items-center justify-between lg:hidden">
-          <span className="text-sm font-semibold text-white/50">القائمة</span>
+          <span className="text-sm font-semibold text-white/50">{labels.menu}</span>
           <button
             type="button"
             onClick={onClose}
             className="rounded-xl border border-white/10 bg-white/5 p-2 text-white/70 transition hover:bg-white/10 hover:text-white"
+            aria-label={labels.closeMenu}
           >
             <X className="h-5 w-5" />
           </button>
@@ -141,34 +161,33 @@ export function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose?: () =>
           </span>
           <span>
             <span className="block text-lg font-semibold text-white">chatter</span>
-            <span className="block text-xs text-white/42">كل قنوات العملاء بمكان واحد</span>
+            <span className="block text-xs text-white/42">{labels.brandHint}</span>
           </span>
         </Link>
 
         <div className="mt-8 rounded-2xl border border-emeraldx-400/20 bg-emeraldx-500/10 p-4">
           <div className="flex items-center gap-2 text-sm font-semibold text-emeraldx-400">
             <Sparkles className="h-4 w-4" />
-            {user?.role === "admin"
-              ? "مدير المنصة"
-              : user?.role === "support_agent"
-                ? "موظف دعم"
-                : user?.business_name || user?.username || "جاهزية الربط"}
+            {roleLabel}
           </div>
-          <p className="mt-3 text-right text-xs leading-5 text-white/50">
-            {user?.role === "support_agent"
-              ? "هنا بتوصل المحادثات اللي تحتاج تدخل بشري."
-              : "الوكيل جاهز للردود الذكية والتحويل البشري وقت الحاجة."}
+          <p className={cn("mt-3 text-xs leading-5 text-white/50", isRtl ? "text-right" : "text-left")}>
+            {user?.role === "support_agent" ? labels.supportSummary : labels.clientSummary}
           </p>
         </div>
 
         <nav
           ref={navRef}
           onScroll={handleScroll}
-          className="mt-6 max-h-[calc(100vh-300px)] space-y-6 overflow-y-auto pb-10 pr-2 scrollbar-none"
+          className={cn(
+            "mt-6 max-h-[calc(100vh-300px)] space-y-6 overflow-y-auto pb-10 scrollbar-none",
+            isRtl ? "pr-2" : "pl-2",
+          )}
         >
           {navGroups.map((group) => (
-            <div key={group.title} className="space-y-2">
-              <div className="px-3 text-[11px] font-bold text-white/30">{group.title}</div>
+            <div key={group.titleKey} className="space-y-2">
+              <div className="px-3 text-[11px] font-bold text-white/30">
+                {labels.nav[group.titleKey]}
+              </div>
               <div className="space-y-1">
                 {group.items.map((item) => {
                   const Icon = item.icon;
@@ -187,7 +206,10 @@ export function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose?: () =>
                       className={cn(
                         "group flex items-center gap-3 rounded-2xl px-3 py-2.5 text-sm font-medium transition",
                         isActive
-                          ? "border-r-2 border-emeraldx-500 bg-emeraldx-500/10 text-white"
+                          ? cn(
+                              "bg-emeraldx-500/10 text-white",
+                              isRtl ? "border-r-2 border-emeraldx-500" : "border-l-2 border-emeraldx-500",
+                            )
                           : "text-white/58 hover:bg-white/8 hover:text-white",
                       )}
                     >
@@ -197,7 +219,7 @@ export function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose?: () =>
                           isActive ? "text-emeraldx-400" : "text-white/38 group-hover:text-emeraldx-400",
                         )}
                       />
-                      {item.label}
+                      {labels.nav[item.labelKey]}
                     </Link>
                   );
                 })}
@@ -214,7 +236,7 @@ export function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose?: () =>
               className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-sm font-medium text-red-400/70 transition hover:bg-red-500/10 hover:text-red-400"
             >
               <LogOut className="h-5 w-5" />
-              تسجيل الخروج
+              {labels.logout}
             </button>
           </div>
         )}

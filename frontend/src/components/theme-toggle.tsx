@@ -3,9 +3,12 @@
 import { useEffect, useState } from "react";
 import { Moon, Sun } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { languageLabels, useLanguageStore } from "@/store/use-language-store";
 
 export function ThemeToggle() {
   const [theme, setTheme] = useState<"dark" | "light">("dark");
+  const language = useLanguageStore((state) => state.language);
+  const labels = languageLabels[language];
 
   useEffect(() => {
     const stored = window.localStorage.getItem("chatter-theme") || window.localStorage.getItem("masar-theme");
@@ -26,9 +29,9 @@ export function ThemeToggle() {
   }
 
   return (
-    <Button variant="secondary" size="sm" onClick={toggleTheme} aria-label="تبديل الوضع الليلي والنهاري">
+    <Button variant="secondary" size="sm" onClick={toggleTheme} aria-label={labels.toggleTheme}>
       {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-      <span className="hidden sm:inline">{theme === "dark" ? "نهاري" : "ليلي"}</span>
+      <span className="hidden sm:inline">{theme === "dark" ? labels.lightMode : labels.darkMode}</span>
     </Button>
   );
 }

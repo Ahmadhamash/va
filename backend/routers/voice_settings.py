@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, s
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.inspection import inspect as sqlalchemy_inspect
 from sqlalchemy.orm import selectinload
 
 from config import settings as env_settings
@@ -84,6 +85,7 @@ ELEVENLABS_ARABIC_VOICES = [
 
 
 ELEVENLABS_API_BASE = "https://api.elevenlabs.io/v1"
+DEFAULT_ARABIC_SAMPLE = "\u0645\u0631\u062d\u0628\u0627\u060c \u0643\u064a\u0641 \u0628\u0642\u062f\u0631 \u0623\u0633\u0627\u0639\u062f\u0643 \u0627\u0644\u064a\u0648\u0645\u061f"
 
 
 def _elevenlabs_key() -> str:
@@ -127,6 +129,21 @@ DIALECT_PRIORITY = {
     "Moroccan": 8,
     "Arabic": 9,
 }
+
+DIALECT_SAMPLES.update(
+    {
+        "Jordanian / Levantine": DEFAULT_ARABIC_SAMPLE,
+        "Palestinian / Levantine": "\u0623\u0647\u0644\u0627 \u0648\u0633\u0647\u0644\u0627\u060c \u0627\u062d\u0643\u064a\u0644\u064a \u0634\u0648 \u0628\u062f\u0643 \u0648\u0623\u0646\u0627 \u0628\u0633\u0627\u0639\u062f\u0643.",
+        "Syrian / Levantine": "\u0623\u0647\u0644\u0627 \u0641\u064a\u0643\u060c \u062e\u0628\u0631\u0646\u064a \u0643\u064a\u0641 \u0641\u064a\u0646\u064a \u0633\u0627\u0639\u062f\u0643 \u0627\u0644\u064a\u0648\u0645\u061f",
+        "Lebanese / Levantine": "\u0623\u0647\u0644\u0627\u060c \u0643\u064a\u0641 \u0641\u064a\u064a \u0633\u0627\u0639\u062f\u0643 \u0627\u0644\u064a\u0648\u0645\u061f",
+        "Egyptian": "\u0623\u0647\u0644\u0627 \u0628\u064a\u0643\u060c \u062a\u062d\u0628 \u0623\u0633\u0627\u0639\u062f\u0643 \u0641\u064a \u0625\u064a\u0647\u061f",
+        "Gulf": "\u062d\u064a\u0627\u0643 \u0627\u0644\u0644\u0647\u060c \u0643\u064a\u0641 \u0623\u0642\u062f\u0631 \u0623\u062e\u062f\u0645\u0643\u061f",
+        "Saudi / Gulf": "\u062d\u064a\u0627\u0643 \u0627\u0644\u0644\u0647\u060c \u0623\u0628\u0634\u0631 \u0643\u064a\u0641 \u0623\u0642\u062f\u0631 \u0623\u062e\u062f\u0645\u0643\u061f",
+        "Iraqi": "\u0647\u0644\u0627 \u0628\u064a\u0643\u060c \u0634\u0644\u0648\u0646 \u0623\u0643\u062f\u0631 \u0623\u0633\u0627\u0639\u062f\u0643\u061f",
+        "Moroccan": "\u0645\u0631\u062d\u0628\u0627\u060c \u0643\u064a\u0641\u0627\u0634 \u0646\u0642\u062f\u0631 \u0646\u0639\u0627\u0648\u0646\u0643 \u0627\u0644\u064a\u0648\u0645\u061f",
+        "Arabic": "\u0645\u0631\u062d\u0628\u0627\u060c \u0643\u064a\u0641 \u0623\u0642\u062f\u0631 \u0623\u0633\u0627\u0639\u062f\u0643 \u0627\u0644\u064a\u0648\u0645\u061f",
+    }
+)
 
 
 # ── Schemas ──────────────────────────────────────────────────────────────
@@ -173,13 +190,46 @@ class VoiceSettingsOut(BaseModel):
 
 
 # ── Endpoints ────────────────────────────────────────────────────────────
+def _user_id(user: User) -> uuid.UUID:
+    try:
+        return user.id
+    except Exception:
+        identity = sqlalchemy_inspect(user).identity
+        if identity:
+            return identity[0]
+        raise
+
+
+def _user_is_admin(user: User) -> bool:
+    try:
+        return bool(user.is_admin)
+    except Exception:
+        return user.__dict__.get("role") == "admin"
+
+
+def _starter_elevenlabs_voices() -> list[dict]:
+    return [
+        {
+            **voice,
+            "sample_text": DIALECT_SAMPLES.get(
+                voice.get("dialect"), DEFAULT_ARABIC_SAMPLE
+            ),
+            "source": "starter",
+            "source_label": "ElevenLabs starter voices",
+            "score": 0,
+        }
+        for voice in ELEVENLABS_ARABIC_VOICES
+    ]
+
+
 @router.get("/")
 async def get_voice_settings(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Get voice settings for the current business."""
-    settings = await _get_or_create(current_user.id, db)
+    user_id = _user_id(current_user)
+    settings = await _get_or_create(user_id, db)
 
     # Determine actual provider names
     elevenlabs_available = bool(_elevenlabs_key())
@@ -210,14 +260,18 @@ async def list_voice_options(
     current_user: User = Depends(get_current_user),
 ):
     """List voice options for the dashboard."""
+    user_id = _user_id(current_user)
     elevenlabs_key = _elevenlabs_key()
     elevenlabs_voices, elevenlabs_meta = await _load_elevenlabs_arabic_voices(
-        elevenlabs_key, current_user.id
+        elevenlabs_key, user_id
+    )
+    elevenlabs_available = bool(elevenlabs_key) and not elevenlabs_meta.get(
+        "elevenlabs_missing_permissions"
     )
     return {
         "openai": OPENAI_VOICES,
         "elevenlabs": elevenlabs_voices,
-        "elevenlabs_available": bool(elevenlabs_key),
+        "elevenlabs_available": elevenlabs_available,
         **elevenlabs_meta,
     }
 
@@ -229,10 +283,13 @@ async def update_voice_settings(
     db: AsyncSession = Depends(get_db),
 ):
     """Update voice settings for the current business."""
-    settings = await _get_or_create(current_user.id, db)
+    user_id = _user_id(current_user)
+    settings = await _get_or_create(user_id, db)
 
     # Subscription checks / Fallback
-    has_paid_subscription = await _voice_cloning_allowed(current_user, db)
+    has_paid_subscription = await _voice_cloning_allowed(
+        user_id, db, is_admin=_user_is_admin(current_user)
+    )
 
     # Check incoming updates
     if body.tts_provider == "elevenlabs" and not has_paid_subscription:
@@ -303,7 +360,8 @@ async def test_voice(
     """Test the voice pipeline with a sample Arabic phrase."""
     from services.voice import VoiceService
 
-    settings = await _get_or_create(current_user.id, db)
+    user_id = _user_id(current_user)
+    settings = await _get_or_create(user_id, db)
 
     try:
         voice_service = await VoiceService.from_db(
@@ -312,7 +370,7 @@ async def test_voice(
         test_text = "مرحبا! كيف بقدر أساعدك اليوم؟"
         audio_url = await voice_service.synthesize_and_save(
             test_text,
-            current_user.id,
+            user_id,
             voice=settings.preferred_voice,
             speed=settings.speech_speed,
             output_format=settings.audio_format,
@@ -342,7 +400,8 @@ async def preview_voice(
     """Generate a short preview using the selected voice without saving settings."""
     from services.voice import VoiceService
 
-    settings = await _get_or_create(current_user.id, db)
+    user_id = _user_id(current_user)
+    settings = await _get_or_create(user_id, db)
     provider = body.tts_provider or settings.tts_provider
     if provider == "elevenlabs" and not _elevenlabs_key():
         raise HTTPException(
@@ -358,7 +417,7 @@ async def preview_voice(
         voice_service = await VoiceService.from_db(db, tts_provider=provider)
         audio_url = await voice_service.synthesize_and_save(
             text,
-            current_user.id,
+            user_id,
             voice=body.preferred_voice or settings.preferred_voice,
             speed=body.speech_speed or settings.speech_speed,
             output_format=body.audio_format or settings.audio_format,
@@ -389,13 +448,16 @@ async def clone_voice(
     db: AsyncSession = Depends(get_db),
 ):
     """Create an ElevenLabs cloned voice for a paid account."""
+    user_id = _user_id(current_user)
     api_key = _elevenlabs_key()
     if not api_key:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="ELEVENLABS_API_KEY is not configured on the server.",
         )
-    if not await _voice_cloning_allowed(current_user, db):
+    if not await _voice_cloning_allowed(
+        user_id, db, is_admin=_user_is_admin(current_user)
+    ):
         raise HTTPException(
             status_code=status.HTTP_402_PAYMENT_REQUIRED,
             detail="Voice cloning is available on paid plans only.",
@@ -430,7 +492,7 @@ async def clone_voice(
         "name": name.strip(),
         "description": description.strip(),
         "labels": json.dumps(
-            {"source": "chatter", "user_id": str(current_user.id)},
+            {"source": "chatter", "user_id": str(user_id)},
             ensure_ascii=False,
         ),
     }
@@ -470,9 +532,11 @@ async def clone_voice(
             detail="ElevenLabs did not return a voice_id.",
         )
 
-    settings = await _get_or_create(current_user.id, db)
+    settings = await _get_or_create(user_id, db)
     settings.tts_provider = "elevenlabs"
     settings.preferred_voice = f"el_{voice_id}"
+    preferred_voice = settings.preferred_voice
+    tts_provider = settings.tts_provider
     config = dict(settings.tts_config or {})
     config.update(
         {
@@ -488,20 +552,22 @@ async def clone_voice(
     return {
         "success": True,
         "voice_id": voice_id,
-        "preferred_voice": settings.preferred_voice,
-        "tts_provider": settings.tts_provider,
+        "preferred_voice": preferred_voice,
+        "tts_provider": tts_provider,
     }
 
 
-async def _voice_cloning_allowed(user: User, db: AsyncSession) -> bool:
-    if user.is_admin:
+async def _voice_cloning_allowed(
+    user_id: uuid.UUID, db: AsyncSession, *, is_admin: bool = False
+) -> bool:
+    if is_admin:
         return True
 
     result = await db.execute(
         select(UserSubscription)
         .options(selectinload(UserSubscription.tier))
         .where(
-            UserSubscription.user_id == user.id,
+            UserSubscription.user_id == user_id,
             UserSubscription.status == "active",
         )
     )
@@ -595,11 +661,11 @@ async def _load_elevenlabs_arabic_voices(
             "elevenlabs_missing_permissions": missing_permissions,
         }
 
-    # Do not pretend generic premade/library voices are Arabic.
-    return [], {
+    starter_voices = _starter_elevenlabs_voices()
+    return starter_voices, {
         "elevenlabs_dynamic": False,
         "elevenlabs_message": "; ".join(dict.fromkeys(messages))
-        or "No Arabic ElevenLabs voices were found for this API key.",
+        or "Using starter ElevenLabs voices because no Arabic-labelled voices were found.",
         "elevenlabs_missing_permissions": missing_permissions,
     }
 
@@ -654,6 +720,8 @@ def _map_elevenlabs_voice(voice: dict, source: str, user_id: uuid.UUID) -> dict 
 
 def _is_arabic_voice(voice: dict) -> bool:
     fields = _voice_search_text(voice)
+    if "\u0627\u0644\u0639\u0631\u0628\u064a\u0629" in fields:
+        return True
     if "ar-" in fields or " arabic" in f" {fields}" or "العربية" in fields:
         return True
     if str(voice.get("language") or "").lower() == "ar":
