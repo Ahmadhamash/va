@@ -58,6 +58,12 @@ class Settings(BaseSettings):
     # Voice / TTS
     ELEVENLABS_API_KEY: str = ""
 
+    # Vapi voice calls
+    VAPI_API_KEY: str = ""
+    VAPI_BASE_URL: str = "https://api.vapi.ai"
+    VAPI_WEBHOOK_BEARER_TOKEN: str = ""
+    VAPI_DEFAULT_ASSISTANT_ID: str = ""
+
     # Meta OAuth for Facebook Messenger / Instagram direct connection
     META_APP_ID: str = ""
     META_APP_SECRET: str = ""

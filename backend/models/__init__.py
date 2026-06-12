@@ -18,6 +18,13 @@ from models.settings import AppSettings
 from models.user import User
 from models.variant import ItemVariant
 from models.verification_log import AIVerificationLog
+from models.vapi_voice import (
+    VapiCallSettings,
+    VoiceCall,
+    VoiceCallEvent,
+    VoiceLead,
+    VoiceToolCall,
+)
 from models.voice_settings import VoiceSettings
 from models.workflow import BusinessWorkflow
 
@@ -45,6 +52,11 @@ __all__ = [
     "VoiceSettings",
     "AIPersonaSettings",
     "AIVerificationLog",
+    "VapiCallSettings",
+    "VoiceCall",
+    "VoiceCallEvent",
+    "VoiceToolCall",
+    "VoiceLead",
     "MessageDeliveryLog",
     "ProductCandidate",
     "SocialPostMapping",
