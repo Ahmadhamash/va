@@ -45,6 +45,7 @@ export const languageLabels = {
       policies: "سياسات العمل",
       billing: "الاشتراك والباقات",
       voice: "إعدادات الصوت",
+      calls: "المكالمات الصوتية",
       settings: "الإعدادات العامة",
       platform: "إدارة المنصة",
       admin: "لوحة الإشراف",
@@ -87,6 +88,7 @@ export const languageLabels = {
       policies: "Business policies",
       billing: "Billing and plans",
       voice: "Voice settings",
+      calls: "Voice calls",
       settings: "General settings",
       platform: "Platform",
       admin: "Admin dashboard",
@@ -98,6 +100,7 @@ export const languageLabels = {
 } as const;
 
 const pageRoutes = [
+  "/settings/calls",
   "/settings/voice",
   "/ai-monitor",
   "/dashboard",
@@ -172,6 +175,10 @@ const pageLabels: Record<Language, Record<PageRoute, PageMeta>> = {
       title: "إعدادات الصوت",
       subtitle: "أصوات OpenAI وElevenLabs مع معاينة حقيقية قبل الحفظ.",
     },
+    "/settings/calls": {
+      title: "المكالمات الصوتية",
+      subtitle: "إعداد مساعد المكالمات وربط Vapi مع بيانات المتجر.",
+    },
     "/settings": {
       title: "الإعدادات",
       subtitle: "إدارة الملف التجاري، التنبيهات، الاشتراك، وضوابط الأمان.",
@@ -237,6 +244,10 @@ const pageLabels: Record<Language, Record<PageRoute, PageMeta>> = {
     "/settings/voice": {
       title: "Voice settings",
       subtitle: "OpenAI and ElevenLabs voices with real previews before saving.",
+    },
+    "/settings/calls": {
+      title: "Voice calls",
+      subtitle: "Configure the call assistant and connect Vapi to store data.",
     },
     "/settings": {
       title: "Settings",
