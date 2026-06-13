@@ -225,13 +225,15 @@ async def sync_reply(
     external_user_id: str,
     text: str,
     db: AsyncSession,
+    *,
+    channel: str | None = None,
 ) -> str:
     """Synchronous answer for the generic webhook (request/response)."""
     client = await _client_for(integration, db)
     if client is None:
         return "This assistant is currently unavailable."
     session = await _get_or_create_session(
-        client, integration.platform, external_user_id, db
+        client, channel or integration.platform, external_user_id, db
     )
     result = await process_message(
         user_message=text,

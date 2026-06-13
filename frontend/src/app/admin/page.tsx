@@ -26,7 +26,8 @@ import {
   Coins,
   TrendingUp,
   Calculator,
-  Sliders
+  Sliders,
+  Copy
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
@@ -90,6 +91,24 @@ interface BusinessTypeOption {
   group?: string;
 }
 
+type ManyChatChannelKey = "facebook" | "instagram";
+
+interface ManyChatSetupChannel {
+  label: string;
+  request_url: string;
+  body: Record<string, unknown>;
+}
+
+interface ManyChatWebhookSetup {
+  method: string;
+  block_type: string;
+  response_format: string;
+  webhook_url: string;
+  webhook_secret: string;
+  headers: Record<string, string>;
+  channels: Record<ManyChatChannelKey, ManyChatSetupChannel>;
+}
+
 const fallbackBusinessTypes: BusinessTypeOption[] = [
   { key: "retail", label: "Retail / Ecommerce", group: "Commerce" },
   { key: "restaurant", label: "Restaurant / Cafe", group: "Food" },
@@ -150,6 +169,8 @@ export default function AdminDashboardPage() {
 
   // Notification notices
   const [notice, setNotice] = useState<{ message: string; type: "success" | "error" } | null>(null);
+  const [manychatSetup, setManychatSetup] = useState<ManyChatWebhookSetup | null>(null);
+  const [manychatSetupClient, setManychatSetupClient] = useState<ClientData | null>(null);
 
   // Edit Client Prompt States
   const [editingClientPrompt, setEditingClientPrompt] = useState<ClientData | null>(null);
@@ -168,6 +189,35 @@ export default function AdminDashboardPage() {
     setNotice({ message, type });
     setTimeout(() => setNotice(null), 5000);
   };
+
+  const copyToClipboard = async (text: string, successMessage?: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      showNotice(successMessage || (isRtl ? "تم النسخ إلى الحافظة." : "Copied to clipboard."));
+    } catch (err) {
+      console.error("Clipboard copy failed", err);
+      showNotice(isRtl ? "تعذر النسخ إلى الحافظة." : "Could not copy to clipboard.", "error");
+    }
+  };
+
+  const prettyJson = (value: unknown) => JSON.stringify(value, null, 2);
+
+  const buildManychatChannelText = (setup: ManyChatWebhookSetup, channelKey: ManyChatChannelKey) => {
+    const channel = setup.channels[channelKey];
+    return [
+      `ManyChat ${channel.label}`,
+      `Block: Dynamic Block`,
+      `Method: ${setup.method || "POST"}`,
+      `Request URL: ${channel.request_url}`,
+      `Headers:\n${prettyJson(setup.headers)}`,
+      `Body:\n${prettyJson(channel.body)}`,
+    ].join("\n\n");
+  };
+
+  const buildManychatSetupText = (setup: ManyChatWebhookSetup) =>
+    (["facebook", "instagram"] as ManyChatChannelKey[])
+      .map((channelKey) => buildManychatChannelText(setup, channelKey))
+      .join("\n\n---\n\n");
 
   const handleSaveClientPrompt = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -460,7 +510,7 @@ export default function AdminDashboardPage() {
   const handleGenerateManychatWebhook = async (clientId: string) => {
     if (!token) return;
     
-    showNotice(isRtl ? `⏳ جاري توليد رابط Webhook لمنصة Manychat...` : `⏳ Generating Manychat Webhook URL...`);
+    showNotice(isRtl ? `⏳ جاري تجهيز إعدادات ManyChat...` : `⏳ Preparing ManyChat setup...`);
 
     try {
       const res = await fetch(`/api/admin/clients/${clientId}/manychat-webhook`, {
@@ -471,8 +521,13 @@ export default function AdminDashboardPage() {
       });
       const data = await res.json();
       if (res.ok && data.webhook_url) {
-        navigator.clipboard.writeText(data.webhook_url);
-        showNotice(isRtl ? "✅ تم إنشاء الرابط ونسخه إلى الحافظة بنجاح!" : "✅ Webhook URL copied to clipboard!");
+        const setup = data as ManyChatWebhookSetup;
+        setManychatSetup(setup);
+        setManychatSetupClient(clients.find((client) => client.id === clientId) || null);
+        await copyToClipboard(
+          setup.channels?.facebook?.request_url || setup.webhook_url,
+          isRtl ? "تم تجهيز الإعدادات ونسخ رابط فيسبوك." : "Setup ready. Facebook URL copied."
+        );
       } else {
         showNotice(
           isRtl 
@@ -703,7 +758,7 @@ export default function AdminDashboardPage() {
                                   onClick={() => handleGenerateManychatWebhook(client.id)}
                                 >
                                   <Smartphone className="h-3.5 w-3.5 mx-1" />
-                                  {isRtl ? "نسخ Webhook" : "Copy Webhook"}
+                                  {isRtl ? "إعداد ManyChat" : "ManyChat Setup"}
                                 </Button>
                                 <Button
                                   size="sm"
@@ -866,7 +921,7 @@ export default function AdminDashboardPage() {
                                         size="sm"
                                         variant="ghost"
                                         className="text-violet-400 hover:bg-violet-400/10 py-1 h-auto text-[10px] px-2 flex gap-1 items-center"
-                                        title={isRtl ? "نسخ رابط Manychat Webhook" : "Copy Manychat Webhook URL"}
+                                        title={isRtl ? "فتح حزمة إعداد ManyChat" : "Open ManyChat setup kit"}
                                         onClick={() => handleGenerateManychatWebhook(client.id)}
                                       >
                                         <Smartphone className="h-3 w-3" />
@@ -1323,6 +1378,149 @@ export default function AdminDashboardPage() {
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* MODAL: ManyChat Setup Kit */}
+      {manychatSetup && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className={cn("w-full max-w-5xl max-h-[90vh] overflow-y-auto rounded-3xl border border-white/10 bg-ink-950 p-6 space-y-5", isRtl ? "text-right" : "text-left")} dir={isRtl ? "rtl" : "ltr"}>
+            <div className={cn("flex flex-col gap-3 md:flex-row md:items-start md:justify-between", isRtl ? "md:flex-row-reverse" : "")}>
+              <div>
+                <h4 className={cn("text-lg font-bold text-white flex items-center gap-2", isRtl ? "justify-end" : "justify-start")}>
+                  <Smartphone className="h-5 w-5 text-violet-300" />
+                  <span>{isRtl ? "حزمة إعداد ManyChat" : "ManyChat Setup Kit"}</span>
+                </h4>
+                <p className="mt-1 text-xs text-white/50">
+                  {manychatSetupClient
+                    ? (isRtl ? `العميل: ${manychatSetupClient.business_name || manychatSetupClient.username}` : `Client: ${manychatSetupClient.business_name || manychatSetupClient.username}`)
+                    : (isRtl ? "جاهزة للنسخ داخل ManyChat." : "Ready to copy into ManyChat.")}
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  className="text-xs"
+                  onClick={() => copyToClipboard(
+                    buildManychatSetupText(manychatSetup),
+                    isRtl ? "تم نسخ حزمة الإعداد كاملة." : "Full setup kit copied."
+                  )}
+                >
+                  <Copy className="h-3.5 w-3.5 mx-1" />
+                  {isRtl ? "نسخ الكل" : "Copy All"}
+                </Button>
+                <Button size="sm" variant="ghost" className="text-xs" onClick={() => setManychatSetup(null)}>
+                  {isRtl ? "إغلاق" : "Close"}
+                </Button>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-white/10 bg-white/[0.025] p-4">
+              <div className={cn("flex flex-wrap items-center gap-2", isRtl ? "justify-between" : "justify-between")}>
+                <div>
+                  <div className="text-xs font-bold text-white/70">Headers</div>
+                  <div className="text-[11px] text-white/40">{isRtl ? "ضعها في إعدادات الطلب." : "Add these to the request settings."}</div>
+                </div>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-8 text-xs text-cyan-300"
+                  onClick={() => copyToClipboard(
+                    prettyJson(manychatSetup.headers),
+                    isRtl ? "تم نسخ الهيدرز." : "Headers copied."
+                  )}
+                >
+                  <Copy className="h-3.5 w-3.5 mx-1" />
+                  {isRtl ? "نسخ" : "Copy"}
+                </Button>
+              </div>
+              <Textarea
+                dir="ltr"
+                readOnly
+                value={prettyJson(manychatSetup.headers)}
+                className="mt-3 min-h-24 resize-none border-white/10 bg-black/30 font-mono text-xs text-left"
+              />
+            </div>
+
+            <div className="grid gap-4 lg:grid-cols-2">
+              {(["facebook", "instagram"] as ManyChatChannelKey[]).map((channelKey) => {
+                const channel = manychatSetup.channels?.[channelKey];
+                if (!channel) return null;
+                return (
+                  <div key={channelKey} className="rounded-2xl border border-white/10 bg-white/[0.025] p-4 space-y-4">
+                    <div className={cn("flex items-center justify-between gap-2", isRtl ? "flex-row-reverse" : "")}>
+                      <div>
+                        <div className="text-sm font-bold text-white">{channel.label}</div>
+                        <div className="text-[11px] uppercase tracking-wide text-violet-300">{manychatSetup.method || "POST"} · Dynamic Block</div>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-8 text-xs text-violet-300"
+                        onClick={() => copyToClipboard(
+                          buildManychatChannelText(manychatSetup, channelKey),
+                          isRtl ? "تم نسخ إعدادات القناة." : "Channel setup copied."
+                        )}
+                      >
+                        <Copy className="h-3.5 w-3.5 mx-1" />
+                        {isRtl ? "نسخ القناة" : "Copy Channel"}
+                      </Button>
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className={cn("flex items-center justify-between gap-2", isRtl ? "flex-row-reverse" : "")}>
+                        <label className="text-xs font-semibold text-white/60">Request URL</label>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 px-2 text-[10px] text-cyan-300"
+                          onClick={() => copyToClipboard(
+                            channel.request_url,
+                            isRtl ? "تم نسخ الرابط." : "URL copied."
+                          )}
+                        >
+                          <Copy className="h-3 w-3 mx-1" />
+                          {isRtl ? "نسخ" : "Copy"}
+                        </Button>
+                      </div>
+                      <Input dir="ltr" readOnly value={channel.request_url} className="font-mono text-xs text-left" />
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className={cn("flex items-center justify-between gap-2", isRtl ? "flex-row-reverse" : "")}>
+                        <label className="text-xs font-semibold text-white/60">JSON Body</label>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 px-2 text-[10px] text-cyan-300"
+                          onClick={() => copyToClipboard(
+                            prettyJson(channel.body),
+                            isRtl ? "تم نسخ جسم الطلب." : "Body copied."
+                          )}
+                        >
+                          <Copy className="h-3 w-3 mx-1" />
+                          {isRtl ? "نسخ" : "Copy"}
+                        </Button>
+                      </div>
+                      <Textarea
+                        dir="ltr"
+                        readOnly
+                        value={prettyJson(channel.body)}
+                        className="min-h-64 resize-none border-white/10 bg-black/30 font-mono text-xs text-left"
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className={cn("rounded-2xl border border-violet-400/15 bg-violet-400/5 p-4 text-xs text-white/55", isRtl ? "text-right" : "text-left")}>
+              {isRtl
+                ? "في ManyChat استخدم Content Node يحتوي Dynamic Block، نوع الطلب POST، ثم الصق رابط القناة والهيدرز وجسم الطلب المناسب."
+                : "In ManyChat, use a Content Node with a Dynamic Block, set the request method to POST, then paste the channel URL, headers, and matching body."}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* MODAL 1: Create Client Account */}
       {showCreateModal && (

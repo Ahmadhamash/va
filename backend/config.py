@@ -69,6 +69,12 @@ class Settings(BaseSettings):
     # WhatsApp Cloud API (disabled until credentials are added)
     WHATSAPP_VERIFY_TOKEN: str = ""
 
+    # OpenWA / WhatsApp Web bridge
+    OPENWA_API_URL: str = "http://openwa:2785"
+    OPENWA_API_KEY: str = ""
+    OPENWA_WEBHOOK_SECRET: str = ""
+    OPENWA_ALLOW_GROUPS: bool = False
+
     # Make.com API
     MAKE_API_TOKEN: str = ""
     MAKE_TEAM_ID: str = ""

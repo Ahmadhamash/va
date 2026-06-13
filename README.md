@@ -132,6 +132,12 @@ See [`.env.example`](.env.example). Key ones:
 - Public, routed by unguessable `public_id`:
   - `GET|POST /api/webhooks/meta/{public_id}` — Meta verify + Messenger/IG events
   - `POST /api/webhooks/generic/{public_id}` — `{sender_id, message}` → `{reply}`
+  - `POST /api/webhooks/manychat/{public_id}?platform=facebook|instagram` —
+    ManyChat Dynamic Block v2 response for Facebook Messenger and Instagram DM.
+    Send `X-Webhook-Secret`, `subscriber_id`, and `text`/`last_input_text`.
+  - `POST /api/webhooks/openwa/{public_id}` — OpenWA / WhatsApp Web inbound
+    bridge. Configure OpenWA session webhooks for `message.received`; the backend
+    answers with AI and sends the reply back through OpenWA.
   - `POST /api/webhooks/widget/{public_id}/message` + `GET /api/widget/{public_id}.js`
     (embeddable chat bubble)
 

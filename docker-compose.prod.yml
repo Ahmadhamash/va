@@ -57,6 +57,10 @@ services:
       APP_ENV: production
       WEB_CONCURRENCY: ${WEB_CONCURRENCY:-4}
       CORS_ORIGINS: ${CORS_ORIGINS}
+      OPENWA_API_URL: http://openwa:2785
+      OPENWA_API_KEY: ${OPENWA_API_KEY}
+      OPENWA_WEBHOOK_SECRET: ${OPENWA_WEBHOOK_SECRET}
+      OPENWA_ALLOW_GROUPS: ${OPENWA_ALLOW_GROUPS:-false}
     volumes:
       - uploads_data:/app/uploads
     expose:
@@ -91,6 +95,39 @@ services:
       BACKEND_URL: http://backend:8000
     expose:
       - "3000"
+
+  openwa:
+    build:
+      context: ./OpenWA-main
+      dockerfile: Dockerfile
+    restart: always
+    environment:
+      NODE_ENV: production
+      PORT: 2785
+      LOG_LEVEL: info
+      DATABASE_TYPE: sqlite
+      DATABASE_NAME: /app/data/openwa.sqlite
+      DATABASE_SYNCHRONIZE: "false"
+      ENGINE_TYPE: whatsapp-web.js
+      SESSION_DATA_PATH: /app/data/sessions
+      PUPPETEER_HEADLESS: "true"
+      PUPPETEER_ARGS: --no-sandbox,--disable-setuid-sandbox,--disable-dev-shm-usage,--disable-gpu
+      STORAGE_TYPE: local
+      STORAGE_LOCAL_PATH: /app/data/media
+      REDIS_ENABLED: "false"
+      QUEUE_ENABLED: "false"
+      PLUGINS_ENABLED: "true"
+      PLUGINS_DIR: /app/data/plugins
+      API_MASTER_KEY: ${OPENWA_API_KEY}
+      WEBHOOK_TIMEOUT: 10000
+      WEBHOOK_MAX_RETRIES: 3
+      WEBHOOK_RETRY_DELAY: 5000
+    volumes:
+      - openwa_data:/app/data
+    expose:
+      - "2785"
+    ports:
+      - "127.0.0.1:2785:2785"
 
   caddy:
     image: caddy:2-alpine
@@ -138,3 +175,4 @@ volumes:
   caddy_data:
   caddy_config:
   backups_data:
+  openwa_data:

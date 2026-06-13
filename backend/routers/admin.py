@@ -45,6 +45,13 @@ class AIAutoReplyUpdate(BaseModel):
     enabled: bool
 
 
+class OpenWASetupRequest(BaseModel):
+    openwa_api_url: str | None = None
+    openwa_api_key: str | None = None
+    openwa_session_id: str | None = None
+    allow_groups: bool = False
+
+
 def _mask_key(key: str | None) -> str:
     if not key:
         return ""
@@ -52,6 +59,17 @@ def _mask_key(key: str | None) -> str:
     if len(key) <= 8:
         return "•" * len(key)
     return f"{key[:3]}…{key[-4:]}"
+
+
+def _public_base_url() -> str:
+    domain = (env_settings.DOMAIN or "").strip().rstrip("/")
+    if not domain:
+        return "http://localhost:8000"
+    if domain.startswith(("http://", "https://")):
+        return domain
+    local_hosts = ("localhost", "127.0.0.1", "0.0.0.0")
+    scheme = "http" if domain.startswith(local_hosts) else "https"
+    return f"{scheme}://{domain}"
 
 
 async def _get_client(client_id: uuid.UUID, db: AsyncSession) -> User:
@@ -461,11 +479,10 @@ async def generate_manychat_webhook(
     db: AsyncSession = Depends(get_db),
 ):
     import secrets
-    from config import settings
 
     client = await _get_client(client_id, db)
 
-    # Find or create a generic webhook for this client
+    # Find or create the shared ManyChat webhook for this client.
     result = await db.execute(
         select(ChannelIntegration).where(
             ChannelIntegration.user_id == client.id,
@@ -474,26 +491,147 @@ async def generate_manychat_webhook(
     )
     integration = result.scalar_one_or_none()
 
+    credentials = dict((integration.credentials or {}) if integration else {})
+    webhook_secret = credentials.get("webhook_secret") or secrets.token_urlsafe(24)
+    credentials["webhook_secret"] = webhook_secret
+
     if not integration:
         integration = ChannelIntegration(
             user_id=client.id,
             platform="webhook",
             public_id=secrets.token_urlsafe(24),
-            credentials={"webhook_secret": secrets.token_urlsafe(24)},
+            credentials=credentials,
             is_active=True
         )
         db.add(integration)
-        await db.commit()
-        await db.refresh(integration)
+    else:
+        integration.credentials = credentials
 
-    # Construct the webhook URL dynamically based on domain or config
-    domain = settings.DOMAIN or "localhost:8000"
-    scheme = "https" if "localhost" not in domain else "http"
-    webhook_url = f"{scheme}://{domain}/api/webhooks/manychat/{integration.public_id}"
+    await db.commit()
+    await db.refresh(integration)
+
+    webhook_url = f"{_public_base_url()}/api/webhooks/manychat/{integration.public_id}"
+    headers = {
+        "Content-Type": "application/json",
+        "X-Webhook-Secret": webhook_secret,
+    }
+    request_bodies = {
+        "facebook": {
+            "platform": "facebook",
+            "subscriber_id": "{{user_id}}",
+            "text": "{{last_input_text}}",
+            "contact": {
+                "name": "{{name}}",
+                "first_name": "{{first_name}}",
+                "last_name": "{{last_name}}",
+                "live_chat_url": "{{live_chat_url}}",
+            },
+        },
+        "instagram": {
+            "platform": "instagram",
+            "subscriber_id": "{{user_id}}",
+            "text": "{{last_input_text}}",
+            "contact": {
+                "name": "{{name}}",
+                "first_name": "{{first_name}}",
+                "last_name": "{{last_name}}",
+                "live_chat_url": "{{live_chat_url}}",
+            },
+        },
+    }
 
     return {
-        "message": "Webhook generated successfully", 
-        "webhook_url": webhook_url
+        "message": "ManyChat setup generated successfully",
+        "method": "POST",
+        "block_type": "dynamic_block",
+        "response_format": "manychat_dynamic_block_v2",
+        "webhook_url": webhook_url,
+        "webhook_secret": webhook_secret,
+        "headers": headers,
+        "channels": {
+            "facebook": {
+                "label": "Facebook Messenger",
+                "request_url": f"{webhook_url}?platform=facebook",
+                "body": request_bodies["facebook"],
+            },
+            "instagram": {
+                "label": "Instagram DM",
+                "request_url": f"{webhook_url}?platform=instagram",
+                "body": request_bodies["instagram"],
+            },
+        },
+    }
+
+
+@router.post("/clients/{client_id}/openwa-webhook")
+async def generate_openwa_webhook(
+    client_id: uuid.UUID,
+    payload: OpenWASetupRequest | None = None,
+    _: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    import secrets
+
+    client = await _get_client(client_id, db)
+    result = await db.execute(
+        select(ChannelIntegration).where(
+            ChannelIntegration.user_id == client.id,
+            ChannelIntegration.platform == "webhook",
+        )
+    )
+    integration = result.scalar_one_or_none()
+
+    credentials = dict((integration.credentials or {}) if integration else {})
+    credentials.setdefault("webhook_secret", secrets.token_urlsafe(24))
+    credentials["openwa_webhook_secret"] = credentials.get(
+        "openwa_webhook_secret"
+    ) or secrets.token_urlsafe(24)
+
+    setup_payload = payload or OpenWASetupRequest()
+    if setup_payload.openwa_api_url:
+        credentials["openwa_api_url"] = setup_payload.openwa_api_url.rstrip("/")
+    elif not credentials.get("openwa_api_url") and env_settings.OPENWA_API_URL:
+        credentials["openwa_api_url"] = env_settings.OPENWA_API_URL.rstrip("/")
+
+    if setup_payload.openwa_api_key:
+        credentials["openwa_api_key"] = setup_payload.openwa_api_key
+    elif not credentials.get("openwa_api_key") and env_settings.OPENWA_API_KEY:
+        credentials["openwa_api_key"] = env_settings.OPENWA_API_KEY
+
+    if setup_payload.openwa_session_id:
+        credentials["openwa_session_id"] = setup_payload.openwa_session_id
+    credentials["openwa_allow_groups"] = setup_payload.allow_groups
+
+    if integration is None:
+        integration = ChannelIntegration(
+            user_id=client.id,
+            platform="webhook",
+            public_id=secrets.token_urlsafe(24),
+            credentials=credentials,
+            is_active=True,
+        )
+        db.add(integration)
+    else:
+        integration.credentials = credentials
+        integration.is_active = True
+
+    await db.commit()
+    await db.refresh(integration)
+
+    webhook_url = f"{_public_base_url()}/api/webhooks/openwa/{integration.public_id}"
+    return {
+        "message": "OpenWA webhook generated successfully",
+        "webhook_url": webhook_url,
+        "webhook_secret": credentials["openwa_webhook_secret"],
+        "openwa_api_url": credentials.get("openwa_api_url", env_settings.OPENWA_API_URL),
+        "openwa_session_id": credentials.get("openwa_session_id"),
+        "allow_groups": credentials.get("openwa_allow_groups", False),
+        "openwa_webhook_payload": {
+            "url": webhook_url,
+            "events": ["message.received"],
+            "secret": credentials["openwa_webhook_secret"],
+            "retryCount": 3,
+        },
     }
 
 

@@ -1,10 +1,15 @@
+import hashlib
+import hmac
+import json
 import logging
 
+import httpx
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from fastapi.responses import JSONResponse, PlainTextResponse, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from config import settings
 from database import get_db
 from models import ChatSession, Message, User
 from services.messaging_service import (
@@ -223,13 +228,99 @@ async def generic_inbound(
     return {"reply": reply}
 
 
-# ─── Manychat Webhook (synchronous) ──────────────────────────────────────────
+# ─── Manychat Dynamic Block (synchronous) ────────────────────────────────────
+def _manychat_nested(body: dict, key: str) -> object | None:
+    for container_key in ("contact", "user", "subscriber", "full_contact_data"):
+        nested = body.get(container_key)
+        if isinstance(nested, dict) and nested.get(key) is not None:
+            return nested.get(key)
+    return None
+
+
+def _manychat_channel(request: Request, body: dict) -> str:
+    raw = (
+        request.query_params.get("platform")
+        or request.query_params.get("channel")
+        or body.get("platform")
+        or body.get("channel")
+        or _manychat_nested(body, "platform")
+        or _manychat_nested(body, "channel")
+        or "facebook"
+    )
+    value = str(raw).strip().lower()
+    if value in {"instagram", "ig"}:
+        return "instagram"
+    return "messenger"
+
+
+def _manychat_sender_id(body: dict) -> str:
+    for key in ("subscriber_id", "user_id", "sender_id", "from", "id", "key"):
+        value = body.get(key)
+        if value is None:
+            value = _manychat_nested(body, key)
+        if value is not None and str(value).strip():
+            return str(value).strip()
+    return "anonymous"
+
+
+def _manychat_text(body: dict) -> str:
+    for key in ("text", "message", "last_input_text", "input"):
+        value = body.get(key)
+        if value is None:
+            value = _manychat_nested(body, key)
+        if value is not None and str(value).strip():
+            return str(value).strip()
+    return ""
+
+
+def _manychat_text_messages(reply: str) -> list[dict]:
+    remaining = reply.strip()
+    messages: list[dict] = []
+    limit = 1800
+    max_messages = 10
+
+    while remaining and len(messages) < max_messages:
+        if len(remaining) <= limit:
+            chunk = remaining
+            remaining = ""
+        else:
+            newline_at = remaining.rfind("\n", 0, limit)
+            space_at = remaining.rfind(" ", 0, limit)
+            cut_at = max(newline_at, space_at)
+            if cut_at < int(limit * 0.5):
+                cut_at = limit
+            chunk = remaining[:cut_at].strip()
+            remaining = remaining[cut_at:].strip()
+        if chunk:
+            messages.append({"type": "text", "text": chunk})
+
+    if remaining and messages:
+        suffix = "\n..."
+        text = messages[-1]["text"].rstrip()
+        if len(text) + len(suffix) > limit:
+            text = text[: limit - len(suffix)].rstrip()
+        messages[-1]["text"] = text + suffix
+    return messages
+
+
+def _manychat_response(reply: str | None, channel: str) -> dict:
+    content = {
+        "messages": _manychat_text_messages(reply or ""),
+        "actions": [],
+        "quick_replies": [],
+    }
+    if channel == "instagram":
+        content["type"] = "instagram"
+    return {"version": "v2", "content": content}
+
+
 @router.post("/webhooks/manychat/{public_id}")
 @limiter.limit("60/minute")
 async def manychat_inbound(
     public_id: str,
     request: Request,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    x_webhook_secret: str | None = Header(default=None),
 ):
     integration = await get_integration(public_id, db)
     if integration is None or integration.platform != "webhook":
@@ -240,34 +331,151 @@ async def manychat_inbound(
     except Exception:  # noqa: BLE001
         raise HTTPException(status_code=400, detail="Invalid JSON body")
 
-    # Manychat will send 'text' and 'subscriber_id' configured in the External Request
-    text = str(body.get("text") or body.get("message") or "").strip()
-    sender_id = str(body.get("subscriber_id") or body.get("sender_id") or body.get("from") or "anonymous")
+    secret = (integration.credentials or {}).get("webhook_secret")
+    if secret:
+        import hmac
+
+        supplied_secret = x_webhook_secret or str(body.get("webhook_secret") or "")
+        if not supplied_secret or not hmac.compare_digest(
+            supplied_secret.encode(), secret.encode()
+        ):
+            raise HTTPException(status_code=403, detail="Invalid secret")
+
+    channel = _manychat_channel(request, body)
+    text = _manychat_text(body)
+    sender_id = _manychat_sender_id(body)
     
     if not text:
-        # If Manychat sends a ping or empty text, just return empty response to not break their flow
-        return {
-            "version": "v2",
-            "content": {
-                "messages": []
-            }
-        }
+        return _manychat_response(None, channel)
 
-    # Process via AI
-    reply = await sync_reply(integration, sender_id, text, db)
+    reply = await sync_reply(integration, sender_id, text, db, channel=channel)
     
-    # Format response strictly as Manychat expects
-    return {
-        "version": "v2",
-        "content": {
-            "messages": [
-                {
-                    "type": "text",
-                    "text": reply
-                }
-            ]
-        }
-    }
+    return _manychat_response(reply, channel)
+
+
+# ─── OpenWA / WhatsApp Web bridge ────────────────────────────────────────────
+def _verify_openwa_signature(secret: str | None, raw_body: bytes, signature: str | None) -> bool:
+    if not secret:
+        return True
+    if not signature or not signature.startswith("sha256="):
+        return False
+    expected = hmac.new(secret.encode(), raw_body, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(expected, signature.split("=", 1)[1])
+
+
+def _openwa_message(payload: dict) -> dict:
+    data = payload.get("data")
+    return data if isinstance(data, dict) else {}
+
+
+def _openwa_text_chunks(text: str) -> list[str]:
+    remaining = text.strip()
+    chunks: list[str] = []
+    limit = 3900
+    max_chunks = 4
+
+    while remaining and len(chunks) < max_chunks:
+        if len(remaining) <= limit:
+            chunks.append(remaining)
+            remaining = ""
+            break
+        newline_at = remaining.rfind("\n", 0, limit)
+        space_at = remaining.rfind(" ", 0, limit)
+        split_at = max(newline_at, space_at)
+        if split_at < int(limit * 0.5):
+            split_at = limit
+        chunks.append(remaining[:split_at].strip())
+        remaining = remaining[split_at:].strip()
+
+    if remaining and chunks:
+        suffix = "\n..."
+        chunks[-1] = chunks[-1][: limit - len(suffix)].rstrip() + suffix
+    return [chunk for chunk in chunks if chunk]
+
+
+async def _send_openwa_reply(
+    credentials: dict,
+    session_id: str,
+    chat_id: str,
+    reply: str,
+) -> None:
+    api_url = (
+        credentials.get("openwa_api_url")
+        or settings.OPENWA_API_URL
+        or "http://openwa:2785"
+    ).rstrip("/")
+    api_key = credentials.get("openwa_api_key") or settings.OPENWA_API_KEY
+    if not api_key:
+        raise RuntimeError("OpenWA API key is not configured")
+
+    headers = {"X-API-Key": api_key}
+    chunks = _openwa_text_chunks(reply)
+    if not chunks:
+        return
+
+    async with httpx.AsyncClient(timeout=30) as client:
+        for chunk in chunks:
+            response = await client.post(
+                f"{api_url}/api/sessions/{session_id}/messages/send-text",
+                headers=headers,
+                json={"chatId": chat_id, "text": chunk},
+            )
+            response.raise_for_status()
+
+
+@router.post("/webhooks/openwa/{public_id}")
+@limiter.limit("60/minute")
+async def openwa_inbound(
+    public_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    x_openwa_signature: str | None = Header(default=None),
+):
+    integration = await get_integration(public_id, db)
+    if integration is None or integration.platform != "webhook":
+        raise HTTPException(status_code=404, detail="Unknown webhook")
+
+    raw = await request.body()
+    credentials = integration.credentials or {}
+    secret = credentials.get("openwa_webhook_secret") or settings.OPENWA_WEBHOOK_SECRET
+    if not _verify_openwa_signature(secret, raw, x_openwa_signature):
+        raise HTTPException(status_code=403, detail="Bad signature")
+
+    try:
+        payload = json.loads(raw.decode("utf-8") or "{}")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+
+    event = str(payload.get("event") or "")
+    if event != "message.received":
+        return {"status": "ignored", "reason": "unsupported_event"}
+
+    message = _openwa_message(payload)
+    if message.get("fromMe"):
+        return {"status": "ignored", "reason": "from_me"}
+
+    allow_groups = bool(credentials.get("openwa_allow_groups", settings.OPENWA_ALLOW_GROUPS))
+    if message.get("isGroup") and not allow_groups:
+        return {"status": "ignored", "reason": "group_message"}
+
+    text = str(message.get("body") or "").strip()
+    chat_id = str(message.get("chatId") or message.get("from") or "").strip()
+    session_id = str(payload.get("sessionId") or credentials.get("openwa_session_id") or "").strip()
+
+    if not text:
+        return {"status": "ignored", "reason": "empty_message"}
+    if not chat_id or not session_id:
+        logger.warning("OpenWA webhook missing chat_id/session_id: %s", payload)
+        return {"status": "ignored", "reason": "missing_identity"}
+
+    reply = await sync_reply(integration, chat_id, text, db, channel="whatsapp")
+    try:
+        await _send_openwa_reply(credentials, session_id, chat_id, reply)
+    except Exception:  # noqa: BLE001
+        logger.exception("OpenWA reply send failed")
+        raise HTTPException(status_code=502, detail="OpenWA reply send failed")
+
+    return {"status": "ok"}
 
 
 # ─── Embeddable web widget (debounced + polling) ─────────────────────────────

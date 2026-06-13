@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AppShell } from "@/components/app-shell";
 import { GradientCard } from "@/components/gradient-card";
+import { WhatsAppQrConnector } from "@/components/whatsapp-qr-connector";
 import { useAuthStore } from "@/store/use-auth-store";
 import { useLanguageStore } from "@/store/use-language-store";
 import { cn } from "@/lib/utils";
@@ -342,6 +343,8 @@ export default function OnboardingPage() {
           <span>{notice.text}</span>
         </div>
       )}
+
+      <WhatsAppQrConnector />
 
       <GradientCard>
         <div className="grid gap-6 xl:grid-cols-[1fr_360px]">
