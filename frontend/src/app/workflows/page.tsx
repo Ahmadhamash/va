@@ -1,9 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
 import { GradientCard } from "@/components/gradient-card";
-import { GitBranch, Zap, Plus, Settings2, Trash2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { ArrowLeft, ArrowRight, Bot, GitBranch, Inbox, Loader2, ShieldCheck, Zap } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
 import { useLanguageStore } from "@/store/use-language-store";
@@ -11,97 +11,139 @@ import { useLanguageStore } from "@/store/use-language-store";
 export default function WorkflowsPage() {
   const language = useLanguageStore((state) => state.language);
   const isRtl = language === "ar";
+  const ArrowIcon = isRtl ? ArrowLeft : ArrowRight;
 
   const { data: workflows = [], isLoading } = useQuery({
     queryKey: ["workflows"],
     queryFn: async () => {
-      const res = await apiClient.get("/workflows");
-      return res.data.workflows || [];
+      try {
+        const res = await apiClient.get("/workflows");
+        return res.data.workflows || [];
+      } catch {
+        return [];
+      }
     },
   });
 
+  const coreSteps = [
+    {
+      title: isRtl ? "تشغيل أو إيقاف رد الذكاء" : "Turn AI replies on or off",
+      text: isRtl ? "من الرئيسية" : "From dashboard",
+      href: "/dashboard",
+      icon: Bot,
+    },
+    {
+      title: isRtl ? "تعديل المنتجات ومعلومات الحساب" : "Edit products and business facts",
+      text: isRtl ? "من بيانات المتجر" : "From store data",
+      href: "/knowledge",
+      icon: ShieldCheck,
+    },
+    {
+      title: isRtl ? "استلام المحادثات المحوّلة" : "Handle transferred conversations",
+      text: isRtl ? "من المحادثات" : "From inbox",
+      href: "/inbox",
+      icon: Inbox,
+    },
+  ];
+
+  const examples = [
+    isRtl ? "كلمة محددة مثل موزع أو شكوى" : "A keyword like distributor or complaint",
+    isRtl ? "رد مختلف خارج أوقات العمل" : "A different reply outside working hours",
+    isRtl ? "تحويل فوري لموظف في حالات حساسة" : "Instant handoff for sensitive cases",
+  ];
+
   return (
-    <AppShell 
-      title={isRtl ? "الأتمتة ومسارات العمل" : "Automation & Workflows"} 
-      subtitle={isRtl ? "أنشئ ردود تلقائية وتسلسلات بناءً على كلمات مفتاحية أو أحداث معينة." : "Create automated replies and sequences based on keywords or specific events."}
+    <AppShell
+      title={isRtl ? "ردود متقدمة" : "Advanced replies"}
+      subtitle={isRtl ? "قواعد خاصة للحالات التي تحتاج سلوكاً مختلفاً عن الرد الذكي العادي." : "Special rules for cases that need behavior beyond normal AI replies."}
     >
       <div className="space-y-6">
-        <div className="flex justify-end">
-          <Button>
-            <Plus className="h-4 w-4 mr-2" />
-            {isRtl ? "إنشاء مسار عمل جديد" : "Create New Workflow"}
-          </Button>
+        <GradientCard>
+          <div className="grid gap-5 lg:grid-cols-[1fr_320px] lg:items-center">
+            <div>
+              <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-primary-400/20 bg-primary-500/10 px-3 py-1 text-xs font-semibold text-primary-300">
+                <Zap className="h-3.5 w-3.5" />
+                {isRtl ? "مرحلة اختيارية" : "Optional stage"}
+              </div>
+              <h2 className="text-2xl font-semibold text-white">
+                {isRtl ? "لا تحتاج هذه الصفحة لإضافة منتجات أو معلومات العميل" : "You do not need this page to add products or client information"}
+              </h2>
+              <p className="mt-3 max-w-2xl text-sm leading-7 text-white/55">
+                {isRtl
+                  ? "استخدم بيانات المتجر للمنتجات، العروض، نقاط البيع، وطريقة الطلب. استخدم هذه الصفحة فقط عندما تريد قاعدة خاصة لا تنطبق على كل المحادثات."
+                  : "Use Store data for products, offers, locations, and ordering details. Use this page only when you need a special rule that does not apply to every conversation."}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-4">
+              <div className="text-xs font-semibold text-white/45">{isRtl ? "أمثلة مناسبة" : "Good examples"}</div>
+              <div className="mt-3 space-y-2">
+                {examples.map((example) => (
+                  <div key={example} className="flex items-center gap-2 rounded-xl bg-white/[0.035] px-3 py-2 text-xs text-white/62">
+                    <GitBranch className="h-3.5 w-3.5 text-primary-300" />
+                    <span>{example}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </GradientCard>
+
+        <div className="grid gap-3 md:grid-cols-3">
+          {coreSteps.map((step) => {
+            const Icon = step.icon;
+            return (
+              <Link
+                key={step.href}
+                href={step.href}
+                className="group rounded-2xl border border-white/10 bg-white/[0.045] p-4 transition hover:border-primary-400/30 hover:bg-primary-500/10"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <Icon className="h-5 w-5 text-primary-300" />
+                  <ArrowIcon className="h-4 w-4 text-white/35 transition group-hover:text-primary-300" />
+                </div>
+                <div className="mt-4 text-sm font-semibold text-white">{step.title}</div>
+                <div className="mt-1 text-xs text-white/45">{step.text}</div>
+              </Link>
+            );
+          })}
         </div>
 
         <GradientCard>
-          <div className="space-y-4">
-            {isLoading ? (
-              <div className="text-center py-8 text-white/50">
-                {isRtl ? "جاري التحميل..." : "Loading..."}
-              </div>
-            ) : workflows.length === 0 ? (
-              <div className="text-center py-12 text-white/50 border border-dashed border-white/10 rounded-3xl bg-white/[0.02]">
-                <GitBranch className="h-8 w-8 mx-auto mb-3 text-white/20" />
-                {isRtl ? "لا توجد مسارات عمل مفعّلة حالياً." : "No active workflows found."}
-              </div>
-            ) : (
-              workflows.map((wf: any) => (
-                <div key={wf.id} className="flex flex-wrap items-center justify-between gap-4 rounded-3xl border border-white/10 bg-white/5 p-5 transition hover:bg-white/10">
-                  <div className="flex items-center gap-4">
-                    <div className="grid h-12 w-12 place-items-center rounded-2xl bg-primary-500/10 text-primary-400">
-                      <Zap className="h-6 w-6" />
-                    </div>
-                    <div>
-                      <div className="font-semibold text-white">{wf.name}</div>
-                      <div className="text-xs text-white/50 mt-1">
-                        {isRtl ? `المحفز: ${wf.trigger} • ${wf.steps_count} خطوات` : `Trigger: ${wf.trigger} • ${wf.steps_count} steps`}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    <button className="rounded-full bg-white/10 p-2 text-white/60 hover:bg-white/20 hover:text-white">
-                      <Settings2 className="h-4 w-4" />
-                    </button>
-                    <button className="rounded-full bg-red-500/10 p-2 text-red-400 hover:bg-red-500 hover:text-white">
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
-                </div>
-              ))
-            )}
-            
-            {/* Mock Data for visual demonstration since API might be empty */}
-            {workflows.length === 0 && (
-              <>
-                <div className="flex flex-wrap items-center justify-between gap-4 rounded-3xl border border-white/10 bg-white/5 p-5">
-                  <div className="flex items-center gap-4">
-                    <div className="grid h-12 w-12 place-items-center rounded-2xl bg-amber-500/10 text-amber-400">
-                      <Zap className="h-6 w-6" />
-                    </div>
-                    <div>
-                      <div className="font-semibold text-white flex items-center gap-2">
-                        {isRtl ? "رسالة الترحيب الأولى" : "First Welcome Message"}
-                        <span className="bg-amber-500/20 text-amber-400 px-2 py-0.5 rounded-full text-[10px]">
-                          {isRtl ? "جاهز كعينة" : "Sample Template"}
-                        </span>
-                      </div>
-                      <div className="text-xs text-white/50 mt-1">
-                        {isRtl ? "المحفز: أول رسالة من العميل • خطوتين" : "Trigger: First customer message • 2 steps"}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    <div className="bg-primary-500/20 text-primary-400 px-3 py-1.5 rounded-full text-xs font-semibold">
-                      {isRtl ? "مفعّل" : "Active"}
-                    </div>
-                  </div>
-                </div>
-              </>
-            )}
+          <div className="mb-5 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <GitBranch className="h-5 w-5 text-primary-400" />
+              <h2 className="text-lg font-semibold text-white">{isRtl ? "القواعد الخاصة الحالية" : "Current special rules"}</h2>
+            </div>
           </div>
+
+          {isLoading ? (
+            <div className="flex h-32 items-center justify-center text-white/50">
+              <Loader2 className="h-5 w-5 animate-spin text-primary-300" />
+            </div>
+          ) : workflows.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-white/10 py-12 text-center">
+              <GitBranch className="mx-auto mb-3 h-8 w-8 text-white/18" />
+              <div className="text-sm font-medium text-white/50">{isRtl ? "لا توجد قواعد خاصة مفعّلة" : "No special rules are active"}</div>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {workflows.map((wf: any) => (
+                <div key={wf.id} className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-white/10 bg-white/[0.035] p-4">
+                  <div>
+                    <div className="font-semibold text-white">{wf.name}</div>
+                    <div className="mt-1 text-xs text-white/50">
+                      {isRtl ? `الشرط: ${wf.trigger} - ${wf.steps_count} خطوة` : `Trigger: ${wf.trigger} - ${wf.steps_count} steps`}
+                    </div>
+                  </div>
+                  <span className="rounded-full bg-primary-500/15 px-3 py-1 text-xs font-semibold text-primary-300">
+                    {isRtl ? "مفعّل" : "Active"}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
         </GradientCard>
       </div>
     </AppShell>
   );
 }
-

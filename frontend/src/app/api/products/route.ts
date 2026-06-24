@@ -6,7 +6,7 @@ function mapProduct(item: Record<string, any>) {
     ...item,
     id: item.id,
     name: item.name,
-    price: item.price ? String(item.price) : "",
+    price: item.price == null ? "" : String(item.price),
     available: item.available !== false,
     description: item.description || "",
     category: item.category || "",
