@@ -220,18 +220,25 @@ async def _cache_external_media(
         return media_url, media_type
 
 
-async def sync_reply(
+async def sync_reply_result(
     integration: ChannelIntegration,
     external_user_id: str,
     text: str,
     db: AsyncSession,
     *,
     channel: str | None = None,
-) -> str:
-    """Synchronous answer for the generic webhook (request/response)."""
+    generate_voice: bool = True,
+    force_voice: bool = False,
+    voice_output_format: str | None = None,
+) -> dict:
+    """Synchronous AI result for request/response channel integrations."""
     client = await _client_for(integration, db)
     if client is None:
-        return "This assistant is currently unavailable."
+        return {
+            "reply": "This assistant is currently unavailable.",
+            "audio_url": None,
+            "action": "unavailable",
+        }
     session = await _get_or_create_session(
         client, channel or integration.platform, external_user_id, db
     )
@@ -242,6 +249,30 @@ async def sync_reply(
         db=db,
         media_type="text",
         media_url=None,
+        generate_voice=generate_voice,
+        force_voice=force_voice,
+        voice_output_format=voice_output_format,
+    )
+    return result
+
+
+async def sync_reply(
+    integration: ChannelIntegration,
+    external_user_id: str,
+    text: str,
+    db: AsyncSession,
+    *,
+    channel: str | None = None,
+    generate_voice: bool = True,
+) -> str:
+    """Synchronous text answer for the generic webhook."""
+    result = await sync_reply_result(
+        integration,
+        external_user_id,
+        text,
+        db,
+        channel=channel,
+        generate_voice=generate_voice,
     )
     return result["reply"]
 

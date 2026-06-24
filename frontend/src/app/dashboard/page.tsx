@@ -32,9 +32,10 @@ import { toast } from "react-hot-toast";
 
 export default function DashboardPage() {
   const queryClient = useQueryClient();
-  const { token } = useAuthStore();
+  const { token, user } = useAuthStore();
   const language = useLanguageStore((state) => state.language);
   const isRtl = language === "ar";
+  const autoReplyQueryKey = ["autoReply", user?.id ?? "anonymous"] as const;
 
   const { data: conversations = [], isLoading: loadingConversations } = useQuery({
     queryKey: ["conversations"],
@@ -74,25 +75,29 @@ export default function DashboardPage() {
   });
 
   const { data: autoReply = { enabled: true }, isLoading: loadingAutoReply } = useQuery({
-    queryKey: ["autoReply"],
+    queryKey: autoReplyQueryKey,
     queryFn: async () => {
       const res = await apiClient.get("/chat/auto-reply");
       return { enabled: res.data.enabled !== false };
     },
-    enabled: !!token,
+    enabled: !!token && !!user,
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
   });
 
   const aiPaused = autoReply.enabled === false;
 
   const toggleAutoReplyMutation = useMutation({
     mutationFn: async (enabled: boolean) => {
-      return apiClient.put("/chat/auto-reply", { enabled });
+      const res = await apiClient.put("/chat/auto-reply", { enabled });
+      return { enabled: res.data.enabled !== false };
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["autoReply"] });
+    onSuccess: (nextState) => {
+      queryClient.setQueryData(autoReplyQueryKey, nextState);
       toast.success(
-        aiPaused 
-          ? (isRtl ? "تم تشغيل الرد الآلي." : "Auto-reply enabled.") 
+        nextState.enabled
+          ? (isRtl ? "تم تشغيل الرد الآلي." : "Auto-reply enabled.")
           : (isRtl ? "تم إيقاف الرد الآلي." : "Auto-reply paused.")
       );
     },
@@ -230,6 +235,9 @@ export default function DashboardPage() {
                   <p className="mt-1 text-sm text-white/45">
                     {isRtl ? "يرد من معلومات محفوظة ويتوقف عند الحساسية." : "Replies from documentation facts and pauses on sensitive chat."}
                   </p>
+                  <p className="mt-1 text-xs font-semibold text-cyan-300/70">
+                    {isRtl ? "الحساب الحالي" : "Current account"}: {user?.business_name || user?.username || "—"}
+                  </p>
                 </div>
                 <StatusBadge status={aiPaused ? "PAUSED" : "ACTIVE"} />
               </div>
@@ -256,10 +264,13 @@ export default function DashboardPage() {
                   variant="secondary"
                   className="w-full justify-start gap-2"
                   disabled={toggleAutoReplyMutation.isPending}
-                  onClick={() => toggleAutoReplyMutation.mutate(aiPaused)}
+                  aria-pressed={autoReply.enabled}
+                  onClick={() => toggleAutoReplyMutation.mutate(!autoReply.enabled)}
                 >
                   <PauseCircle className="h-4 w-4" />
-                  {aiPaused ? (isRtl ? "تشغيل الذكاء" : "Resume AI") : (isRtl ? "إيقاف الذكاء" : "Pause AI")}
+                  {autoReply.enabled
+                    ? (isRtl ? "الذكاء يعمل — اضغط للإيقاف" : "AI is ON — click to pause")
+                    : (isRtl ? "الذكاء متوقف — اضغط للتشغيل" : "AI is OFF — click to resume")}
                 </Button>
                 {[
                   { label: isRtl ? "تعديل المعرفة" : "Edit Knowledge", icon: PenLine, href: "/knowledge" },

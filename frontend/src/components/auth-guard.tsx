@@ -51,6 +51,17 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
+    const syncAuthAcrossTabs = (event: StorageEvent) => {
+      if (event.key === "chatter_auth") {
+        void useAuthStore.persist.rehydrate();
+      }
+    };
+
+    window.addEventListener("storage", syncAuthAcrossTabs);
+    return () => window.removeEventListener("storage", syncAuthAcrossTabs);
+  }, []);
+
+  useEffect(() => {
     if (!hydrated) return;
     let cancelled = false;
 

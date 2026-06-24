@@ -78,7 +78,9 @@ TOOLS = [
                 "keeps repeating the same question, you are not confident "
                 "in your answer, you do not understand the question, "
                 "you start repeating yourself or hallucinating, "
-                "or there is a complaint. "
+                "or there is a complaint. Never call this for repeated greetings, "
+                "hello/thanks, or casual chit-chat; a repeated greeting is not a "
+                "repeated unanswered question. "
                 "Pass a short reason explaining why you are escalating."
             ),
             "parameters": {
@@ -622,11 +624,70 @@ async def _exec_get_delivery_info(user_id: uuid.UUID, db: AsyncSession) -> dict:
     return {"delivery_zones": zones}
 
 
+_BENIGN_ESCALATION_TERMS = (
+    "greeting",
+    "hello",
+    "saying hi",
+    "small talk",
+    "chit-chat",
+    "chitchat",
+    "مرحبا",
+    "مرحباً",
+    "اهلا",
+    "أهلا",
+    "هلا",
+    "السلام عليكم",
+)
+
+_HIGH_RISK_ESCALATION_TERMS = (
+    "angry",
+    "frustrat",
+    "complaint",
+    "refund",
+    "return",
+    "cancel",
+    "payment",
+    "legal",
+    "threat",
+    "allerg",
+    "غاضب",
+    "شكوى",
+    "استرجاع",
+    "الغاء",
+    "إلغاء",
+    "دفع",
+    "حساسية",
+)
+
+
+def _is_benign_escalation_reason(reason: str, details: str | None = None) -> bool:
+    """Reject accidental handoffs caused only by greetings or casual chat."""
+    text = f"{reason or ''} {details or ''}".strip().casefold()
+    if any(term in text for term in _HIGH_RISK_ESCALATION_TERMS):
+        return False
+    return any(term in text for term in _BENIGN_ESCALATION_TERMS)
+
+
 async def _exec_escalate(
     func_args: dict, user_id: uuid.UUID, session_id: uuid.UUID | None, db: AsyncSession
 ) -> dict:
     reason = (func_args.get("reason", "unspecified") or "unspecified").strip()
     details = func_args.get("details")
+    if _is_benign_escalation_reason(reason, details):
+        logger.warning(
+            "Blocked false human escalation for benign conversation: session=%s reason=%s",
+            session_id,
+            reason,
+        )
+        return {
+            "escalated": False,
+            "reason": reason,
+            "message": (
+                "Do not escalate greetings or casual chit-chat. "
+                "Reply naturally and continue helping the customer."
+            ),
+        }
+
     full_reason = None
     if len(reason) > 100:
         full_reason = reason

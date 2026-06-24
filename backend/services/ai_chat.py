@@ -1082,6 +1082,9 @@ async def process_message(
     db: AsyncSession,
     media_type: str = "text",
     media_url: str | None = None,
+    generate_voice: bool = True,
+    force_voice: bool = False,
+    voice_output_format: str | None = None,
 ) -> dict:
     user_id = user.id
     ai_persona = user.ai_persona
@@ -1149,11 +1152,41 @@ async def process_message(
                 .where(User.id == user_id, User.ai_credit_balance > 0)
                 .values(ai_credit_balance=User.ai_credit_balance - 1)
             )
-            await save_message(session_id, "assistant", cached_reply, "text", None, db)
+            cached_audio_url = None
+            cached_media_type = "text"
+            if generate_voice:
+                should_voice, voice, speed, voice_config, tts_provider, audio_format = await _determine_voice_mode(
+                    user_id,
+                    db,
+                    incoming_media_type=media_type,
+                    ai_persona=ai_persona,
+                )
+                if should_voice or force_voice:
+                    cached_audio_url = await _generate_voice_reply(
+                        cached_reply,
+                        user_id,
+                        db,
+                        voice=voice,
+                        speed=speed,
+                        voice_config=voice_config,
+                        tts_provider=tts_provider,
+                        output_format=voice_output_format or audio_format,
+                    )
+                    if cached_audio_url:
+                        cached_media_type = "audio"
+            await save_message(
+                session_id,
+                "assistant",
+                cached_reply,
+                cached_media_type,
+                cached_audio_url,
+                db,
+            )
             await db.commit()
             return {
                 "reply": cached_reply,
                 "transcription": transcription,
+                "audio_url": cached_audio_url,
                 "action": "cached",
             }
 
@@ -1254,7 +1287,7 @@ async def process_message(
             incoming_media_type=media_type,
             ai_persona=ai_persona,
         )
-        if should_voice:
+        if generate_voice and (should_voice or force_voice):
             reply_media_url = await _generate_voice_reply(
                 reply,
                 user_id,
@@ -1263,7 +1296,7 @@ async def process_message(
                 speed=speed,
                 voice_config=voice_config,
                 tts_provider=tts_provider,
-                output_format=audio_format,
+                output_format=voice_output_format or audio_format,
             )
             if reply_media_url:
                 reply_media_type = "audio"

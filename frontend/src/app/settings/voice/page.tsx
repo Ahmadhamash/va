@@ -243,6 +243,11 @@ export default function VoiceSettingsPage() {
                 </button>
               ))}
             </div>
+            <div className="mt-4 rounded-2xl border border-emerald-400/20 bg-emerald-500/[0.08] p-4 text-sm text-emerald-200/85">
+              {isRtl
+                ? "إذا كان ManyChat مركباً برابط Auto، يتغير الرد فور الحفظ بدون تعديل الـAutomation: «متوقف» يرسل نصاً، «نص وصوت» يرسل الاثنين، و«صوت دائماً» يرسل فويس فقط."
+                : "When ManyChat uses the Auto URL, saving applies immediately without editing the automation: Off sends text, Text & Voice sends both, and Always Voice sends audio only."}
+            </div>
             {settings.voice_mode !== "off" && (
               <div className="mt-4 rounded-2xl border border-amber-400/20 bg-amber-500/10 p-4 text-sm text-amber-300">
                 {isRtl ? "تفعيل الردود الصوتية يزيد كلفة التشغيل حسب مزود الصوت وعدد الرسائل الصوتية." : "Enabling voice replies increases operation costs depending on voice provider and audio count."}

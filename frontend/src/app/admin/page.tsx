@@ -96,7 +96,22 @@ type ManyChatChannelKey = "facebook" | "instagram";
 interface ManyChatSetupChannel {
   label: string;
   request_url: string;
+  text_external_request_url: string;
+  voice_request_url: string;
+  text_and_voice_request_url: string;
   body: Record<string, unknown>;
+}
+
+interface ManyChatResponseMapping {
+  json_path: string;
+  custom_field: string;
+  field_type: string;
+}
+
+interface ManyChatRequiredVariable {
+  json_key: string;
+  manychat_label: string;
+  template: string;
 }
 
 interface ManyChatWebhookSetup {
@@ -106,6 +121,9 @@ interface ManyChatWebhookSetup {
   webhook_url: string;
   webhook_secret: string;
   headers: Record<string, string>;
+  response_mapping: ManyChatResponseMapping;
+  required_variables: ManyChatRequiredVariable[];
+  flow_steps: string[];
   channels: Record<ManyChatChannelKey, ManyChatSetupChannel>;
 }
 
@@ -206,11 +224,16 @@ export default function AdminDashboardPage() {
     const channel = setup.channels[channelKey];
     return [
       `ManyChat ${channel.label}`,
-      `Block: Dynamic Block`,
+      `Block: Dynamic Block (Auto)`,
       `Method: ${setup.method || "POST"}`,
-      `Request URL: ${channel.request_url}`,
+      `Recommended Auto URL: ${channel.request_url}`,
+      `Voice-only URL (Dynamic Block): ${channel.voice_request_url}`,
+      `Text + Voice URL (Dynamic Block): ${channel.text_and_voice_request_url}`,
+      `Legacy text-only URL (External Request): ${channel.text_external_request_url}`,
       `Headers:\n${prettyJson(setup.headers)}`,
       `Body:\n${prettyJson(channel.body)}`,
+      `Response Mapping (legacy External Request only): ${setup.response_mapping?.json_path || "$.ai_reply"} -> ${setup.response_mapping?.custom_field || "ai_reply"}`,
+      `Recommended Flow: User sends a message -> Dynamic Block (Auto URL)`,
     ].join("\n\n");
   };
 
@@ -296,9 +319,9 @@ export default function AdminDashboardPage() {
     if (!token) return;
     try {
       const [statsRes, clientsRes, settingsRes, businessTypesRes] = await Promise.all([
-        fetch("/api/admin/stats", { headers: { Authorization: "Bearer " + token } }),
-        fetch("/api/admin/clients", { headers: { Authorization: "Bearer " + token } }),
-        fetch("/api/admin/settings", { headers: { Authorization: "Bearer " + token } }),
+        fetch("/api/admin/stats", { headers: { Authorization: "Bearer " + token }, cache: "no-store" }),
+        fetch("/api/admin/clients", { headers: { Authorization: "Bearer " + token }, cache: "no-store" }),
+        fetch("/api/admin/settings", { headers: { Authorization: "Bearer " + token }, cache: "no-store" }),
         fetch("/api/business-types", { cache: "no-store" })
       ]);
 
@@ -333,6 +356,38 @@ export default function AdminDashboardPage() {
     loadAdminData();
   }, [token]);
 
+  useEffect(() => {
+    if (!token) return;
+
+    const refreshClients = async () => {
+      const path = searchQuery ? `/api/admin/clients?q=${encodeURIComponent(searchQuery)}` : "/api/admin/clients";
+      try {
+        const res = await fetch(path, {
+          headers: { Authorization: "Bearer " + token },
+          cache: "no-store",
+        });
+        if (res.ok) {
+          setClients(await res.json());
+        }
+      } catch (err) {
+        console.error("Client status refresh error:", err);
+      }
+    };
+
+    const refreshVisibleTab = () => {
+      if (document.visibilityState === "visible") {
+        void refreshClients();
+      }
+    };
+
+    window.addEventListener("focus", refreshClients);
+    document.addEventListener("visibilitychange", refreshVisibleTab);
+    return () => {
+      window.removeEventListener("focus", refreshClients);
+      document.removeEventListener("visibilitychange", refreshVisibleTab);
+    };
+  }, [searchQuery, token]);
+
   const pendingManychatClients = clients.filter(
     (client) => client.manychat_setup_status === "pending_setup"
   );
@@ -343,7 +398,7 @@ export default function AdminDashboardPage() {
     const fetchFilteredClients = async () => {
       try {
         const path = searchQuery ? `/api/admin/clients?q=${encodeURIComponent(searchQuery)}` : "/api/admin/clients";
-        const res = await fetch(path, { headers: { Authorization: "Bearer " + token } });
+        const res = await fetch(path, { headers: { Authorization: "Bearer " + token }, cache: "no-store" });
         if (res.ok) {
           setClients(await res.json());
         }
@@ -877,7 +932,9 @@ export default function AdminDashboardPage() {
                                   <span className={`inline-block rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
                                     client.ai_auto_reply_enabled ? "border border-cyan-500/20 bg-cyan-500/10 text-cyan-300" : "border border-amber-500/20 bg-amber-500/10 text-amber-300"
                                   }`}>
-                                    {client.ai_auto_reply_enabled ? "ON" : "OFF"}
+                                    {client.ai_auto_reply_enabled
+                                      ? (isRtl ? "يعمل" : "ON")
+                                      : (isRtl ? "متوقف" : "OFF")}
                                   </span>
                                 </td>
                                 <td className="p-4 text-center">
@@ -935,7 +992,11 @@ export default function AdminDashboardPage() {
                                       onClick={() => handleToggleClientAI(client)}
                                     >
                                       <Bot className="h-3.5 w-3.5 mx-1" />
-                                      <span>{client.ai_auto_reply_enabled ? "AI OFF" : "AI ON"}</span>
+                                      <span>
+                                        {client.ai_auto_reply_enabled
+                                          ? (isRtl ? "إيقاف AI" : "Disable AI")
+                                          : (isRtl ? "تشغيل AI" : "Enable AI")}
+                                      </span>
                                     </Button>
                                     <Button 
                                       size="sm" 
@@ -1414,6 +1475,29 @@ export default function AdminDashboardPage() {
               </div>
             </div>
 
+            <div className="rounded-2xl border border-emerald-400/25 bg-emerald-400/[0.07] p-4">
+              <h5 className="text-sm font-bold text-emerald-200">
+                {isRtl ? "التركيب الصحيح لكل متجر جديد" : "Correct setup for every new store"}
+              </h5>
+              <ol className="mt-3 grid gap-2 text-xs text-white/70 md:grid-cols-2">
+                <li><span className="font-bold text-emerald-300">1.</span> {isRtl ? "أنشئ Automation: المستخدم يرسل رسالة." : "Create an automation triggered when the user sends a message."}</li>
+                <li><span className="font-bold text-emerald-300">2.</span> {isRtl ? "أضف Dynamic Block واحد فقط." : "Add one Dynamic Block only."}</li>
+                <li><span className="font-bold text-emerald-300">3.</span> {isRtl ? "الصق رابط Auto الرئيسي والهيدرز الخاصين بهذا المتجر." : "Paste this store's main Auto URL and headers."}</li>
+                <li><span className="font-bold text-emerald-300">4.</span> {isRtl ? "أضف User ID وLast Input Text من قائمة المتغيرات." : "Insert User ID and Last Input Text from the variable picker."}</li>
+                <li><span className="font-bold text-emerald-300">5.</span> {isRtl ? "انشر الفلو؛ لا تضف Send Message بعد الـDynamic Block." : "Publish the flow; do not add Send Message after the Dynamic Block."}</li>
+              </ol>
+              <div className="mt-3 rounded-xl border border-amber-300/20 bg-amber-300/[0.06] px-3 py-2 text-xs text-amber-100/80">
+                {isRtl
+                  ? "مهم: داخل JSON اختَر User ID وLast Input Text من زر المتغيرات في ManyChat حتى يظهرا كحقول ملوّنة. لا تكتب {{...}} يدويًا، واحذف أي contact أو live_chat_url."
+                  : "Important: insert User ID and Last Input Text using ManyChat's variable picker so they appear as colored tokens. Do not type {{...}} manually, and do not add contact or live_chat_url."}
+              </div>
+              <div className="mt-2 rounded-xl border border-violet-300/20 bg-violet-300/[0.06] px-3 py-2 text-xs text-violet-100/80">
+                {isRtl
+                  ? "بعد التركيب لا تعدّل ManyChat مرة ثانية: صاحب المتجر يختار من إعدادات الصوت «متوقف» أو «نص وصوت» أو «صوت دائماً»، ورابط Auto يطبّق اختياره تلقائياً."
+                  : "After setup, never edit ManyChat again: the store owner chooses Off, Text & Voice, or Always Voice in Voice Settings, and the Auto URL applies it automatically."}
+              </div>
+            </div>
+
             <div className="rounded-2xl border border-white/10 bg-white/[0.025] p-4">
               <div className={cn("flex flex-wrap items-center gap-2", isRtl ? "justify-between" : "justify-between")}>
                 <div>
@@ -1441,6 +1525,43 @@ export default function AdminDashboardPage() {
               />
             </div>
 
+            <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-4">
+              <div className={cn("flex flex-wrap items-center justify-between gap-3", isRtl ? "flex-row-reverse" : "")}>
+                <div>
+                  <div className="text-sm font-bold text-white/60">{isRtl ? "خيار قديم للنص فقط — External Request" : "Legacy text-only option — External Request"}</div>
+                  <div className="mt-1 text-xs text-white/50">
+                    {isRtl ? "لا تحتاج هذا مع رابط Auto. استخدمه فقط إذا أردت الإبقاء على الفلو النصّي القديم." : "You do not need this with the Auto URL. Use it only to keep the old text-only flow."}
+                  </div>
+                </div>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-8 text-xs text-cyan-300"
+                  onClick={() => copyToClipboard(
+                    manychatSetup.response_mapping?.json_path || "$.ai_reply",
+                    isRtl ? "تم نسخ JSON Path." : "JSON Path copied."
+                  )}
+                >
+                  <Copy className="h-3.5 w-3.5 mx-1" />
+                  {isRtl ? "نسخ المسار" : "Copy path"}
+                </Button>
+              </div>
+              <div className="mt-3 grid gap-3 md:grid-cols-3" dir="ltr">
+                <div className="rounded-xl bg-black/25 p-3 text-left">
+                  <div className="text-[10px] uppercase text-white/35">JSON Path</div>
+                  <code className="mt-1 block text-sm text-cyan-200">{manychatSetup.response_mapping?.json_path || "$.ai_reply"}</code>
+                </div>
+                <div className="rounded-xl bg-black/25 p-3 text-left">
+                  <div className="text-[10px] uppercase text-white/35">Save to field</div>
+                  <code className="mt-1 block text-sm text-cyan-200">{manychatSetup.response_mapping?.custom_field || "ai_reply"}</code>
+                </div>
+                <div className="rounded-xl bg-black/25 p-3 text-left">
+                  <div className="text-[10px] uppercase text-white/35">Flow</div>
+                  <code className="mt-1 block text-xs text-cyan-200">Trigger → External Request → ai_reply</code>
+                </div>
+              </div>
+            </div>
+
             <div className="grid gap-4 lg:grid-cols-2">
               {(["facebook", "instagram"] as ManyChatChannelKey[]).map((channelKey) => {
                 const channel = manychatSetup.channels?.[channelKey];
@@ -1450,7 +1571,7 @@ export default function AdminDashboardPage() {
                     <div className={cn("flex items-center justify-between gap-2", isRtl ? "flex-row-reverse" : "")}>
                       <div>
                         <div className="text-sm font-bold text-white">{channel.label}</div>
-                        <div className="text-[11px] uppercase tracking-wide text-violet-300">{manychatSetup.method || "POST"} · Dynamic Block</div>
+                        <div className="text-[11px] uppercase tracking-wide text-emerald-300">{manychatSetup.method || "POST"} · Dynamic Block · Auto</div>
                       </div>
                       <Button
                         size="sm"
@@ -1468,7 +1589,7 @@ export default function AdminDashboardPage() {
 
                     <div className="space-y-2">
                       <div className={cn("flex items-center justify-between gap-2", isRtl ? "flex-row-reverse" : "")}>
-                        <label className="text-xs font-semibold text-white/60">Request URL</label>
+                        <label className="text-xs font-semibold text-emerald-200">{isRtl ? "رابط Auto الموصى به" : "Recommended Auto URL"}</label>
                         <Button
                           size="sm"
                           variant="ghost"
@@ -1483,6 +1604,69 @@ export default function AdminDashboardPage() {
                         </Button>
                       </div>
                       <Input dir="ltr" readOnly value={channel.request_url} className="font-mono text-xs text-left" />
+                    </div>
+
+                    <div className="space-y-3 rounded-xl border border-violet-400/15 bg-violet-400/[0.04] p-3">
+                      <div>
+                        <div className="text-xs font-bold text-violet-200">{isRtl ? "خيارات ثابتة متقدمة" : "Advanced fixed modes"}</div>
+                        <div className="mt-1 text-[11px] text-white/40">
+                          {isRtl ? "لا تحتاجها عادةً؛ رابط Auto أعلاه يتبع اختيار صاحب المتجر." : "Usually unnecessary; the Auto URL follows the store owner's setting."}
+                        </div>
+                      </div>
+                      <div className="space-y-1.5">
+                        <div className={cn("flex items-center justify-between gap-2", isRtl ? "flex-row-reverse" : "")}>
+                          <label className="text-[11px] font-semibold text-white/55">{isRtl ? "فويس فقط" : "Voice only"}</label>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 px-2 text-[10px] text-violet-300"
+                            onClick={() => copyToClipboard(
+                              channel.voice_request_url,
+                              isRtl ? "تم نسخ رابط الفويس." : "Voice URL copied."
+                            )}
+                          >
+                            <Copy className="h-3 w-3 mx-1" />
+                            {isRtl ? "نسخ" : "Copy"}
+                          </Button>
+                        </div>
+                        <Input dir="ltr" readOnly value={channel.voice_request_url} className="font-mono text-[10px] text-left" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <div className={cn("flex items-center justify-between gap-2", isRtl ? "flex-row-reverse" : "")}>
+                          <label className="text-[11px] font-semibold text-white/55">{isRtl ? "نص + فويس" : "Text + voice"}</label>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 px-2 text-[10px] text-violet-300"
+                            onClick={() => copyToClipboard(
+                              channel.text_and_voice_request_url,
+                              isRtl ? "تم نسخ رابط النص والفويس." : "Text + voice URL copied."
+                            )}
+                          >
+                            <Copy className="h-3 w-3 mx-1" />
+                            {isRtl ? "نسخ" : "Copy"}
+                          </Button>
+                        </div>
+                        <Input dir="ltr" readOnly value={channel.text_and_voice_request_url} className="font-mono text-[10px] text-left" />
+                      </div>
+                      <div className="space-y-1.5 border-t border-white/10 pt-2">
+                        <div className={cn("flex items-center justify-between gap-2", isRtl ? "flex-row-reverse" : "")}>
+                          <label className="text-[11px] font-semibold text-white/45">{isRtl ? "النص القديم — External Request" : "Legacy text — External Request"}</label>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 px-2 text-[10px] text-white/45"
+                            onClick={() => copyToClipboard(
+                              channel.text_external_request_url,
+                              isRtl ? "تم نسخ رابط النص القديم." : "Legacy text URL copied."
+                            )}
+                          >
+                            <Copy className="h-3 w-3 mx-1" />
+                            {isRtl ? "نسخ" : "Copy"}
+                          </Button>
+                        </div>
+                        <Input dir="ltr" readOnly value={channel.text_external_request_url} className="font-mono text-[10px] text-left opacity-60" />
+                      </div>
                     </div>
 
                     <div className="space-y-2">
@@ -1505,7 +1689,7 @@ export default function AdminDashboardPage() {
                         dir="ltr"
                         readOnly
                         value={prettyJson(channel.body)}
-                        className="min-h-64 resize-none border-white/10 bg-black/30 font-mono text-xs text-left"
+                        className="min-h-40 resize-none border-white/10 bg-black/30 font-mono text-xs text-left"
                       />
                     </div>
                   </div>
@@ -1515,8 +1699,8 @@ export default function AdminDashboardPage() {
 
             <div className={cn("rounded-2xl border border-violet-400/15 bg-violet-400/5 p-4 text-xs text-white/55", isRtl ? "text-right" : "text-left")}>
               {isRtl
-                ? "في ManyChat استخدم Content Node يحتوي Dynamic Block، نوع الطلب POST، ثم الصق رابط القناة والهيدرز وجسم الطلب المناسب."
-                : "In ManyChat, use a Content Node with a Dynamic Block, set the request method to POST, then paste the channel URL, headers, and matching body."}
+                ? "كل متجر يحصل على رابط وسر خاصين به من هذه الصفحة. كرر نفس الخطوات فقط، ولا تعِد استخدام رابط متجر آخر."
+                : "Each store gets its own URL and secret from this page. Repeat the same steps, and never reuse another store's URL."}
             </div>
           </div>
         </div>

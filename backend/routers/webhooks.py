@@ -2,6 +2,7 @@ import hashlib
 import hmac
 import json
 import logging
+import time
 
 import httpx
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
@@ -11,13 +12,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import settings
 from database import get_db
-from models import ChatSession, Message, User
+from models import ChatSession, Message, User, VoiceSettings
 from services.messaging_service import (
     enqueue_inbound,
     get_integration,
     sync_reply,
+    sync_reply_result,
     verify_meta_signature,
 )
+from services.file_service import signed_upload_url
 from services.ratelimit import limiter
 
 logger = logging.getLogger("webhooks")
@@ -303,15 +306,77 @@ def _manychat_text_messages(reply: str) -> list[dict]:
     return messages
 
 
-def _manychat_response(reply: str | None, channel: str) -> dict:
-    content = {
-        "messages": _manychat_text_messages(reply or ""),
-        "actions": [],
-        "quick_replies": [],
-    }
+def _manychat_public_media_url(url_or_path: str | None) -> str | None:
+    if not url_or_path:
+        return None
+    raw = url_or_path.strip()
+    if raw.startswith("https://"):
+        return raw
+    if raw.startswith("http://"):
+        return raw.replace("http://", "https://", 1)
+
+    domain = settings.DOMAIN.strip().rstrip("/")
+    if not domain:
+        logger.error("DOMAIN is not configured; cannot expose ManyChat audio URL")
+        return None
+    if not domain.startswith(("http://", "https://")):
+        domain = f"https://{domain}"
+    clean = signed_upload_url(raw.lstrip("/"), expires_minutes=120)
+    return f"{domain}/{clean}"
+
+
+def _manychat_response(
+    reply: str | None,
+    channel: str,
+    *,
+    audio_url: str | None = None,
+    delivery: str = "text",
+) -> dict:
+    messages: list[dict] = []
+    if delivery != "voice" or not audio_url:
+        messages.extend(_manychat_text_messages(reply or ""))
+    if audio_url:
+        messages.append({"type": "audio", "url": audio_url})
+    content = {"messages": messages}
     if channel == "instagram":
         content["type"] = "instagram"
     return {"version": "v2", "content": content}
+
+
+def _manychat_external_response(
+    reply: str | None,
+    *,
+    audio_url: str | None = None,
+) -> dict:
+    """Flat payload for ManyChat's External Request response mapping."""
+    value = reply or ""
+    return {
+        "ai_reply": value,
+        "reply": value,
+        "audio_url": audio_url or "",
+        "has_audio": bool(audio_url),
+    }
+
+
+async def _manychat_resolve_delivery(
+    requested_delivery: str,
+    user_id,
+    db: AsyncSession,
+) -> str:
+    if requested_delivery != "auto":
+        return requested_delivery
+
+    result = await db.execute(
+        select(VoiceSettings.voice_mode).where(VoiceSettings.user_id == user_id)
+    )
+    voice_mode = result.scalar_one_or_none() or "off"
+    if voice_mode == "always_voice":
+        return "voice"
+    if voice_mode == "text_and_voice":
+        return "text_and_voice"
+    # ManyChat sends text to this webhook, so voice_when_voice behaves as text
+    # unless the flow is later extended to forward the original audio metadata.
+    return "text"
 
 
 @router.post("/webhooks/manychat/{public_id}")
@@ -344,13 +409,55 @@ async def manychat_inbound(
     channel = _manychat_channel(request, body)
     text = _manychat_text(body)
     sender_id = _manychat_sender_id(body)
+    response_mode = request.query_params.get("response", "dynamic").strip().lower()
+    requested_delivery = request.query_params.get("delivery", "text").strip().lower()
+    if requested_delivery not in {"auto", "text", "voice", "text_and_voice"}:
+        raise HTTPException(status_code=400, detail="Invalid delivery mode")
+    delivery = await _manychat_resolve_delivery(
+        requested_delivery,
+        integration.user_id,
+        db,
+    )
     
     if not text:
-        return _manychat_response(None, channel)
+        if response_mode == "external":
+            return _manychat_external_response(None)
+        return _manychat_response(None, channel, delivery=delivery)
 
-    reply = await sync_reply(integration, sender_id, text, db, channel=channel)
+    started_at = time.perf_counter()
+    wants_voice = delivery in {"voice", "text_and_voice"}
+    force_voice = requested_delivery != "auto" and wants_voice
+    result = await sync_reply_result(
+        integration,
+        sender_id,
+        text,
+        db,
+        channel=channel,
+        generate_voice=wants_voice,
+        force_voice=force_voice,
+        voice_output_format="mp3" if wants_voice else None,
+    )
+    reply = result.get("reply") or ""
+    audio_url = _manychat_public_media_url(result.get("audio_url"))
+    logger.info(
+        "ManyChat reply ready: channel=%s requested_delivery=%s delivery=%s has_audio=%s sender_suffix=%s elapsed_ms=%d reply_len=%d",
+        channel,
+        requested_delivery,
+        delivery,
+        bool(audio_url),
+        sender_id[-6:],
+        round((time.perf_counter() - started_at) * 1000),
+        len(reply or ""),
+    )
     
-    return _manychat_response(reply, channel)
+    if response_mode == "external":
+        return _manychat_external_response(reply, audio_url=audio_url)
+    return _manychat_response(
+        reply,
+        channel,
+        audio_url=audio_url,
+        delivery=delivery,
+    )
 
 
 # ─── OpenWA / WhatsApp Web bridge ────────────────────────────────────────────

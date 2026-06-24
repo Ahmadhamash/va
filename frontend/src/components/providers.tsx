@@ -2,8 +2,9 @@
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "react-hot-toast";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { directionForLanguage, useLanguageStore, type Language } from "@/store/use-language-store";
+import { useAuthStore } from "@/store/use-auth-store";
 
 function LanguageHydrator() {
   const { language, setLanguage } = useLanguageStore();
@@ -26,6 +27,20 @@ function LanguageHydrator() {
   return null;
 }
 
+function AuthQuerySynchronizer({ queryClient }: { queryClient: QueryClient }) {
+  const userId = useAuthStore((state) => state.user?.id ?? null);
+  const previousUserId = useRef<string | null | undefined>(undefined);
+
+  useEffect(() => {
+    if (previousUserId.current !== undefined && previousUserId.current !== userId) {
+      queryClient.clear();
+    }
+    previousUserId.current = userId;
+  }, [queryClient, userId]);
+
+  return null;
+}
+
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
     () =>
@@ -42,6 +57,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
+      <AuthQuerySynchronizer queryClient={queryClient} />
       <LanguageHydrator />
       {children}
       <Toaster 

@@ -520,23 +520,11 @@ async def generate_manychat_webhook(
             "platform": "facebook",
             "subscriber_id": "{{user_id}}",
             "text": "{{last_input_text}}",
-            "contact": {
-                "name": "{{name}}",
-                "first_name": "{{first_name}}",
-                "last_name": "{{last_name}}",
-                "live_chat_url": "{{live_chat_url}}",
-            },
         },
         "instagram": {
             "platform": "instagram",
             "subscriber_id": "{{user_id}}",
             "text": "{{last_input_text}}",
-            "contact": {
-                "name": "{{name}}",
-                "first_name": "{{first_name}}",
-                "last_name": "{{last_name}}",
-                "live_chat_url": "{{live_chat_url}}",
-            },
         },
     }
 
@@ -548,15 +536,31 @@ async def generate_manychat_webhook(
         "webhook_url": webhook_url,
         "webhook_secret": webhook_secret,
         "headers": headers,
+        "required_variables": [
+            {
+                "json_key": "subscriber_id",
+                "manychat_label": "User ID",
+                "template": "{{user_id}}",
+            },
+            {
+                "json_key": "text",
+                "manychat_label": "Last Input Text",
+                "template": "{{last_input_text}}",
+            },
+        ],
+        "flow_steps": [
+            "User sends a message",
+            "Dynamic Block (use the Auto URL)",
+        ],
         "channels": {
             "facebook": {
                 "label": "Facebook Messenger",
-                "request_url": f"{webhook_url}?platform=facebook",
+                "request_url": f"{webhook_url}?platform=facebook&response=dynamic&delivery=auto",
                 "body": request_bodies["facebook"],
             },
             "instagram": {
                 "label": "Instagram DM",
-                "request_url": f"{webhook_url}?platform=instagram",
+                "request_url": f"{webhook_url}?platform=instagram&response=dynamic&delivery=auto",
                 "body": request_bodies["instagram"],
             },
         },

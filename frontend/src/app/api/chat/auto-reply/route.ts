@@ -13,7 +13,10 @@ export async function GET(request: Request) {
     if (!res.ok) {
       return NextResponse.json({ ok: false, error: data.detail || "Failed to fetch auto-reply status" }, { status: res.status });
     }
-    return NextResponse.json({ ok: true, enabled: data.enabled !== false });
+    return NextResponse.json(
+      { ok: true, enabled: data.enabled !== false },
+      { headers: { "Cache-Control": "no-store" } }
+    );
   } catch (err) {
     console.error(err);
     return NextResponse.json({ ok: false, error: "Internal Error" }, { status: 500 });
@@ -37,7 +40,10 @@ export async function PUT(request: Request) {
     if (!res.ok) {
       return NextResponse.json({ ok: false, error: data.detail || "Failed to update auto-reply status" }, { status: res.status });
     }
-    return NextResponse.json({ ok: true, enabled: data.enabled !== false });
+    return NextResponse.json(
+      { ok: true, enabled: data.enabled !== false },
+      { headers: { "Cache-Control": "no-store" } }
+    );
   } catch (err) {
     console.error(err);
     return NextResponse.json({ ok: false, error: "Internal Error" }, { status: 500 });
