@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   BookOpenText,
   CheckCircle2,
@@ -199,6 +199,7 @@ export default function KnowledgeBasePage() {
   const [styleMyName, setStyleMyName] = useState("");
   const [styleUploading, setStyleUploading] = useState(false);
   const [styleStats, setStyleStats] = useState<{ total: number } | null>(null);
+  const productFormRef = useRef<HTMLDivElement | null>(null);
 
   const dynamicLabels = useMemo<Array<[keyof ProductForm, string, string]>>(() => {
     return [
@@ -307,7 +308,8 @@ export default function KnowledgeBasePage() {
       included: listValue(metadata.included),
       notes: listValue(metadata.notes),
     });
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    showNotice(isRtl ? `تم اختيار "${product.name}" للتعديل.` : `"${product.name}" is ready to edit.`, "info");
+    productFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   async function saveProduct() {
@@ -583,20 +585,33 @@ export default function KnowledgeBasePage() {
 
         <TabsContent value="products" className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
           <div className="grid gap-6 xl:grid-cols-[420px_1fr]">
-            <GradientCard className="h-fit">
-              <div className="mb-5 flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2">
-                  {editingProductId ? <Pencil className="h-5 w-5 text-primary-400" /> : <Plus className="h-5 w-5 text-primary-400" />}
-                  <h2 className="text-lg font-semibold text-white">{editingProductId ? (isRtl ? "تعديل المنتج" : "Edit product") : (isRtl ? "إضافة منتج" : "Add product")}</h2>
+            <div ref={productFormRef} className="scroll-mt-6">
+              <GradientCard className="h-fit">
+                <div className="mb-5 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    {editingProductId ? <Pencil className="h-5 w-5 text-primary-400" /> : <Plus className="h-5 w-5 text-primary-400" />}
+                    <h2 className="text-lg font-semibold text-white">{editingProductId ? (isRtl ? "تعديل المنتج" : "Edit product") : (isRtl ? "إضافة منتج" : "Add product")}</h2>
+                  </div>
+                  {editingProductId && (
+                    <Button type="button" variant="ghost" size="sm" onClick={resetProductForm} title={isRtl ? "إلغاء التعديل" : "Cancel edit"}>
+                      <X className="h-4 w-4" />
+                    </Button>
+                  )}
                 </div>
-                {editingProductId && (
-                  <Button type="button" variant="ghost" size="sm" onClick={resetProductForm} title={isRtl ? "إلغاء التعديل" : "Cancel edit"}>
-                    <X className="h-4 w-4" />
-                  </Button>
-                )}
-              </div>
 
-              <div className="space-y-4">
+                {editingProductId && (
+                  <div className="mb-5 rounded-2xl border border-primary-400/25 bg-primary-500/10 p-3">
+                    <div className="text-[11px] font-semibold text-primary-300">
+                      {isRtl ? "المنتج المحدد للتعديل" : "Selected product"}
+                    </div>
+                    <div className="mt-1 truncate text-sm font-semibold text-white">{form.name}</div>
+                    <div className="mt-1 text-[11px] leading-5 text-white/48">
+                      {isRtl ? "عدّل البيانات هنا ثم اضغط حفظ التعديل." : "Edit the fields here, then save changes."}
+                    </div>
+                  </div>
+                )}
+
+                <div className="space-y-4">
                 <div>
                   <label className="mb-1.5 block text-xs font-medium text-white/70">{isRtl ? "اسم المنتج" : "Product name"}</label>
                   <Input placeholder={isRtl ? "مثال: مانجا - 6 قطع" : "Example: Mango - 6 pieces"} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
@@ -665,8 +680,9 @@ export default function KnowledgeBasePage() {
                   {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                   {editingProductId ? (isRtl ? "حفظ التعديل" : "Save changes") : (isRtl ? "حفظ المنتج" : "Save product")}
                 </Button>
-              </div>
-            </GradientCard>
+                </div>
+              </GradientCard>
+            </div>
 
             <GradientCard>
               <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
@@ -686,49 +702,68 @@ export default function KnowledgeBasePage() {
                 </div>
               ) : (
                 <div className="grid gap-3 md:grid-cols-2">
-                  {products.map((product) => (
-                    <article key={product.id} className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.025]">
-                      <div className="flex gap-3 p-3">
-                        <div className="h-20 w-20 shrink-0 overflow-hidden rounded-xl bg-white/5">
-                          {product.image_url ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img src={imageSrc(product.image_url, token)} alt="" className="h-full w-full object-cover" />
-                          ) : (
-                            <div className="grid h-full w-full place-items-center text-white/20"><Package className="h-6 w-6" /></div>
-                          )}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="min-w-0">
-                              <h3 className="truncate text-sm font-semibold text-white">{product.name}</h3>
-                              <p className="mt-1 text-[11px] text-white/42">{product.category || (isRtl ? "بدون تصنيف" : "No category")}</p>
+                  {products.map((product) => {
+                    const isEditingThisProduct = product.id === editingProductId;
+                    return (
+                      <article
+                        key={product.id}
+                        className={cn(
+                          "overflow-hidden rounded-2xl border transition",
+                          isEditingThisProduct
+                            ? "border-primary-400/60 bg-primary-500/10 shadow-lg shadow-primary-500/10"
+                            : "border-white/10 bg-white/[0.025] hover:border-white/18",
+                        )}
+                      >
+                        <div className="flex gap-3 p-3">
+                          <div className="h-20 w-20 shrink-0 overflow-hidden rounded-xl bg-white/5">
+                            {product.image_url ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={imageSrc(product.image_url, token)} alt="" className="h-full w-full object-cover" />
+                            ) : (
+                              <div className="grid h-full w-full place-items-center text-white/20"><Package className="h-6 w-6" /></div>
+                            )}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <h3 className="truncate text-sm font-semibold text-white">{product.name}</h3>
+                                <p className="mt-1 text-[11px] text-white/42">{product.category || (isRtl ? "بدون تصنيف" : "No category")}</p>
+                              </div>
+                              <div className="flex shrink-0 flex-col items-end gap-1">
+                                {isEditingThisProduct && (
+                                  <span className="rounded-full bg-primary-500 px-2 py-0.5 text-[10px] font-bold text-ink-950">
+                                    {isRtl ? "قيد التعديل" : "Editing"}
+                                  </span>
+                                )}
+                                <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", product.available !== false ? "bg-primary-500/15 text-primary-300" : "bg-white/10 text-white/45")}>
+                                  {product.available !== false ? (isRtl ? "ظاهر" : "Visible") : (isRtl ? "مخفي" : "Hidden")}
+                                </span>
+                              </div>
                             </div>
-                            <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", product.available !== false ? "bg-primary-500/15 text-primary-300" : "bg-white/10 text-white/45")}>
-                              {product.available !== false ? (isRtl ? "ظاهر" : "Visible") : (isRtl ? "مخفي" : "Hidden")}
-                            </span>
+                            <div className="mt-2 text-sm font-bold text-primary-300">
+                              {product.price ? `${product.price} ${product.currency || ""}` : (isRtl ? "بدون سعر" : "No price")}
+                            </div>
+                            <p className="mt-2 line-clamp-2 text-[11px] leading-5 text-white/48">{product.description || (isRtl ? "لا يوجد وصف." : "No description.")}</p>
+                            <div className="mt-2 text-[10px] font-medium text-white/35">{statusLabel(product.stock_status, isRtl)}</div>
                           </div>
-                          <div className="mt-2 text-sm font-bold text-primary-300">
-                            {product.price ? `${product.price} ${product.currency || ""}` : (isRtl ? "بدون سعر" : "No price")}
+                        </div>
+                        <div className="flex items-center justify-between gap-2 border-t border-white/5 bg-white/[0.02] px-3 py-2">
+                          <div className="flex gap-1">
+                            <Button type="button" variant={isEditingThisProduct ? "secondary" : "ghost"} size="sm" onClick={() => startEditProduct(product)} title={isRtl ? "تعديل المنتج" : "Edit product"}>
+                              <Pencil className="h-4 w-4" />
+                              <span className="text-xs">{isEditingThisProduct ? (isRtl ? "محدد" : "Selected") : (isRtl ? "تعديل" : "Edit")}</span>
+                            </Button>
+                            <Button type="button" variant="ghost" size="sm" onClick={() => toggleProduct(product.id)} title={product.available !== false ? (isRtl ? "إخفاء المنتج" : "Hide product") : (isRtl ? "إظهار المنتج" : "Show product")}>
+                              {product.available !== false ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                            </Button>
                           </div>
-                          <p className="mt-2 line-clamp-2 text-[11px] leading-5 text-white/48">{product.description || (isRtl ? "لا يوجد وصف." : "No description.")}</p>
-                          <div className="mt-2 text-[10px] font-medium text-white/35">{statusLabel(product.stock_status, isRtl)}</div>
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-between gap-2 border-t border-white/5 bg-white/[0.02] px-3 py-2">
-                        <div className="flex gap-1">
-                          <Button type="button" variant="ghost" size="sm" onClick={() => startEditProduct(product)} title={isRtl ? "تعديل المنتج" : "Edit product"}>
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button type="button" variant="ghost" size="sm" onClick={() => toggleProduct(product.id)} title={product.available !== false ? (isRtl ? "إخفاء المنتج" : "Hide product") : (isRtl ? "إظهار المنتج" : "Show product")}>
-                            {product.available !== false ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                          <Button type="button" variant="ghost" size="sm" onClick={() => deleteProduct(product.id)} className="text-red-300 hover:bg-red-500/10 hover:text-red-200" title={isRtl ? "حذف المنتج" : "Delete product"}>
+                            <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>
-                        <Button type="button" variant="ghost" size="sm" onClick={() => deleteProduct(product.id)} className="text-red-300 hover:bg-red-500/10 hover:text-red-200" title={isRtl ? "حذف المنتج" : "Delete product"}>
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </article>
-                  ))}
+                      </article>
+                    );
+                  })}
                 </div>
               )}
             </GradientCard>
