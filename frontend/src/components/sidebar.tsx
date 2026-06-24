@@ -21,7 +21,6 @@ import {
   Users,
   WalletCards,
   X,
-  Zap,
   type LucideIcon,
 } from "lucide-react";
 import { useAuthStore } from "@/store/use-auth-store";
@@ -47,7 +46,6 @@ const clientNavGroups: NavGroup[] = [
       { href: "/agent", labelKey: "agent", icon: Bot },
       { href: "/ai-monitor", labelKey: "monitor", icon: BrainCircuit },
       { href: "/knowledge", labelKey: "knowledge", icon: WalletCards },
-      { href: "/workflows", labelKey: "workflows", icon: Zap },
     ],
   },
   {

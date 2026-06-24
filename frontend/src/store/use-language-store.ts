@@ -38,7 +38,6 @@ export const languageLabels = {
       agent: "الوكيل الذكي",
       monitor: "مراقبة الذكاء",
       knowledge: "بيانات المتجر",
-      workflows: "ردود متقدمة",
       business: "إدارة العمل",
       onboarding: "ربط القنوات",
       bookings: "الحجوزات",
@@ -81,7 +80,6 @@ export const languageLabels = {
       agent: "AI agent",
       monitor: "AI monitor",
       knowledge: "Store data",
-      workflows: "Advanced replies",
       business: "Business",
       onboarding: "Connect channels",
       bookings: "Bookings",
@@ -108,7 +106,6 @@ const pageRoutes = [
   "/analytics",
   "/agent",
   "/knowledge",
-  "/workflows",
   "/onboarding",
   "/bookings",
   "/policies",
@@ -150,10 +147,6 @@ const pageLabels: Record<Language, Record<PageRoute, PageMeta>> = {
     "/knowledge": {
       title: "بيانات المتجر والمنتجات",
       subtitle: "المنتجات، العروض، نقاط البيع، والمعلومات التي يعتمد عليها المساعد.",
-    },
-    "/workflows": {
-      title: "ردود متقدمة",
-      subtitle: "قواعد خاصة للحالات الاستثنائية بعد تجهيز بيانات المتجر والوكيل.",
     },
     "/onboarding": {
       title: "ربط القنوات",
@@ -220,10 +213,6 @@ const pageLabels: Record<Language, Record<PageRoute, PageMeta>> = {
     "/knowledge": {
       title: "Store data and products",
       subtitle: "Products, offers, locations, and facts the assistant relies on.",
-    },
-    "/workflows": {
-      title: "Advanced replies",
-      subtitle: "Special rules for edge cases after store data and the assistant are ready.",
     },
     "/onboarding": {
       title: "Connect channels",

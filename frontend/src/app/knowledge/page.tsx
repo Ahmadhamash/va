@@ -15,7 +15,6 @@ import {
   Plus,
   RotateCcw,
   Save,
-  Settings2,
   Store,
   Trash2,
   Upload,
@@ -31,7 +30,6 @@ import { useAuthStore } from "@/store/use-auth-store";
 import { useLanguageStore } from "@/store/use-language-store";
 import { cn } from "@/lib/utils";
 
-type BusinessType = "clothing" | "electronics" | "beauty" | "services" | "food" | "general";
 type NoticeTone = "success" | "error" | "info";
 
 type Product = {
@@ -90,15 +88,6 @@ const emptyKnowledgeForm = {
 };
 
 type ProductForm = typeof emptyProductForm;
-
-const businessTypes = (isRtl: boolean): Array<{ id: BusinessType; label: string; hint: string }> => [
-  { id: "food", label: isRtl ? "طعام ومشروبات" : "Food & drinks", hint: isRtl ? "نكهات، عبوات، مكونات، نقاط بيع" : "Flavors, packs, ingredients, locations" },
-  { id: "clothing", label: isRtl ? "ملابس" : "Clothing", hint: isRtl ? "قياسات، ألوان، خامة، استبدال" : "Sizes, colors, materials, returns" },
-  { id: "electronics", label: isRtl ? "أجهزة" : "Electronics", hint: isRtl ? "مواصفات، موديل، كفالة، صيانة" : "Specs, model, warranty, repairs" },
-  { id: "beauty", label: isRtl ? "تجميل وعناية" : "Beauty & care", hint: isRtl ? "استخدام، مكونات، تحذيرات" : "Usage, ingredients, warnings" },
-  { id: "services", label: isRtl ? "خدمات" : "Services", hint: isRtl ? "مدة التنفيذ، المتطلبات، الحجز" : "Timeline, requirements, booking" },
-  { id: "general", label: isRtl ? "عام" : "General", hint: isRtl ? "حقول مرنة لأي نشاط" : "Flexible fields for any business" },
-];
 
 const knowledgeCategories = (isRtl: boolean) => [
   { value: "business_profile", label: isRtl ? "معلومات الحساب والبراند" : "Business profile" },
@@ -190,8 +179,7 @@ function statusLabel(status: string | undefined, isRtl: boolean) {
 export default function KnowledgeBasePage() {
   const language = useLanguageStore((state) => state.language);
   const isRtl = language === "ar";
-  const { token, user, setAuth } = useAuthStore();
-  const [businessType, setBusinessType] = useState<BusinessType>((user?.business_type as BusinessType) || "food");
+  const { token } = useAuthStore();
   const [products, setProducts] = useState<Product[]>([]);
   const [knowledge, setKnowledge] = useState<KnowledgeItem[]>([]);
   const [form, setForm] = useState<ProductForm>(emptyProductForm);
@@ -213,43 +201,13 @@ export default function KnowledgeBasePage() {
   const [styleStats, setStyleStats] = useState<{ total: number } | null>(null);
 
   const dynamicLabels = useMemo<Array<[keyof ProductForm, string, string]>>(() => {
-    if (businessType === "food") {
-      return [
-        ["sizes", isRtl ? "حجم العبوة أو عدد القطع" : "Pack size or pieces", isRtl ? "مثال: 6 قطع، علبة عائلية" : "Example: 6 pieces, family box"],
-        ["colors", isRtl ? "النكهات أو الخيارات" : "Flavors or options", isRtl ? "مثال: فراولة، مانجا، خوخ" : "Example: strawberry, mango, peach"],
-        ["material", isRtl ? "المكونات أو التغطية" : "Ingredients or coating", isRtl ? "مثال: شوكولاتة، فواكه طبيعية" : "Example: chocolate, natural fruit"],
-        ["notes", isRtl ? "ملاحظات للعميل" : "Customer notes", isRtl ? "مثال: يحفظ مجمداً" : "Example: keep frozen"],
-      ];
-    }
-    if (businessType === "clothing") {
-      return [
-        ["sizes", isRtl ? "القياسات المتاحة" : "Available sizes", isRtl ? "S, M, L أو 38, 40" : "S, M, L or 38, 40"],
-        ["colors", isRtl ? "الألوان المتاحة" : "Available colors", isRtl ? "أسود، أبيض، أزرق" : "Black, white, blue"],
-        ["material", isRtl ? "الخامة" : "Material", isRtl ? "قطن، كتان، جلد" : "Cotton, linen, leather"],
-        ["fit", isRtl ? "القصة أو المقاس" : "Fit or cut", isRtl ? "واسع، ضيق، عادي" : "Oversized, slim, regular"],
-      ];
-    }
-    if (businessType === "electronics") {
-      return [
-        ["model", isRtl ? "الموديل" : "Model", isRtl ? "رقم أو اسم الموديل" : "Model name or number"],
-        ["specs", isRtl ? "المواصفات" : "Specs", isRtl ? "المواصفات المهمة فقط" : "Only the important specs"],
-        ["included", isRtl ? "محتويات العلبة" : "Box contents", isRtl ? "الشاحن، الكابل، الكتيب" : "Charger, cable, guide"],
-        ["notes", isRtl ? "ملاحظات استخدام" : "Usage notes", isRtl ? "طريقة تشغيل أو تنبيه مهم" : "Setup or important warning"],
-      ];
-    }
-    if (businessType === "services") {
-      return [
-        ["usage", isRtl ? "آلية الخدمة" : "Service flow", isRtl ? "ماذا يحدث بعد الطلب" : "What happens after ordering"],
-        ["included", isRtl ? "ما يشمله السعر" : "Included", isRtl ? "الخدمات الداخلة في السعر" : "What the price covers"],
-        ["notes", isRtl ? "متطلبات قبل البدء" : "Requirements", isRtl ? "ملفات، موعد، بيانات" : "Files, date, details"],
-      ];
-    }
     return [
-      ["usage", isRtl ? "طريقة الاستخدام" : "Usage", isRtl ? "متى وكيف يستخدمه العميل" : "When and how customers use it"],
-      ["included", isRtl ? "ما يشمله المنتج" : "Included details", isRtl ? "إكسسوارات أو خدمات مرفقة" : "Accessories or included services"],
-      ["notes", isRtl ? "ملاحظات مهمة" : "Important notes", isRtl ? "أي تنبيه لازم يعرفه العميل" : "Any customer-facing note"],
+      ["sizes", isRtl ? "الحجم أو عدد القطع" : "Size or quantity", isRtl ? "مثال: 6 قطع، Small, Large" : "Example: 6 pieces, Small, Large"],
+      ["colors", isRtl ? "الخيارات أو النكهات" : "Options or flavors", isRtl ? "مثال: مانجا، فراولة، أسود، أبيض" : "Example: mango, strawberry, black, white"],
+      ["material", isRtl ? "المكونات أو التفاصيل" : "Ingredients or details", isRtl ? "مثال: شوكولاتة، فواكه طبيعية، قطن" : "Example: chocolate, natural fruit, cotton"],
+      ["notes", isRtl ? "ملاحظات للعميل" : "Customer notes", isRtl ? "مثال: يحفظ مجمداً، متاح حسب الطلب" : "Example: keep frozen, available on request"],
     ];
-  }, [businessType, isRtl]);
+  }, [isRtl]);
 
   const groupedKnowledge = useMemo(() => {
     const groups: Record<string, KnowledgeItem[]> = {};
@@ -301,25 +259,8 @@ export default function KnowledgeBasePage() {
     load();
   }, [token]);
 
-  async function saveBusinessType(nextType: BusinessType) {
-    setBusinessType(nextType);
-    if (!token) return;
-    const res = await fetch("/api/auth/me", {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ business_type: nextType }),
-    });
-    if (res.ok) {
-      setAuth(token, await res.json());
-    }
-  }
-
   function metadataFromForm() {
     return {
-      business_type: businessType,
       sizes: splitList(form.sizes),
       colors: splitList(form.colors),
       material: form.material,
@@ -641,34 +582,6 @@ export default function KnowledgeBasePage() {
         </TabsList>
 
         <TabsContent value="products" className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
-          <GradientCard>
-            <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <Settings2 className="h-5 w-5 text-primary-400" />
-                <h2 className="text-lg font-semibold text-white">{isRtl ? "نوع النشاط" : "Business type"}</h2>
-              </div>
-              <div className="text-xs text-white/45">{isRtl ? "يغيّر أسماء الحقول فقط" : "Only changes field labels"}</div>
-            </div>
-            <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">
-              {businessTypes(isRtl).map((type) => (
-                <button
-                  key={type.id}
-                  type="button"
-                  onClick={() => saveBusinessType(type.id)}
-                  className={cn(
-                    "rounded-2xl border p-4 text-start transition-all duration-200 hover:-translate-y-0.5",
-                    businessType === type.id
-                      ? "border-primary-400/40 bg-primary-500/12 text-white shadow-glow"
-                      : "border-white/10 bg-white/[0.035] text-white/65 hover:border-white/18 hover:bg-white/[0.06]",
-                  )}
-                >
-                  <div className="font-semibold">{type.label}</div>
-                  <div className="mt-2 text-[11px] leading-5 text-white/42">{type.hint}</div>
-                </button>
-              ))}
-            </div>
-          </GradientCard>
-
           <div className="grid gap-6 xl:grid-cols-[420px_1fr]">
             <GradientCard className="h-fit">
               <div className="mb-5 flex items-center justify-between gap-3">
