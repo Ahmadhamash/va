@@ -357,6 +357,12 @@ def _tool_names(tools: list[dict] | None) -> list[str]:
     return [t["function"]["name"] for t in (tools or []) if t.get("function")]
 
 
+def _tool_call_kwargs(tools: list[dict] | None) -> dict:
+    if not tools:
+        return {}
+    return {"tools": tools, "tool_choice": "auto"}
+
+
 def _summarize_tool_result(result: dict) -> dict:
     if not isinstance(result, dict):
         return {"type": type(result).__name__}
@@ -476,8 +482,7 @@ async def _generate_reply(
     response = await client.chat.completions.create(
         model=model,
         messages=messages,
-        tools=allowed_tools if allowed_tools else None,
-        tool_choice="auto" if allowed_tools else "none",
+        **_tool_call_kwargs(allowed_tools),
         temperature=dynamic_temp,
         max_tokens=_max_tokens_for_intent(intent),
     )
@@ -529,8 +534,7 @@ async def _generate_reply(
         response = await client.chat.completions.create(
             model=model,
             messages=messages,
-            tools=allowed_tools if allowed_tools else None,
-            tool_choice="auto" if allowed_tools else "none",
+            **_tool_call_kwargs(allowed_tools),
             temperature=0.3, # Slightly higher after tools to naturalize the data
             max_tokens=_max_tokens_for_intent(intent, after_tools=True),
         )

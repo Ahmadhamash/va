@@ -1,4 +1,5 @@
 from models import User
+from services.ai_chat import _tool_call_kwargs
 from services.ai_prompts import build_system_prompt
 from services.ai_tools import get_tools_for_intents
 
@@ -15,6 +16,17 @@ def test_handoff_tool_can_be_removed_from_ai_tools():
     assert "escalate_to_human" not in disabled_tools
     assert "get_policies" in disabled_tools
     assert "get_business_info" in disabled_tools
+
+
+def test_tool_choice_is_omitted_when_no_tools_are_available():
+    assert _tool_call_kwargs([]) == {}
+    assert _tool_call_kwargs(None) == {}
+
+
+def test_tool_choice_is_auto_when_tools_are_available():
+    tools = get_tools_for_intents(["support"], include_handoff=True)
+
+    assert _tool_call_kwargs(tools) == {"tools": tools, "tool_choice": "auto"}
 
 
 def test_prompt_disables_human_handoff_promises():
