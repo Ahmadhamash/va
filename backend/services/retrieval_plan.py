@@ -20,11 +20,14 @@ _ARABIC_DIACRITICS_RE = re.compile(r"[\u064b-\u065f\u0670\u0640]")
 _ISO_DATE_RE = re.compile(r"\b20\d{2}-\d{2}-\d{2}\b")
 
 _BROAD_CATALOG_TERMS = (
-    "\u0634\u0648 \u0639\u0646\u062f\u0643\u0645", "\u0627\u064a\u0634 \u0639\u0646\u062f\u0643\u0645",
+    "\u0634\u0648 \u0639\u0646\u062f\u0643\u0645", "\u0627\u0634 \u0639\u0646\u062f\u0643\u0645",
+    "\u0627\u064a\u0634 \u0639\u0646\u062f\u0643\u0645", "\u0634\u0646\u0648 \u0639\u0646\u062f\u0643\u0645",
     "\u0645\u0627\u0630\u0627 \u062a\u0628\u064a\u0639", "\u0628\u062a\u0628\u064a\u0639\u0648",
     "\u0627\u0644\u0643\u062a\u0627\u0644\u0648\u062c", "\u0643\u062a\u0627\u0644\u0648\u062c",
     "\u0645\u0646\u062a\u062c\u0627\u062a\u0643\u0645", "what do you sell",
-    "catalog", "products",
+    "\u0639\u0646\u062f\u0643\u0645 \u0627\u0643\u0644", "\u0639\u0646\u062f\u0643\u0645 \u0623\u0643\u0644",
+    "\u0639\u0646\u062f\u0643\u0645 \u0637\u0639\u0627\u0645", "what do you have",
+    "what food", "which flavors", "catalog", "products",
 )
 _OFFER_TERMS = (
     "\u0639\u0631\u0636", "\u0639\u0631\u0648\u0636", "\u062e\u0635\u0645",
@@ -34,7 +37,19 @@ _OFFER_TERMS = (
 _PACKAGE_TERMS = (
     "\u0628\u0643\u062c", "\u0628\u0627\u0643\u062c", "\u062d\u0632\u0645\u0647",
     "\u0628\u0627\u0642\u0647", "\u0643\u0648\u0645\u0628\u0648",
+    "\u0628\u0648\u0643\u0633", "\u0628\u0648\u0643\u0633\u0627\u062a",
+    "\u0627\u0644\u0628\u0648\u0643\u0633", "\u0627\u0644\u0639\u0627\u0626\u0644\u064a",
+    "\u0639\u0627\u0626\u0644\u064a", "\u062c\u0645\u0639\u0627\u062a",
     "bundle", "bundles", "package", "packages", "combo",
+    "box", "boxes", "gathering", "family box",
+)
+_DETAIL_TERMS = (
+    "\u062a\u0641\u0627\u0635\u064a\u0644", "\u0627\u0644\u062a\u0641\u0627\u0635\u064a\u0644",
+    "\u0643\u064a\u0641 \u0647\u0648", "\u0643\u064a\u0641 \u0634\u0643\u0644",
+    "\u0634\u0643\u0644\u0647", "\u0634\u0643\u0644\u0648", "\u0645\u0643\u0648\u0646\u0627\u062a",
+    "\u0634\u0648 \u0641\u064a\u0647", "\u0627\u064a\u0634 \u0641\u064a\u0647",
+    "\u0648\u0631\u062c\u064a\u0646\u064a", "\u062a\u0648\u0631\u062c\u064a\u0646\u064a",
+    "details", "describe", "what is in", "looks", "look like",
 )
 _PAYMENT_TERMS = (
     "\u062f\u0641\u0639", "\u0627\u062f\u0641\u0639", "\u0627\u0644\u062f\u0641\u0639",
@@ -134,6 +149,8 @@ def supplemental_tool_plan(customer_message: str, intent: str) -> list[ToolCallP
             calls.append(ToolCallPlan("get_offers", {}))
         if _has_any(text, _PACKAGE_TERMS):
             calls.append(ToolCallPlan("get_packages", {}))
+        if _has_any(text, _PACKAGE_TERMS + _DETAIL_TERMS):
+            calls.append(ToolCallPlan("get_business_info", {}))
         if _has_any(text, _PAYMENT_TERMS):
             calls.append(ToolCallPlan("get_payment_methods", {}))
         return _dedupe(calls)

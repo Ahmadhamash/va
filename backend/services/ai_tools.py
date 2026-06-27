@@ -248,7 +248,14 @@ TOOLS = [
 ]
 
 _INTENT_TOOL_NAMES = {
-    "sales": {"get_catalog", "get_offers", "get_packages", "get_payment_methods", "analyze_webpage"},
+    "sales": {
+        "get_catalog",
+        "get_offers",
+        "get_packages",
+        "get_payment_methods",
+        "get_business_info",
+        "analyze_webpage",
+    },
     "support": {"get_delivery_info", "get_policies", "get_business_info", "get_order_status", "analyze_webpage"},
     "booking": {"get_available_slots", "create_booking"},
     "general": set(),
@@ -328,6 +335,8 @@ _SEARCH_STOPWORDS = {
     "\u0639\u0646\u062f\u0643\u0645", "\u0628\u062f\u064a", "\u0627\u0631\u064a\u062f",
     "\u0627\u0628\u063a\u0649", "\u0639\u0627\u064a\u0632", "\u0645\u0646\u062a\u062c",
     "\u0645\u0646\u062a\u062c\u0627\u062a",
+    "\u0634\u0648", "\u0627\u0634", "\u0627\u064a\u0634", "\u0645\u0627\u0630\u0627",
+    "\u0634\u0646\u0648", "\u0627\u064a\u0647",
     "price", "cost", "available", "availability", "stock", "product",
     "products", "do", "you", "have", "is", "the", "a", "an", "for",
 }
@@ -371,6 +380,47 @@ _SEARCH_SYNONYM_GROUPS = (
     ("keyboard", "\u0643\u064a\u0628\u0648\u0631\u062f", "\u0644\u0648\u062d\u0647 \u0645\u0641\u0627\u062a\u064a\u062d"),
     ("mouse", "\u0645\u0627\u0648\u0633", "\u0641\u0627\u0631\u0647"),
     ("camera", "\u0643\u0627\u0645\u064a\u0631\u0627"),
+    (
+        "box", "boxes", "gathering", "family", "familybox", "gatheringbox",
+        "\u0628\u0648\u0643\u0633", "\u0628\u0648\u0643\u0633\u0627\u062a",
+        "\u0639\u0627\u0626\u0644\u064a", "\u0627\u0644\u0639\u0627\u0626\u0644\u064a",
+        "\u062c\u0645\u0639\u0627\u062a", "\u062c\u0645\u0639\u0647",
+    ),
+)
+
+_BROAD_CATALOG_TERMS = (
+    "\u0634\u0648 \u0639\u0646\u062f\u0643\u0645",
+    "\u0627\u0634 \u0639\u0646\u062f\u0643\u0645",
+    "\u0627\u064a\u0634 \u0639\u0646\u062f\u0643\u0645",
+    "\u0634\u0646\u0648 \u0639\u0646\u062f\u0643\u0645",
+    "\u0645\u0627\u0630\u0627 \u062a\u0628\u064a\u0639",
+    "\u0634\u0648 \u0628\u062a\u0628\u064a\u0639",
+    "\u0634\u0648 \u0628\u062a\u0628\u064a\u0639\u0648",
+    "\u0639\u0646\u062f\u0643\u0645 \u0627\u0643\u0644",
+    "\u0639\u0646\u062f\u0643\u0645 \u0623\u0643\u0644",
+    "\u0639\u0646\u062f\u0643\u0645 \u0637\u0639\u0627\u0645",
+    "what do you have",
+    "what do you sell",
+    "what food",
+    "which flavors",
+)
+
+_GENERIC_FOOD_QUERY_TERMS = (
+    "\u0627\u0643\u0644", "\u0623\u0643\u0644", "\u0627\u0643\u0644\u0627\u062a",
+    "\u0637\u0639\u0627\u0645", "\u0627\u0637\u0639\u0645\u0629", "\u0623\u0637\u0639\u0645\u0629",
+    "\u0645\u0627\u0643\u0648\u0644\u0627\u062a", "\u0645\u0623\u0643\u0648\u0644\u0627\u062a",
+    "\u062d\u0644\u0648\u064a\u0627\u062a", "\u062d\u0644\u0649",
+    "\u0627\u064a\u0633 \u0643\u0631\u064a\u0645", "\u0627\u064a\u0633\u0643\u0631\u064a\u0645",
+    "\u0622\u064a\u0633 \u0643\u0631\u064a\u0645", "\u0628\u0648\u0638\u0629",
+    "\u0646\u0643\u0647\u0629", "\u0646\u0643\u0647\u0627\u062a",
+    "food", "foods", "dessert", "desserts", "ice cream", "flavor", "flavors",
+)
+
+_FOOD_BUSINESS_TERMS = (
+    "food", "drink", "restaurant", "cafe", "dessert", "ice cream", "bites",
+    "\u0637\u0639\u0627\u0645", "\u0634\u0631\u0627\u0628", "\u0645\u0637\u0639\u0645",
+    "\u062d\u0644\u0648\u064a\u0627\u062a", "\u0627\u064a\u0633", "\u0627\u064a\u0633\u0643\u0631\u064a\u0645",
+    "\u0622\u064a\u0633", "\u0628\u0648\u0638\u0629",
 )
 
 
@@ -426,6 +476,47 @@ def _tokens(query: str) -> list[str]:
             continue
         out.append(normalised)
     return _expand_tokens(out)
+
+
+def _has_normalised_phrase(text: str, terms: tuple[str, ...]) -> bool:
+    return any(_normalise_search_text(term) in text for term in terms)
+
+
+def _generic_food_tokens() -> set[str]:
+    tokens: set[str] = set()
+    for term in _GENERIC_FOOD_QUERY_TERMS:
+        tokens.update(_tokens(term))
+        normalised = _normalise_search_text(term)
+        if normalised:
+            tokens.add(normalised)
+    return tokens
+
+
+def _is_broad_catalog_query(query: str) -> bool:
+    text = _normalise_search_text(query)
+    if not text:
+        return False
+    return _has_normalised_phrase(text, _BROAD_CATALOG_TERMS)
+
+
+def _is_generic_food_query(query: str) -> bool:
+    tokens = set(_tokens(query))
+    if not tokens:
+        return False
+    return tokens.issubset(_generic_food_tokens())
+
+
+async def _is_food_business(user_id: uuid.UUID, db: AsyncSession) -> bool:
+    user = await db.get(User, user_id)
+    if not user:
+        return False
+    text = _normalise_search_text(
+        " ".join(
+            str(value or "")
+            for value in (user.business_name, user.business_type, user.ai_persona)
+        )
+    )
+    return _has_normalised_phrase(text, _FOOD_BUSINESS_TERMS)
 
 
 def _item_search_text(item: Item) -> tuple[str, str, str]:
@@ -517,6 +608,10 @@ async def _exec_get_catalog(func_args: dict, user_id: uuid.UUID, db: AsyncSessio
         base = base.where(Item.available.is_(True))
 
     query = (func_args.get("query") or "").strip()
+    if _is_broad_catalog_query(query) or (
+        _is_generic_food_query(query) and await _is_food_business(user_id, db)
+    ):
+        query = ""
     tokens = _tokens(query)
 
     if query and tokens:

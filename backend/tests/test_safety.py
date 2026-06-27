@@ -36,6 +36,8 @@ from services.voice.voice_service import VoiceService
 from services.voice.tts import ElevenLabsTTS, OpenAITTS
 from services.automation_engine import AutomationEngine, AutomationContext, TRIGGERS
 from services.ai_tools import (
+    _is_broad_catalog_query,
+    _is_generic_food_query,
     _item_match_score,
     _rank_catalog_rows,
     _tokens,
@@ -154,6 +156,12 @@ class TestRouterGuardrails:
     def test_price_question_routes_to_sales_without_llm(self):
         assert heuristic_intent_for_message("\u0645\u0631\u062d\u0628\u0627 \u0643\u0645 \u0633\u0639\u0631 \u0627\u0644\u0633\u0645\u0627\u0639\u0629\u061f") == "sales"
 
+    def test_food_catalog_question_routes_to_sales_without_llm(self):
+        assert heuristic_intent_for_message("\u0627\u0634 \u0639\u0646\u062f\u0643\u0645 \u0627\u0643\u0644\u061f") == "sales"
+
+    def test_family_box_followup_routes_to_sales_without_llm(self):
+        assert heuristic_intent_for_message("\u0627\u0644\u0628\u0648\u0643\u0633 \u0627\u0644\u0639\u0627\u0626\u0644\u064a \u0628\u062a\u0642\u062f\u0631 \u062a\u0648\u0631\u062c\u064a\u0646\u064a \u0643\u064a\u0641 \u0647\u0648") == "sales"
+
     def test_delivery_question_routes_to_support_without_llm(self):
         assert heuristic_intent_for_message("\u0643\u0645 \u0631\u0633\u0648\u0645 \u0627\u0644\u062a\u0648\u0635\u064a\u0644\u061f") == "support"
 
@@ -166,6 +174,7 @@ class TestRouterGuardrails:
     def test_sales_intent_exposes_catalog_tool(self):
         tool_names = {t["function"]["name"] for t in get_tools_for_intent("sales")}
         assert "get_catalog" in tool_names
+        assert "get_business_info" in tool_names
         assert "escalate_to_human" in tool_names
 
     def test_catalog_no_match_does_not_fall_back_to_full_catalog(self):
@@ -177,6 +186,10 @@ class TestRouterGuardrails:
 
 
 class TestCatalogHybridSearch:
+    def test_food_catalog_questions_are_treated_as_overview_queries(self):
+        assert _is_broad_catalog_query("\u0627\u0634 \u0639\u0646\u062f\u0643\u0645 \u0627\u0643\u0644\u061f")
+        assert _is_generic_food_query("\u0627\u0643\u0644")
+
     def test_headphone_synonym_expands_to_arabic_speaker_terms(self):
         tokens = _tokens("headphone")
         assert "\u0633\u0645\u0627\u0639\u0647" in tokens
@@ -195,6 +208,20 @@ class TestCatalogHybridSearch:
             item_metadata={},
         )
         score = _item_match_score(item, "headphone", _tokens("headphone"))
+        assert score >= 2.0
+
+    def test_family_box_synonyms_match_gathering_box_item(self):
+        item = SimpleNamespace(
+            name="Gathering Box",
+            category="\u0628\u0648\u0643\u0633\u0627\u062a",
+            description="\u0628\u0648\u0643\u0633 \u0639\u0627\u0626\u0644\u064a \u0644\u0644\u062c\u0645\u0639\u0627\u062a",
+            item_metadata={},
+        )
+        score = _item_match_score(
+            item,
+            "\u0627\u0644\u0628\u0648\u0643\u0633 \u0627\u0644\u0639\u0627\u0626\u0644\u064a",
+            _tokens("\u0627\u0644\u0628\u0648\u0643\u0633 \u0627\u0644\u0639\u0627\u0626\u0644\u064a"),
+        )
         assert score >= 2.0
 
     def test_unrelated_item_is_filtered_out(self):
@@ -227,6 +254,19 @@ class TestSupplementalRetrievalPlan:
         calls = supplemental_tool_plan("\u0634\u0648 \u0639\u0646\u062f\u0643\u0645\u061f", "sales")
         assert calls[0].name == "get_catalog"
         assert calls[0].args["query"] == ""
+
+    def test_food_catalog_question_uses_overview_query(self):
+        calls = supplemental_tool_plan("\u0627\u0634 \u0639\u0646\u062f\u0643\u0645 \u0627\u0643\u0644\u061f", "sales")
+        assert calls[0].name == "get_catalog"
+        assert calls[0].args["query"] == ""
+
+    def test_family_box_detail_question_fetches_catalog_and_business_info(self):
+        calls = supplemental_tool_plan(
+            "\u0627\u0644\u0628\u0648\u0643\u0633 \u0627\u0644\u0639\u0627\u0626\u0644\u064a \u0628\u062a\u0642\u062f\u0631 \u062a\u0648\u0631\u062c\u064a\u0646\u064a \u0643\u064a\u0641 \u0647\u0648",
+            "sales",
+        )
+        names = {call.name for call in calls}
+        assert names >= {"get_catalog", "get_business_info"}
 
     def test_offer_question_fetches_catalog_and_offers(self):
         calls = supplemental_tool_plan(

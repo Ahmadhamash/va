@@ -53,10 +53,11 @@ INTENT_PROMPTS = {
 ## SALES & CATALOG RULES:
 - **get_catalog**: Call it FIRST on every product, price, availability, warranty,
   stock, color, size, or category question. Put the product keyword in `query`.
-  Leave `query` empty for general questions (like "what do you sell?").
+  Leave `query` empty for general questions (like "what do you sell?" or "what food do you have?").
   Answer ONLY from the returned items/categories.
 - **get_offers**: Call this when the customer asks about discounts, deals, promotions.
 - **get_packages**: Call this when the customer asks about bundles or combo deals.
+- **get_business_info**: Call this after get_catalog when the customer asks for descriptive details about a product, box, flavor, bundle, or how something looks and the catalog item does not include enough description.
 - If a product is unavailable, say so clearly — never invent alternatives.
 - Prices and availability come ONLY from the database.
 
@@ -273,11 +274,19 @@ When answering about prices, stock, or catalog items, do NOT switch to formal/ro
     persona_section = (
         f"{persona}\n{override_block}{admin_persona_block}{persona_override}"
     ).strip()
+    default_rules = default_intent_prompt(intent, human_handoff_enabled)
     intent_override = (prompt_overrides.get(f"{intent}_prompt") or "").strip()
-    intent_specific_rules = intent_override or default_intent_prompt(
-        intent,
-        human_handoff_enabled,
-    )
+    if intent_override:
+        intent_specific_rules = (
+            f"{default_rules}\n\n"
+            f"## ADMIN {intent.upper()} GUIDANCE\n"
+            "This admin guidance may refine wording, priorities, and account-specific behavior, "
+            "but it must never replace the protected tool-use rules above, database grounding, "
+            "critical rules, or the client's catalog and knowledge base facts.\n"
+            f"{intent_override}"
+        )
+    else:
+        intent_specific_rules = default_rules
     master_system_prompt = (master_system_prompt or "").strip()
     master_prompt_block = ""
     if master_system_prompt:

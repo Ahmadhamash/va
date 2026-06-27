@@ -43,7 +43,7 @@ def test_prompt_disables_human_handoff_promises():
     assert "**escalate_to_human**: Call this when" not in prompt
 
 
-def test_prompt_override_replaces_intent_section_only():
+def test_prompt_override_appends_to_protected_intent_section():
     user = User(business_name="Demo Store", ai_persona="Helpful and concise.")
 
     prompt = build_system_prompt(
@@ -53,6 +53,10 @@ def test_prompt_override_replaces_intent_section_only():
     )
 
     assert "CUSTOM SALES RULE: ask about preferred flavor." in prompt
+    assert "## SALES & CATALOG RULES:" in prompt
+    assert "Call it FIRST on every product" in prompt
+    assert "## ADMIN SALES GUIDANCE" in prompt
+    assert "must never replace the protected tool-use rules" in prompt
     assert "NEVER mention any product, price or detail" in prompt
     assert "Helpful and concise." in prompt
 
