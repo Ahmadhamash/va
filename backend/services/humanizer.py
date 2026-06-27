@@ -2,6 +2,7 @@ import logging
 from typing import Optional
 import json
 from services.openai_client import get_openai_client
+from services.ai_usage import usage_call_from_response
 
 logger = logging.getLogger("humanizer_agent")
 OPENAI_TIMEOUT_SECONDS = 30.0
@@ -38,6 +39,7 @@ class HumanizerAgent:
 
     def __init__(self, api_key: str):
         self._client = get_openai_client(api_key, timeout=OPENAI_TIMEOUT_SECONDS)
+        self.last_usage_call: dict | None = None
 
     async def rewrite(
         self,
@@ -50,6 +52,7 @@ class HumanizerAgent:
         """
         Takes the factual logic draft and rewrites it according to the persona and style samples.
         """
+        self.last_usage_call = None
         
         # If the draft is a simple tool request (shouldn't happen here usually) or empty, just return it
         if not logic_draft or logic_draft.strip() == "":
@@ -75,6 +78,11 @@ class HumanizerAgent:
                 ],
                 temperature=0.8, # High temperature for maximum creativity in phrasing
                 max_tokens=300,
+            )
+            self.last_usage_call = usage_call_from_response(
+                label="humanizer",
+                model="gpt-4o-mini",
+                response=response,
             )
             
             rewritten_text = response.choices[0].message.content or logic_draft

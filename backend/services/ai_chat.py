@@ -36,6 +36,7 @@ from .fact_guard import check_humanizer_preserved_facts
 from .retrieval_plan import supplemental_tool_plan
 from .openai_client import get_openai_client
 from .prompt_settings import get_client_prompt_overrides
+from .ai_usage import append_response_usage, append_usage_call
 
 logger = logging.getLogger("ai_chat")
 HISTORY_LIMIT = 20
@@ -480,6 +481,12 @@ async def _generate_reply(
         temperature=dynamic_temp,
         max_tokens=_max_tokens_for_intent(intent),
     )
+    append_response_usage(
+        trace,
+        label="knowledge_agent",
+        model=model,
+        response=response,
+    )
 
     # Collect all tool results for the verifier
     retrieved_data: dict = {}
@@ -526,6 +533,12 @@ async def _generate_reply(
             tool_choice="auto" if allowed_tools else "none",
             temperature=0.3, # Slightly higher after tools to naturalize the data
             max_tokens=_max_tokens_for_intent(intent, after_tools=True),
+        )
+        append_response_usage(
+            trace,
+            label=f"knowledge_agent_after_tools_round_{rounds}",
+            model=model,
+            response=response,
         )
 
     draft = response.choices[0].message.content or "I don't have that information."
@@ -717,6 +730,7 @@ async def _verify_and_finalize(
         conversation_context=conversation_context,
         system_prompt_override=prompt_overrides.get("humanizer_prompt"),
     )
+    append_usage_call(ai_trace, humanizer.last_usage_call)
     logger.info("Humanized draft: %s", humanized_draft)
 
     # 3. Deterministic fact guard before the LLM verifier. If the Humanizer
@@ -753,6 +767,8 @@ async def _verify_and_finalize(
 
     try:
         result = await verifier.verify(customer_message, retrieved_data, humanized_draft)
+        for usage_call in verifier.drain_usage_calls():
+            append_usage_call(ai_trace, usage_call)
     except Exception:
         logger.exception("Answer verification failed")
         if not human_handoff_enabled:
@@ -837,6 +853,7 @@ async def _verify_and_finalize(
                     conversation_context=conversation_context,
                     system_prompt_override=prompt_overrides.get("humanizer_prompt"),
                 )
+                append_usage_call(ai_trace, humanizer.last_usage_call)
                 retry_guard = check_humanizer_preserved_facts(
                     retry_draft,
                     retry_humanized,
@@ -865,6 +882,8 @@ async def _verify_and_finalize(
                         merged_data,
                         retry_humanized,
                     )
+                    for usage_call in verifier.drain_usage_calls():
+                        append_usage_call(ai_trace, usage_call)
                     logger.info(
                         "Verification after supplemental data: verdict=%s "
                         "risk=%.2f reasons=%s",
@@ -974,6 +993,7 @@ async def _verify_and_finalize(
             conversation_context=conversation_context,
             system_prompt_override=prompt_overrides.get("humanizer_prompt"),
         )
+        append_usage_call(ai_trace, humanizer.last_usage_call)
         fallback_guard = check_humanizer_preserved_facts(
             fallback_logic,
             rewritten_fallback,

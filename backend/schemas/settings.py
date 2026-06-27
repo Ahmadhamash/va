@@ -28,3 +28,36 @@ class StatsOut(BaseModel):
     style_samples: int
     channels: int
     sessions_by_channel: dict
+
+
+class UsageModelBreakdown(BaseModel):
+    calls: int = 0
+    input_tokens: int = 0
+    output_tokens: int = 0
+    total_tokens: int = 0
+    cost_usd: float = 0.0
+    cost_estimated: bool = True
+
+
+class ClientUsageOut(BaseModel):
+    client_id: str
+    username: str
+    business_name: str | None = None
+    email: str
+    active_model: str
+    last_model: str | None = None
+    calls: int = 0
+    input_tokens: int = 0
+    output_tokens: int = 0
+    total_tokens: int = 0
+    cost_usd: float = 0.0
+    cost_estimated: bool = True
+    last_used_at: str | None = None
+    models: dict[str, UsageModelBreakdown] = Field(default_factory=dict)
+
+
+class UsageSummaryOut(BaseModel):
+    generated_at: str
+    active_model: str
+    totals: UsageModelBreakdown
+    clients: list[ClientUsageOut]

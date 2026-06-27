@@ -30,6 +30,7 @@ from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from services.openai_client import get_openai_client
+from services.ai_usage import usage_call_from_response
 
 logger = logging.getLogger("answer_verifier")
 OPENAI_TIMEOUT_SECONDS = 30.0
@@ -195,6 +196,12 @@ class AnswerVerifier:
 
     def __init__(self, api_key: str):
         self._client = get_openai_client(api_key, timeout=OPENAI_TIMEOUT_SECONDS)
+        self._usage_calls: list[dict] = []
+
+    def drain_usage_calls(self) -> list[dict]:
+        calls = list(self._usage_calls)
+        self._usage_calls.clear()
+        return calls
 
     async def verify(
         self,
@@ -248,6 +255,13 @@ class AnswerVerifier:
                 max_tokens=500,
                 response_format={"type": "json_object"},
             )
+            usage_call = usage_call_from_response(
+                label="answer_verifier",
+                model=model,
+                response=response,
+            )
+            if usage_call:
+                self._usage_calls.append(usage_call)
 
             content = response.choices[0].message.content or "{}"
             result = json.loads(content)

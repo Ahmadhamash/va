@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
@@ -26,7 +26,7 @@ from schemas.chat import MessageOut, SessionOut
 from schemas.item import ItemOut
 from schemas.onboarding import ManyChatStatusUpdate
 from schemas.prompt_settings import ClientPromptSettingsOut, ClientPromptSettingsUpdate
-from schemas.settings import SettingsOut, SettingsUpdate, StatsOut
+from schemas.settings import SettingsOut, SettingsUpdate, StatsOut, UsageSummaryOut
 from schemas.user import (
     ActiveUpdate,
     ClientCreate,
@@ -43,6 +43,7 @@ from services.prompt_settings import (
     get_or_create_prompt_settings,
     prompt_settings_payload,
 )
+from services.ai_usage import normalise_model, usage_summary_from_trace
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -399,6 +400,137 @@ async def stats(
         style_samples=style or 0,
         channels=channels or 0,
         sessions_by_channel={c: n for c, n in by_channel_rows.all()},
+    )
+
+
+@router.get("/usage", response_model=UsageSummaryOut)
+async def usage(
+    _: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    settings_row = await get_settings_row(db)
+    active_model = settings_row.ai_model
+    clients = list(
+        (
+            await db.execute(
+                select(User)
+                .where(User.role == "client")
+                .order_by(User.created_at.desc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+    aggregates: dict[uuid.UUID, dict] = {
+        client.id: {
+            "calls": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "cost_usd": 0.0,
+            "cost_estimated": True,
+            "last_used_at": None,
+            "last_model": None,
+            "models": {},
+        }
+        for client in clients
+    }
+    totals = {
+        "calls": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "total_tokens": 0,
+        "cost_usd": 0.0,
+        "cost_estimated": True,
+    }
+
+    rows = (
+        await db.execute(
+            select(
+                AIVerificationLog.user_id,
+                AIVerificationLog.created_at,
+                AIVerificationLog.ai_trace,
+            ).order_by(AIVerificationLog.created_at.asc())
+        )
+    ).all()
+    for user_id, created_at, ai_trace in rows:
+        if user_id not in aggregates:
+            continue
+        summary = usage_summary_from_trace(ai_trace)
+        if not summary["calls"]:
+            continue
+
+        aggregate = aggregates[user_id]
+        for key in ("calls", "input_tokens", "output_tokens", "total_tokens"):
+            aggregate[key] += summary[key]
+            totals[key] += summary[key]
+        aggregate["cost_usd"] = round(
+            aggregate["cost_usd"] + summary["cost_usd"], 8
+        )
+        totals["cost_usd"] = round(totals["cost_usd"] + summary["cost_usd"], 8)
+        aggregate["cost_estimated"] = (
+            aggregate["cost_estimated"] and summary["cost_estimated"]
+        )
+        totals["cost_estimated"] = totals["cost_estimated"] and summary["cost_estimated"]
+
+        trace_calls = ((ai_trace or {}).get("usage") or {}).get("calls") or []
+        if trace_calls:
+            aggregate["last_model"] = normalise_model(trace_calls[-1].get("model"))
+        elif (ai_trace or {}).get("model"):
+            aggregate["last_model"] = normalise_model((ai_trace or {}).get("model"))
+        aggregate["last_used_at"] = created_at
+
+        for model, model_summary in summary["models"].items():
+            model_aggregate = aggregate["models"].setdefault(
+                model,
+                {
+                    "calls": 0,
+                    "input_tokens": 0,
+                    "output_tokens": 0,
+                    "total_tokens": 0,
+                    "cost_usd": 0.0,
+                    "cost_estimated": True,
+                },
+            )
+            for key in ("calls", "input_tokens", "output_tokens", "total_tokens"):
+                model_aggregate[key] += model_summary[key]
+            model_aggregate["cost_usd"] = round(
+                model_aggregate["cost_usd"] + model_summary["cost_usd"], 8
+            )
+            model_aggregate["cost_estimated"] = (
+                model_aggregate["cost_estimated"]
+                and model_summary["cost_estimated"]
+            )
+
+    client_rows = []
+    for client in clients:
+        aggregate = aggregates[client.id]
+        last_used_at = aggregate["last_used_at"]
+        client_rows.append(
+            {
+                "client_id": str(client.id),
+                "username": client.username,
+                "business_name": client.business_name,
+                "email": client.email,
+                "active_model": active_model,
+                "last_model": aggregate["last_model"],
+                "calls": aggregate["calls"],
+                "input_tokens": aggregate["input_tokens"],
+                "output_tokens": aggregate["output_tokens"],
+                "total_tokens": aggregate["total_tokens"],
+                "cost_usd": round(aggregate["cost_usd"], 8),
+                "cost_estimated": aggregate["cost_estimated"],
+                "last_used_at": last_used_at.isoformat() if last_used_at else None,
+                "models": aggregate["models"],
+            }
+        )
+
+    client_rows.sort(key=lambda row: row["cost_usd"], reverse=True)
+    return UsageSummaryOut(
+        generated_at=datetime.now(timezone.utc).isoformat(),
+        active_model=active_model,
+        totals=totals,
+        clients=client_rows,
     )
 
 

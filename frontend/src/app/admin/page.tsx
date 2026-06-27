@@ -112,6 +112,33 @@ interface ClientPromptSettings {
   sections: Record<PromptKey, PromptSection>;
 }
 
+interface UsageModelBreakdown {
+  calls: number;
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  cost_usd: number;
+  cost_estimated: boolean;
+}
+
+interface ClientUsageData extends UsageModelBreakdown {
+  client_id: string;
+  username: string;
+  business_name: string | null;
+  email: string;
+  active_model: string;
+  last_model: string | null;
+  last_used_at: string | null;
+  models: Record<string, UsageModelBreakdown>;
+}
+
+interface UsageSummary {
+  generated_at: string;
+  active_model: string;
+  totals: UsageModelBreakdown;
+  clients: ClientUsageData[];
+}
+
 interface BusinessTypeOption {
   key: string;
   label: string;
@@ -193,6 +220,7 @@ export default function AdminDashboardPage() {
 
   const [stats, setStats] = useState<PlatformStats | null>(null);
   const [clients, setClients] = useState<ClientData[]>([]);
+  const [usageSummary, setUsageSummary] = useState<UsageSummary | null>(null);
   const [systemSettings, setSystemSettings] = useState<PlatformSettings | null>(null);
   const [businessTypes, setBusinessTypes] = useState<BusinessTypeOption[]>(fallbackBusinessTypes);
   const [loading, setLoading] = useState(true);
@@ -248,6 +276,12 @@ export default function AdminDashboardPage() {
   const [pricingModel, setPricingModel] = useState("gpt-4o-mini");
   const [avgInputTokens, setAvgInputTokens] = useState(450);
   const [avgOutputTokens, setAvgOutputTokens] = useState(80);
+
+  const formatTokens = (value: number) => new Intl.NumberFormat("en-US").format(value || 0);
+  const formatUsd = (value: number) => {
+    const amount = value || 0;
+    return `$${amount >= 1 ? amount.toFixed(2) : amount.toFixed(6)}`;
+  };
 
   const showNotice = (message: string, type: "success" | "error" = "success") => {
     setNotice({ message, type });
@@ -364,11 +398,12 @@ export default function AdminDashboardPage() {
   const loadAdminData = async () => {
     if (!token) return;
     try {
-      const [statsRes, clientsRes, settingsRes, businessTypesRes] = await Promise.all([
+      const [statsRes, clientsRes, settingsRes, businessTypesRes, usageRes] = await Promise.all([
         fetch("/api/admin/stats", { headers: { Authorization: "Bearer " + token }, cache: "no-store" }),
         fetch("/api/admin/clients", { headers: { Authorization: "Bearer " + token }, cache: "no-store" }),
         fetch("/api/admin/settings", { headers: { Authorization: "Bearer " + token }, cache: "no-store" }),
-        fetch("/api/business-types", { cache: "no-store" })
+        fetch("/api/business-types", { cache: "no-store" }),
+        fetch("/api/admin/usage", { headers: { Authorization: "Bearer " + token }, cache: "no-store" })
       ]);
 
       if (statsRes.ok) {
@@ -390,6 +425,9 @@ export default function AdminDashboardPage() {
         if (Array.isArray(typesData) && typesData.length) {
           setBusinessTypes(typesData);
         }
+      }
+      if (usageRes.ok) {
+        setUsageSummary(await usageRes.json());
       }
     } catch (err) {
       console.error("Failed to load admin dashboard data", err);
@@ -438,6 +476,10 @@ export default function AdminDashboardPage() {
   const pendingManychatClients = clients.filter(
     (client) => client.manychat_setup_status === "pending_setup"
   );
+  const usageClients = usageSummary?.clients || [];
+  const topUsageClients = usageClients
+    .filter((client) => client.total_tokens > 0)
+    .slice(0, 5);
 
   useEffect(() => {
     if (!promptClientId && clients.length > 0) {
@@ -829,10 +871,14 @@ export default function AdminDashboardPage() {
         )}
 
         <Tabs defaultValue="management" className={cn("w-full", isRtl ? "text-right" : "text-left")}>
-          <TabsList className="grid grid-cols-4 bg-white/5 border border-white/10 p-1 rounded-2xl w-full max-w-3xl mb-6">
+          <TabsList className="grid grid-cols-5 bg-white/5 border border-white/10 p-1 rounded-2xl w-full max-w-5xl mb-6">
             <TabsTrigger value="management" className="rounded-xl text-xs font-semibold py-2">
               <Settings className="h-4 w-4 mx-1.5 shrink-0" />
-              {isRtl ? "إدارة المشتركين والإعدادات" : "Subscribers & Settings"}
+              {isRtl ? "العملاء" : "Clients"}
+            </TabsTrigger>
+            <TabsTrigger value="usage" className="rounded-xl text-xs font-semibold py-2">
+              <TrendingUp className="h-4 w-4 mx-1.5 shrink-0" />
+              {isRtl ? "الاستهلاك" : "Usage"}
             </TabsTrigger>
             <TabsTrigger value="prompts" className="rounded-xl text-xs font-semibold py-2">
               <Sliders className="h-4 w-4 mx-1.5 shrink-0" />
@@ -1295,6 +1341,113 @@ export default function AdminDashboardPage() {
                 </Card>
               </div>
             </div>
+          </TabsContent>
+
+          <TabsContent value="usage" className="space-y-6">
+            <GradientCard className={isRtl ? "text-right" : "text-left"}>
+              <div className={cn("mb-5 flex flex-wrap items-center justify-between gap-3", isRtl && "flex-row-reverse")}>
+                <div>
+                  <h3 className="text-xl font-semibold text-white">
+                    {isRtl ? "استهلاك العملاء" : "Client Usage"}
+                  </h3>
+                  <p className="mt-1 text-sm leading-6 text-white/45">
+                    {isRtl
+                      ? "متابعة التوكنز والتكلفة التقديرية والموديلات المستخدمة لكل حساب."
+                      : "Track tokens, estimated cost, and models used per client account."}
+                  </p>
+                </div>
+                <Button type="button" variant="secondary" onClick={loadAdminData}>
+                  <RefreshCw className="h-4 w-4" />
+                  {isRtl ? "تحديث" : "Refresh"}
+                </Button>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-4">
+                  <div className="text-xs font-semibold text-white/45">{isRtl ? "إجمالي التوكنز" : "Total tokens"}</div>
+                  <div className="mt-2 text-2xl font-bold text-white">{formatTokens(usageSummary?.totals.total_tokens || 0)}</div>
+                  <div className="mt-1 text-xs text-white/35">
+                    {formatTokens(usageSummary?.totals.input_tokens || 0)} in / {formatTokens(usageSummary?.totals.output_tokens || 0)} out
+                  </div>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-4">
+                  <div className="text-xs font-semibold text-white/45">{isRtl ? "التكلفة التقديرية" : "Estimated cost"}</div>
+                  <div className="mt-2 text-2xl font-bold text-cyan-300">{formatUsd(usageSummary?.totals.cost_usd || 0)}</div>
+                  <div className="mt-1 text-xs text-white/35">
+                    {usageSummary?.totals.cost_estimated === false ? (isRtl ? "يوجد موديل بلا تسعيرة" : "Some models have no rate") : (isRtl ? "حسب جدول أسعار النظام" : "Based on system rates")}
+                  </div>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-4">
+                  <div className="text-xs font-semibold text-white/45">{isRtl ? "استدعاءات AI" : "AI calls"}</div>
+                  <div className="mt-2 text-2xl font-bold text-white">{formatTokens(usageSummary?.totals.calls || 0)}</div>
+                  <div className="mt-1 text-xs text-white/35">{isRtl ? "تشمل الرد والتحقق والتحسين" : "Reply, verifier, and humanizer"}</div>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-4">
+                  <div className="text-xs font-semibold text-white/45">{isRtl ? "الموديل الافتراضي" : "Default model"}</div>
+                  <div className="mt-2 break-all font-mono text-lg font-bold text-white">{usageSummary?.active_model || aiModelInput}</div>
+                  <div className="mt-1 text-xs text-white/35">{isRtl ? "من إعدادات المنصة" : "From platform settings"}</div>
+                </div>
+              </div>
+
+              {topUsageClients.length > 0 && (
+                <div className="mt-5 grid gap-3 lg:grid-cols-5">
+                  {topUsageClients.map((client) => (
+                    <div key={client.client_id} className="rounded-2xl border border-cyan-400/15 bg-cyan-500/5 p-4">
+                      <div className="truncate text-sm font-semibold text-white">{client.business_name || client.username}</div>
+                      <div className="mt-1 font-mono text-xs text-white/35">@{client.username}</div>
+                      <div className="mt-3 text-lg font-bold text-cyan-300">{formatUsd(client.cost_usd)}</div>
+                      <div className="mt-1 text-xs text-white/40">{formatTokens(client.total_tokens)} tokens</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="mt-5 overflow-x-auto rounded-2xl border border-white/10 bg-black/15">
+                <table className={cn("w-full border-collapse", isRtl ? "text-right" : "text-left")}>
+                  <thead>
+                    <tr className="border-b border-white/10 bg-white/[0.03] text-xs font-semibold text-white/50">
+                      <th className="p-4">{isRtl ? "الحساب" : "Account"}</th>
+                      <th className="p-4 text-center">{isRtl ? "التكلفة" : "Cost"}</th>
+                      <th className="p-4 text-center">{isRtl ? "التوكنز" : "Tokens"}</th>
+                      <th className="p-4 text-center">{isRtl ? "المدخلات" : "Input"}</th>
+                      <th className="p-4 text-center">{isRtl ? "المخرجات" : "Output"}</th>
+                      <th className="p-4 text-center">{isRtl ? "الموديل" : "Model"}</th>
+                      <th className="p-4 text-center">{isRtl ? "آخر استخدام" : "Last used"}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5 text-sm text-white/75">
+                    {usageClients.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="p-8 text-center text-white/40">
+                          {isRtl ? "لا توجد بيانات استهلاك بعد." : "No usage data yet."}
+                        </td>
+                      </tr>
+                    ) : (
+                      usageClients.map((client) => (
+                        <tr key={client.client_id} className="hover:bg-white/[0.02]">
+                          <td className="p-4">
+                            <div className="font-semibold text-white">{client.business_name || client.username}</div>
+                            <div className="mt-0.5 font-mono text-xs text-white/40">@{client.username}</div>
+                          </td>
+                          <td className="p-4 text-center font-mono text-cyan-300">{formatUsd(client.cost_usd)}</td>
+                          <td className="p-4 text-center font-mono">{formatTokens(client.total_tokens)}</td>
+                          <td className="p-4 text-center font-mono text-white/55">{formatTokens(client.input_tokens)}</td>
+                          <td className="p-4 text-center font-mono text-white/55">{formatTokens(client.output_tokens)}</td>
+                          <td className="p-4 text-center">
+                            <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 font-mono text-[11px] text-white/70">
+                              {client.last_model || client.active_model || "-"}
+                            </span>
+                          </td>
+                          <td className="p-4 text-center text-xs text-white/45">
+                            {client.last_used_at ? new Date(client.last_used_at).toLocaleString() : "-"}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </GradientCard>
           </TabsContent>
 
           <TabsContent value="prompts" className="space-y-6">
