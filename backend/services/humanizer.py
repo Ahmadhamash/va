@@ -45,6 +45,7 @@ class HumanizerAgent:
         style_samples: list[str],
         voice_settings: dict,
         conversation_context: str | None = None,
+        system_prompt_override: str | None = None,
     ) -> str:
         """
         Takes the factual logic draft and rewrites it according to the persona and style samples.
@@ -69,7 +70,7 @@ class HumanizerAgent:
             response = await self._client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[
-                    {"role": "system", "content": HUMANIZER_SYSTEM_PROMPT},
+                    {"role": "system", "content": (system_prompt_override or HUMANIZER_SYSTEM_PROMPT).strip()},
                     {"role": "user", "content": user_prompt},
                 ],
                 temperature=0.8, # High temperature for maximum creativity in phrasing

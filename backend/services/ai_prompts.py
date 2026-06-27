@@ -104,6 +104,14 @@ GENERAL_HANDOFF_ENABLED = "- If they ask for human assistance, call **escalate_t
 
 GENERAL_HANDOFF_DISABLED = "- If they ask for a human, explain that you can keep helping here and ask what they need next. Do not promise a human transfer."
 
+
+def default_intent_prompt(intent: str, human_handoff_enabled: bool = True) -> str:
+    intent_template = INTENT_PROMPTS.get(intent, INTENT_PROMPTS["general"])
+    return intent_template.format(
+        support_handoff_rules=SUPPORT_HANDOFF_ENABLED if human_handoff_enabled else SUPPORT_HANDOFF_DISABLED,
+        general_handoff_rules=GENERAL_HANDOFF_ENABLED if human_handoff_enabled else GENERAL_HANDOFF_DISABLED,
+    ).strip()
+
 def build_system_prompt(
     user: User, 
     style_samples: list[str] | None = None,
@@ -111,6 +119,7 @@ def build_system_prompt(
     intent: str = "general",
     master_system_prompt: str | None = None,
     human_handoff_enabled: bool = True,
+    prompt_overrides: dict[str, str] | None = None,
 ) -> str:
     business = user.business_name or "this business"
     persona = user.ai_persona or "Friendly, professional, and helpful."
@@ -245,10 +254,11 @@ When answering about prices, stock, or catalog items, do NOT switch to formal/ro
 """
 
     persona_section = f"{persona}\n{override_block}{persona_override}".strip()
-    intent_template = INTENT_PROMPTS.get(intent, INTENT_PROMPTS["general"])
-    intent_specific_rules = intent_template.format(
-        support_handoff_rules=SUPPORT_HANDOFF_ENABLED if human_handoff_enabled else SUPPORT_HANDOFF_DISABLED,
-        general_handoff_rules=GENERAL_HANDOFF_ENABLED if human_handoff_enabled else GENERAL_HANDOFF_DISABLED,
+    prompt_overrides = prompt_overrides or {}
+    intent_override = (prompt_overrides.get(f"{intent}_prompt") or "").strip()
+    intent_specific_rules = intent_override or default_intent_prompt(
+        intent,
+        human_handoff_enabled,
     )
     master_system_prompt = (master_system_prompt or "").strip()
     master_prompt_block = ""

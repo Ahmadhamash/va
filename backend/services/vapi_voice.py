@@ -31,6 +31,7 @@ from models import (
     VoiceToolCall,
 )
 from services.handoff_service import create_handoff
+from services.prompt_settings import get_client_prompt_overrides
 
 logger = logging.getLogger("vapi_voice")
 
@@ -49,6 +50,7 @@ class VapiCallContext:
     chat_session_id: uuid.UUID | None
     message: dict[str, Any]
     call_id: str | None
+    prompt_overrides: dict[str, str]
 
 
 def _utcnow() -> datetime:
@@ -242,6 +244,7 @@ async def resolve_call_context(
         chat_session_id=voice_call.chat_session_id if voice_call else None,
         message=message,
         call_id=call_id,
+        prompt_overrides=await get_client_prompt_overrides(user.id, db),
     )
 
 
@@ -318,9 +321,19 @@ async def record_vapi_event(
     await db.flush()
 
 
-def build_vapi_system_prompt(user: User, call_settings: VapiCallSettings) -> str:
+def build_vapi_system_prompt(
+    user: User,
+    call_settings: VapiCallSettings,
+    prompt_override: str | None = None,
+) -> str:
     business_name = user.business_name or "المتجر"
     dialect = call_settings.dialect or "أردنية بسيطة"
+    if prompt_override and prompt_override.strip():
+        return (
+            prompt_override.strip()
+            .replace("{business_name}", business_name)
+            .replace("{dialect}", dialect)
+        )
     return f"""أنت مساعد صوتي لمتجر {business_name}.
 تحدث بلهجة {dialect} وبجمل قصيرة مناسبة للمكالمة.
 
@@ -487,6 +500,11 @@ def build_assistant_response(ctx: VapiCallContext) -> dict[str, Any]:
     if not ctx.settings.enabled:
         return {"error": "Voice calls are not enabled for this business."}
 
+    voice_prompt = build_vapi_system_prompt(
+        ctx.user,
+        ctx.settings,
+        ctx.prompt_overrides.get("voice_prompt"),
+    )
     variable_values = {
         "business_name": ctx.business_name or "المتجر",
         "tenant_id": str(ctx.user_id),
@@ -494,6 +512,7 @@ def build_assistant_response(ctx: VapiCallContext) -> dict[str, Any]:
         "dialect": ctx.settings.dialect,
         "handoff_phone": ctx.settings.handoff_phone or "",
         "business_hours": ctx.settings.business_hours or "",
+        "voice_prompt": voice_prompt,
     }
     if ctx.settings.assistant_id:
         return {
@@ -514,7 +533,7 @@ def build_assistant_response(ctx: VapiCallContext) -> dict[str, Any]:
                 "messages": [
                     {
                         "role": "system",
-                        "content": build_vapi_system_prompt(ctx.user, ctx.settings),
+                        "content": voice_prompt,
                     }
                 ],
                 "tools": build_vapi_tools(),

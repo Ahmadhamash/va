@@ -35,6 +35,7 @@ from .humanizer import HumanizerAgent
 from .fact_guard import check_humanizer_preserved_facts
 from .retrieval_plan import supplemental_tool_plan
 from .openai_client import get_openai_client
+from .prompt_settings import get_client_prompt_overrides
 
 logger = logging.getLogger("ai_chat")
 HISTORY_LIMIT = 20
@@ -399,6 +400,7 @@ async def _generate_reply(
 
     history = await get_session_history(session_id, db, limit=HISTORY_LIMIT)
     style_samples = await get_style_samples(user.id, db)
+    prompt_overrides = await get_client_prompt_overrides(user.id, db)
 
     # Fetch active workflows
     stmt_wf = select(BusinessWorkflow).where(
@@ -435,6 +437,7 @@ async def _generate_reply(
         "tool_rounds": 0,
         "max_tool_rounds": MAX_TOOL_ROUNDS,
         "human_handoff_enabled": human_handoff_enabled,
+        "prompt_overrides": sorted(prompt_overrides.keys()),
     }
     
     if settings.LOCAL_LLM_ENABLED and intent in ("support", "general"):
@@ -459,6 +462,7 @@ async def _generate_reply(
                 intent=intent,
                 master_system_prompt=master_system_prompt,
                 human_handoff_enabled=human_handoff_enabled,
+                prompt_overrides=prompt_overrides,
             ),
         },
         *history,
@@ -688,6 +692,7 @@ async def _verify_and_finalize(
     
     # 1. Fetch Style Samples and Voice Settings for the Humanizer
     style_samples = await get_style_samples(user_id, db)
+    prompt_overrides = await get_client_prompt_overrides(user_id, db)
     conversation_context = _humanizer_context(
         await get_session_history(session_id, db, limit=8)
     )
@@ -710,6 +715,7 @@ async def _verify_and_finalize(
         style_samples=style_samples,
         voice_settings=voice_settings,
         conversation_context=conversation_context,
+        system_prompt_override=prompt_overrides.get("humanizer_prompt"),
     )
     logger.info("Humanized draft: %s", humanized_draft)
 
@@ -829,6 +835,7 @@ async def _verify_and_finalize(
                     style_samples=style_samples,
                     voice_settings=voice_settings,
                     conversation_context=conversation_context,
+                    system_prompt_override=prompt_overrides.get("humanizer_prompt"),
                 )
                 retry_guard = check_humanizer_preserved_facts(
                     retry_draft,
@@ -965,6 +972,7 @@ async def _verify_and_finalize(
             style_samples=style_samples,
             voice_settings=voice_settings,
             conversation_context=conversation_context,
+            system_prompt_override=prompt_overrides.get("humanizer_prompt"),
         )
         fallback_guard = check_humanizer_preserved_facts(
             fallback_logic,

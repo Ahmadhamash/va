@@ -29,3 +29,17 @@ def test_prompt_disables_human_handoff_promises():
     assert "Human handoff is DISABLED" in prompt
     assert "never promise that a human will take over" in prompt
     assert "**escalate_to_human**: Call this when" not in prompt
+
+
+def test_prompt_override_replaces_intent_section_only():
+    user = User(business_name="Demo Store", ai_persona="Helpful and concise.")
+
+    prompt = build_system_prompt(
+        user,
+        intent="sales",
+        prompt_overrides={"sales_prompt": "CUSTOM SALES RULE: ask about preferred flavor."},
+    )
+
+    assert "CUSTOM SALES RULE: ask about preferred flavor." in prompt
+    assert "NEVER mention any product, price or detail" in prompt
+    assert "Helpful and concise." in prompt

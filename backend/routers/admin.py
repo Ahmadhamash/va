@@ -25,6 +25,7 @@ from seed_test_store import seed_store
 from schemas.chat import MessageOut, SessionOut
 from schemas.item import ItemOut
 from schemas.onboarding import ManyChatStatusUpdate
+from schemas.prompt_settings import ClientPromptSettingsOut, ClientPromptSettingsUpdate
 from schemas.settings import SettingsOut, SettingsUpdate, StatsOut
 from schemas.user import (
     ActiveUpdate,
@@ -37,6 +38,11 @@ from schemas.user import (
 from services.auth_service import hash_password
 from services.settings_service import get_settings_row, invalidate_cache
 from services.business_templates import get_template
+from services.prompt_settings import (
+    PROMPT_FIELDS,
+    get_or_create_prompt_settings,
+    prompt_settings_payload,
+)
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -176,6 +182,59 @@ async def set_client_persona(
     await db.commit()
     await db.refresh(client)
     return client
+
+
+@router.get(
+    "/clients/{client_id}/prompt-settings",
+    response_model=ClientPromptSettingsOut,
+)
+async def get_client_prompt_settings(
+    client_id: uuid.UUID,
+    _: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    client = await _get_client(client_id, db)
+    row = await get_or_create_prompt_settings(client.id, db)
+    app_settings = await get_settings_row(db)
+    await db.commit()
+    return prompt_settings_payload(
+        user=client,
+        row=row,
+        human_handoff_enabled=app_settings.human_handoff_enabled,
+    )
+
+
+@router.put(
+    "/clients/{client_id}/prompt-settings",
+    response_model=ClientPromptSettingsOut,
+)
+async def update_client_prompt_settings(
+    client_id: uuid.UUID,
+    payload: ClientPromptSettingsUpdate,
+    _: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    client = await _get_client(client_id, db)
+    row = await get_or_create_prompt_settings(client.id, db)
+    updates = payload.model_dump(exclude_unset=True)
+
+    if "ai_persona" in updates:
+        client.ai_persona = (updates["ai_persona"] or "").strip() or None
+
+    for field in PROMPT_FIELDS:
+        if field in updates:
+            value = updates[field]
+            setattr(row, field, (value or "").strip() or None)
+
+    app_settings = await get_settings_row(db)
+    await db.commit()
+    await db.refresh(client)
+    await db.refresh(row)
+    return prompt_settings_payload(
+        user=client,
+        row=row,
+        human_handoff_enabled=app_settings.human_handoff_enabled,
+    )
 
 
 @router.patch("/clients/{client_id}/active", response_model=UserOut)

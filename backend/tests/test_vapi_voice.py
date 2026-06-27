@@ -8,6 +8,61 @@ from sqlalchemy import select
 from main import app
 from middleware.auth_middleware import get_current_user
 from models import Item, User, VapiCallSettings, VoiceCall, VoiceToolCall
+from services.vapi_voice import VapiCallContext, build_assistant_response
+
+
+def _voice_context(assistant_id: str | None = None) -> VapiCallContext:
+    user_id = uuid.uuid4()
+    user = User(
+        id=user_id,
+        username="voice_prompt_client",
+        email="voice-prompt-client@example.com",
+        hashed_password="hashed",
+        role="client",
+        business_name="Voice Store",
+    )
+    settings = VapiCallSettings(
+        user_id=user_id,
+        public_id="voice_prompt_public",
+        enabled=True,
+        assistant_id=assistant_id,
+        language="ar",
+        dialect="Jordanian",
+        model_provider="openai",
+        model_name="gpt-4o",
+        handoff_phone="",
+        business_hours="",
+    )
+    return VapiCallContext(
+        settings=settings,
+        user=user,
+        user_id=user_id,
+        business_name=user.business_name,
+        payment_methods={},
+        voice_call=None,
+        voice_call_id=None,
+        chat_session_id=None,
+        message={},
+        call_id="call_prompt_test",
+        prompt_overrides={
+            "voice_prompt": "VOICE CUSTOM for {business_name} in {dialect}."
+        },
+    )
+
+
+def test_vapi_assistant_id_receives_prompt_variable():
+    response = build_assistant_response(_voice_context(assistant_id="asst_prompt"))
+
+    variable_values = response["assistantOverrides"]["variableValues"]
+    assert response["assistantId"] == "asst_prompt"
+    assert variable_values["voice_prompt"] == "VOICE CUSTOM for Voice Store in Jordanian."
+
+
+def test_vapi_inline_assistant_uses_prompt_override():
+    response = build_assistant_response(_voice_context())
+
+    system_message = response["assistant"]["model"]["messages"][0]["content"]
+    assert system_message == "VOICE CUSTOM for Voice Store in Jordanian."
 
 
 @pytest.mark.asyncio

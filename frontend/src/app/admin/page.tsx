@@ -86,6 +86,32 @@ interface PlatformSettings {
   human_handoff_enabled: boolean;
 }
 
+type PromptKey =
+  | "sales_prompt"
+  | "support_prompt"
+  | "booking_prompt"
+  | "general_prompt"
+  | "humanizer_prompt"
+  | "voice_prompt";
+
+interface PromptSection {
+  key: PromptKey;
+  label: string;
+  description: string;
+  default_prompt: string;
+  custom_prompt: string;
+  effective_prompt: string;
+  is_custom: boolean;
+}
+
+interface ClientPromptSettings {
+  client_id: string;
+  username: string;
+  business_name: string | null;
+  ai_persona: string;
+  sections: Record<PromptKey, PromptSection>;
+}
+
 interface BusinessTypeOption {
   key: string;
   label: string;
@@ -133,6 +159,15 @@ const fallbackBusinessTypes: BusinessTypeOption[] = [
   { key: "retail", label: "Retail / Ecommerce", group: "Commerce" },
   { key: "restaurant", label: "Restaurant / Cafe", group: "Food" },
   { key: "services", label: "Professional Services", group: "Services" },
+];
+
+const promptKeys: PromptKey[] = [
+  "sales_prompt",
+  "support_prompt",
+  "booking_prompt",
+  "general_prompt",
+  "humanizer_prompt",
+  "voice_prompt",
 ];
 
 function manyChatStatusLabel(status: ManyChatSetupStatus, isRtl: boolean) {
@@ -197,6 +232,14 @@ export default function AdminDashboardPage() {
   const [editingClientPrompt, setEditingClientPrompt] = useState<ClientData | null>(null);
   const [clientPromptText, setClientPromptText] = useState("");
   const [savingClientPrompt, setSavingClientPrompt] = useState(false);
+
+  // Prompt center states
+  const [promptClientId, setPromptClientId] = useState("");
+  const [promptSettings, setPromptSettings] = useState<ClientPromptSettings | null>(null);
+  const [promptDrafts, setPromptDrafts] = useState<Partial<Record<PromptKey, string>>>({});
+  const [personaDraft, setPersonaDraft] = useState("");
+  const [loadingPrompts, setLoadingPrompts] = useState(false);
+  const [savingPrompts, setSavingPrompts] = useState(false);
 
   // AI Testing Store States
   const [resettingTesting, setResettingTesting] = useState(false);
@@ -395,6 +438,89 @@ export default function AdminDashboardPage() {
   const pendingManychatClients = clients.filter(
     (client) => client.manychat_setup_status === "pending_setup"
   );
+
+  useEffect(() => {
+    if (!promptClientId && clients.length > 0) {
+      setPromptClientId(clients[0].id);
+    }
+  }, [clients, promptClientId]);
+
+  const loadPromptSettings = async (clientId: string) => {
+    if (!token || !clientId) return;
+    setLoadingPrompts(true);
+    try {
+      const res = await fetch(`/api/admin/clients/${clientId}/prompt-settings`, {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: "no-store",
+      });
+      if (!res.ok) {
+        showNotice(isRtl ? "فشل تحميل برومبتات العميل." : "Failed to load client prompts.", "error");
+        return;
+      }
+      const data: ClientPromptSettings = await res.json();
+      const drafts: Partial<Record<PromptKey, string>> = {};
+      promptKeys.forEach((key) => {
+        drafts[key] = data.sections[key]?.custom_prompt || "";
+      });
+      setPromptSettings(data);
+      setPromptDrafts(drafts);
+      setPersonaDraft(data.ai_persona || "");
+    } catch (err) {
+      console.error("Prompt settings load error", err);
+      showNotice(isRtl ? "حدث خطأ أثناء تحميل البرومبتات." : "Error loading prompts.", "error");
+    } finally {
+      setLoadingPrompts(false);
+    }
+  };
+
+  useEffect(() => {
+    if (promptClientId) {
+      void loadPromptSettings(promptClientId);
+    }
+  }, [promptClientId, token]);
+
+  const handleSavePromptSettings = async () => {
+    if (!token || !promptClientId) return;
+    setSavingPrompts(true);
+    try {
+      const body: Record<string, string> = {
+        ai_persona: personaDraft,
+      };
+      promptKeys.forEach((key) => {
+        body[key] = promptDrafts[key] || "";
+      });
+
+      const res = await fetch(`/api/admin/clients/${promptClientId}/prompt-settings`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        showNotice(isRtl ? "فشل حفظ البرومبتات." : "Failed to save prompts.", "error");
+        return;
+      }
+      const data: ClientPromptSettings = await res.json();
+      const drafts: Partial<Record<PromptKey, string>> = {};
+      promptKeys.forEach((key) => {
+        drafts[key] = data.sections[key]?.custom_prompt || "";
+      });
+      setPromptSettings(data);
+      setPromptDrafts(drafts);
+      setPersonaDraft(data.ai_persona || "");
+      setClients((prev) => prev.map((client) => (
+        client.id === promptClientId ? { ...client, ai_persona: data.ai_persona } : client
+      )));
+      showNotice(isRtl ? "تم حفظ برومبتات العميل بنجاح." : "Client prompts saved successfully.");
+    } catch (err) {
+      console.error("Prompt settings save error", err);
+      showNotice(isRtl ? "حدث خطأ أثناء حفظ البرومبتات." : "Error saving prompts.", "error");
+    } finally {
+      setSavingPrompts(false);
+    }
+  };
 
   // Handle Client Search
   useEffect(() => {
@@ -703,10 +829,14 @@ export default function AdminDashboardPage() {
         )}
 
         <Tabs defaultValue="management" className={cn("w-full", isRtl ? "text-right" : "text-left")}>
-          <TabsList className="grid grid-cols-3 bg-white/5 border border-white/10 p-1 rounded-2xl w-full max-w-xl mb-6">
+          <TabsList className="grid grid-cols-4 bg-white/5 border border-white/10 p-1 rounded-2xl w-full max-w-3xl mb-6">
             <TabsTrigger value="management" className="rounded-xl text-xs font-semibold py-2">
               <Settings className="h-4 w-4 mx-1.5 shrink-0" />
               {isRtl ? "إدارة المشتركين والإعدادات" : "Subscribers & Settings"}
+            </TabsTrigger>
+            <TabsTrigger value="prompts" className="rounded-xl text-xs font-semibold py-2">
+              <Sliders className="h-4 w-4 mx-1.5 shrink-0" />
+              {isRtl ? "مركز البرومبتات" : "Prompt Center"}
             </TabsTrigger>
             <TabsTrigger value="testing" className="rounded-xl text-xs font-semibold py-2">
               <Bot className="h-4 w-4 mx-1.5 shrink-0" />
@@ -1165,6 +1295,185 @@ export default function AdminDashboardPage() {
                 </Card>
               </div>
             </div>
+          </TabsContent>
+
+          <TabsContent value="prompts" className="space-y-6">
+            <GradientCard className={isRtl ? "text-right" : "text-left"}>
+              <div className={cn("mb-5 flex flex-wrap items-center justify-between gap-3", isRtl && "flex-row-reverse")}>
+                <div>
+                  <h3 className="text-xl font-semibold text-white">
+                    {isRtl ? "مركز برومبتات العملاء" : "Client Prompt Center"}
+                  </h3>
+                  <p className="mt-1 text-sm leading-6 text-white/45">
+                    {isRtl
+                      ? "عدّل شخصية العميل وأقسام برومبتات الرد. الحقول الفارغة تستخدم البرومبت الافتراضي الآمن من الكود."
+                      : "Edit the client persona and prompt sections. Empty fields use the protected default prompt from code."}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" variant="secondary" onClick={() => void loadPromptSettings(promptClientId)} disabled={!promptClientId || loadingPrompts}>
+                    {loadingPrompts ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                    {isRtl ? "تحديث" : "Refresh"}
+                  </Button>
+                  <Button type="button" onClick={handleSavePromptSettings} disabled={!promptClientId || savingPrompts || loadingPrompts}>
+                    {savingPrompts ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                    {isRtl ? "حفظ البرومبتات" : "Save prompts"}
+                  </Button>
+                </div>
+              </div>
+
+              <div className="grid gap-4 lg:grid-cols-[320px_1fr]">
+                <div className="space-y-4">
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-semibold text-white/60">
+                      {isRtl ? "اختر الحساب" : "Select account"}
+                    </label>
+                    <select
+                      value={promptClientId}
+                      onChange={(event) => setPromptClientId(event.target.value)}
+                      className={cn(
+                        "h-11 w-full rounded-2xl border border-white/10 bg-[#16161a] px-4 text-sm text-white outline-none",
+                        isRtl ? "text-right" : "text-left",
+                      )}
+                    >
+                      {clients.map((client) => (
+                        <option key={client.id} value={client.id}>
+                          {client.business_name || client.username} - @{client.username}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-4">
+                    <div className="text-xs font-semibold text-white/50">
+                      {isRtl ? "الحساب المحدد" : "Selected account"}
+                    </div>
+                    <div className="mt-2 text-sm font-bold text-white">
+                      {promptSettings?.business_name || promptSettings?.username || (isRtl ? "لا يوجد حساب" : "No account")}
+                    </div>
+                    <div className="mt-1 text-xs text-white/40" dir="ltr">
+                      {promptSettings ? `@${promptSettings.username}` : ""}
+                    </div>
+                  </div>
+
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="w-full justify-center"
+                    onClick={() => {
+                      setPersonaDraft(promptSettings?.ai_persona || "");
+                      const drafts: Partial<Record<PromptKey, string>> = {};
+                      promptKeys.forEach((key) => {
+                        drafts[key] = promptSettings?.sections[key]?.custom_prompt || "";
+                      });
+                      setPromptDrafts(drafts);
+                    }}
+                    disabled={!promptSettings}
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                    {isRtl ? "إلغاء التغييرات غير المحفوظة" : "Discard unsaved changes"}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="w-full justify-center"
+                    onClick={() => {
+                      setPersonaDraft("");
+                      const drafts: Partial<Record<PromptKey, string>> = {};
+                      promptKeys.forEach((key) => {
+                        drafts[key] = "";
+                      });
+                      setPromptDrafts(drafts);
+                    }}
+                    disabled={!promptSettings}
+                  >
+                    <Database className="h-4 w-4" />
+                    {isRtl ? "استخدام كل الافتراضيات" : "Use all defaults"}
+                  </Button>
+                </div>
+
+                <div className="space-y-4">
+                  {loadingPrompts ? (
+                    <div className="grid min-h-80 place-items-center rounded-2xl border border-white/10 bg-white/[0.025]">
+                      <Loader2 className="h-7 w-7 animate-spin text-primary-400" />
+                    </div>
+                  ) : !promptSettings ? (
+                    <div className="rounded-2xl border border-dashed border-white/10 p-8 text-center text-sm text-white/40">
+                      {isRtl ? "اختر حساباً لعرض البرومبتات." : "Select an account to view prompts."}
+                    </div>
+                  ) : (
+                    <>
+                      <div className="rounded-2xl border border-primary-400/20 bg-primary-500/10 p-4">
+                        <div className="mb-2 flex items-center justify-between gap-3">
+                          <label className="text-sm font-semibold text-white">
+                            {isRtl ? "البرومبت الشخصي للعميل" : "Client persona prompt"}
+                          </label>
+                          <Button type="button" size="sm" variant="ghost" onClick={() => setPersonaDraft("")}>
+                            {isRtl ? "تفريغ" : "Clear"}
+                          </Button>
+                        </div>
+                        <Textarea
+                          value={personaDraft}
+                          onChange={(event) => setPersonaDraft(event.target.value)}
+                          className={cn("min-h-40 font-mono text-xs leading-5", isRtl ? "text-right" : "text-left")}
+                          placeholder={isRtl ? "صف شخصية المساعد ونبرة الرد لهذا الحساب." : "Describe the assistant personality and tone for this account."}
+                        />
+                        <p className="mt-2 text-xs leading-5 text-white/40">
+                          {isRtl
+                            ? "هذا النص يدخل كـ persona داخل البرومبت الأساسي، ولا يتجاوز قواعد الأمان والحقائق."
+                            : "This text is injected as persona inside the protected base prompt and cannot override safety or grounding rules."}
+                        </p>
+                      </div>
+
+                      {promptKeys.map((key) => {
+                        const section = promptSettings.sections[key];
+                        const value = promptDrafts[key] ?? "";
+                        return (
+                          <div key={key} className="rounded-2xl border border-white/10 bg-white/[0.025] p-4">
+                            <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+                              <div>
+                                <h4 className="text-sm font-semibold text-white">{section.label}</h4>
+                                <p className="mt-1 text-xs leading-5 text-white/40">{section.description}</p>
+                              </div>
+                              <div className="flex gap-2">
+                                {section.is_custom && (
+                                  <span className="rounded-full bg-primary-500/15 px-2 py-1 text-[10px] font-bold text-primary-300">
+                                    {isRtl ? "مخصص" : "Custom"}
+                                  </span>
+                                )}
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => setPromptDrafts((current) => ({ ...current, [key]: "" }))}
+                                >
+                                  {isRtl ? "استخدام الافتراضي" : "Use default"}
+                                </Button>
+                              </div>
+                            </div>
+                            <Textarea
+                              value={value}
+                              onChange={(event) => setPromptDrafts((current) => ({ ...current, [key]: event.target.value }))}
+                              className="min-h-44 font-mono text-xs leading-5 text-left"
+                              dir="ltr"
+                              placeholder={isRtl ? "اتركه فارغاً لاستخدام الافتراضي." : "Leave empty to use the default."}
+                            />
+                            <details className="mt-3 rounded-xl border border-white/10 bg-black/15 p-3">
+                              <summary className="cursor-pointer text-xs font-semibold text-white/50">
+                                {isRtl ? "عرض البرومبت الافتراضي" : "Show default prompt"}
+                              </summary>
+                              <pre className="mt-3 max-h-64 overflow-auto whitespace-pre-wrap text-left text-[11px] leading-5 text-white/45" dir="ltr">
+                                {section.default_prompt}
+                              </pre>
+                            </details>
+                          </div>
+                        );
+                      })}
+                    </>
+                  )}
+                </div>
+              </div>
+            </GradientCard>
           </TabsContent>
 
           <TabsContent value="testing" className="space-y-6">
