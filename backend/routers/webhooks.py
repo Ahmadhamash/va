@@ -330,11 +330,14 @@ def _manychat_response(
     channel: str,
     *,
     audio_url: str | None = None,
+    image_url: str | None = None,
     delivery: str = "text",
 ) -> dict:
     messages: list[dict] = []
     if delivery != "voice" or not audio_url:
         messages.extend(_manychat_text_messages(reply or ""))
+    if image_url:
+        messages.append({"type": "image", "url": image_url})
     if audio_url:
         messages.append({"type": "audio", "url": audio_url})
     content = {"messages": messages}
@@ -347,6 +350,7 @@ def _manychat_external_response(
     reply: str | None,
     *,
     audio_url: str | None = None,
+    image_url: str | None = None,
 ) -> dict:
     """Flat payload for ManyChat's External Request response mapping."""
     value = reply or ""
@@ -355,6 +359,8 @@ def _manychat_external_response(
         "reply": value,
         "audio_url": audio_url or "",
         "has_audio": bool(audio_url),
+        "image_url": image_url or "",
+        "has_image": bool(image_url),
     }
 
 
@@ -439,23 +445,31 @@ async def manychat_inbound(
     )
     reply = result.get("reply") or ""
     audio_url = _manychat_public_media_url(result.get("audio_url"))
+    result_image_url = result.get("image_url")
+    image_url = _manychat_public_media_url(result_image_url) if result_image_url else None
     logger.info(
-        "ManyChat reply ready: channel=%s requested_delivery=%s delivery=%s has_audio=%s sender_suffix=%s elapsed_ms=%d reply_len=%d",
+        "ManyChat reply ready: channel=%s requested_delivery=%s delivery=%s has_audio=%s has_image=%s sender_suffix=%s elapsed_ms=%d reply_len=%d",
         channel,
         requested_delivery,
         delivery,
         bool(audio_url),
+        bool(image_url),
         sender_id[-6:],
         round((time.perf_counter() - started_at) * 1000),
         len(reply or ""),
     )
     
     if response_mode == "external":
-        return _manychat_external_response(reply, audio_url=audio_url)
+        return _manychat_external_response(
+            reply,
+            audio_url=audio_url,
+            image_url=image_url,
+        )
     return _manychat_response(
         reply,
         channel,
         audio_url=audio_url,
+        image_url=image_url,
         delivery=delivery,
     )
 

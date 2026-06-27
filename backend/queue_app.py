@@ -64,6 +64,7 @@ async def process_session_task(ctx, session_id: str, seq: int) -> str:
                 credentials = integration.credentials or {}
                 adapter = get_adapter(channel)
                 audio_url = result.get("audio_url")
+                image_url = result.get("image_url")
                 text_reply = result["reply"]
 
                 try:
@@ -134,6 +135,18 @@ async def process_session_task(ctx, session_id: str, seq: int) -> str:
                                 break # Stop sending remaining bubbles if one fails
                                 
                         delivery = final_delivery or DeliveryResult(success=False, error_message="Empty message")
+
+                        if image_url and delivery.success:
+                            image_delivery = await adapter.send_image_message(
+                                external_id, image_url, credentials
+                            )
+                            await _log_delivery(
+                                db,
+                                channel=channel,
+                                delivery_type="image",
+                                result=image_delivery,
+                                session_id=session_id,
+                            )
 
                     if not delivery.success:
                         job_try = ctx.get("job_try", 1)

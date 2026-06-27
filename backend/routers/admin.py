@@ -219,9 +219,6 @@ async def update_client_prompt_settings(
     row = await get_or_create_prompt_settings(client.id, db)
     updates = payload.model_dump(exclude_unset=True)
 
-    if "ai_persona" in updates:
-        client.ai_persona = (updates["ai_persona"] or "").strip() or None
-
     for field in PROMPT_FIELDS:
         if field in updates:
             value = updates[field]

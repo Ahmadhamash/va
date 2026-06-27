@@ -108,6 +108,8 @@ interface ClientPromptSettings {
   client_id: string;
   username: string;
   business_name: string | null;
+  client_ai_persona: string;
+  admin_persona_prompt: string;
   ai_persona: string;
   sections: Record<PromptKey, PromptSection>;
 }
@@ -506,7 +508,7 @@ export default function AdminDashboardPage() {
       });
       setPromptSettings(data);
       setPromptDrafts(drafts);
-      setPersonaDraft(data.ai_persona || "");
+      setPersonaDraft(data.admin_persona_prompt || "");
     } catch (err) {
       console.error("Prompt settings load error", err);
       showNotice(isRtl ? "حدث خطأ أثناء تحميل البرومبتات." : "Error loading prompts.", "error");
@@ -526,7 +528,7 @@ export default function AdminDashboardPage() {
     setSavingPrompts(true);
     try {
       const body: Record<string, string> = {
-        ai_persona: personaDraft,
+        admin_persona_prompt: personaDraft,
       };
       promptKeys.forEach((key) => {
         body[key] = promptDrafts[key] || "";
@@ -551,10 +553,7 @@ export default function AdminDashboardPage() {
       });
       setPromptSettings(data);
       setPromptDrafts(drafts);
-      setPersonaDraft(data.ai_persona || "");
-      setClients((prev) => prev.map((client) => (
-        client.id === promptClientId ? { ...client, ai_persona: data.ai_persona } : client
-      )));
+      setPersonaDraft(data.admin_persona_prompt || "");
       showNotice(isRtl ? "تم حفظ برومبتات العميل بنجاح." : "Client prompts saved successfully.");
     } catch (err) {
       console.error("Prompt settings save error", err);
@@ -1514,7 +1513,7 @@ export default function AdminDashboardPage() {
                     variant="ghost"
                     className="w-full justify-center"
                     onClick={() => {
-                      setPersonaDraft(promptSettings?.ai_persona || "");
+                      setPersonaDraft(promptSettings?.admin_persona_prompt || "");
                       const drafts: Partial<Record<PromptKey, string>> = {};
                       promptKeys.forEach((key) => {
                         drafts[key] = promptSettings?.sections[key]?.custom_prompt || "";
@@ -1557,9 +1556,17 @@ export default function AdminDashboardPage() {
                   ) : (
                     <>
                       <div className="rounded-2xl border border-primary-400/20 bg-primary-500/10 p-4">
+                        <div className="mb-4 rounded-xl border border-white/10 bg-black/20 p-3">
+                          <div className="text-xs font-semibold text-white/50">
+                            {isRtl ? "شخصية البوت من حساب العميل (قراءة فقط)" : "Client bot personality (read-only)"}
+                          </div>
+                          <div className="mt-2 max-h-28 overflow-auto whitespace-pre-wrap text-xs leading-5 text-white/60">
+                            {promptSettings.client_ai_persona || (isRtl ? "لم يحدد العميل شخصية بعد." : "The client has not set a personality yet.")}
+                          </div>
+                        </div>
                         <div className="mb-2 flex items-center justify-between gap-3">
                           <label className="text-sm font-semibold text-white">
-                            {isRtl ? "البرومبت الشخصي للعميل" : "Client persona prompt"}
+                            {isRtl ? "إرشادات الأدمن لهذا الحساب" : "Admin account guidance"}
                           </label>
                           <Button type="button" size="sm" variant="ghost" onClick={() => setPersonaDraft("")}>
                             {isRtl ? "تفريغ" : "Clear"}
@@ -1569,12 +1576,12 @@ export default function AdminDashboardPage() {
                           value={personaDraft}
                           onChange={(event) => setPersonaDraft(event.target.value)}
                           className={cn("min-h-40 font-mono text-xs leading-5", isRtl ? "text-right" : "text-left")}
-                          placeholder={isRtl ? "صف شخصية المساعد ونبرة الرد لهذا الحساب." : "Describe the assistant personality and tone for this account."}
+                          placeholder={isRtl ? "أضف قواعد أو توجيهات إدارية لهذا الحساب بدون استبدال شخصية العميل." : "Add admin guidance for this account without replacing the client-owned personality."}
                         />
                         <p className="mt-2 text-xs leading-5 text-white/40">
                           {isRtl
-                            ? "هذا النص يدخل كـ persona داخل البرومبت الأساسي، ولا يتجاوز قواعد الأمان والحقائق."
-                            : "This text is injected as persona inside the protected base prompt and cannot override safety or grounding rules."}
+                            ? "هذه الخانة تضاف كإرشادات أدمن فقط. بيانات المتجر والكتالوج وقواعد الأمان تبقى أعلى أولوية، وشخصية العميل لا تتغير عند الحفظ."
+                            : "This is added as admin guidance only. Store data, catalog facts, and safety rules stay higher priority, and saving here does not change the client's personality."}
                         </p>
                       </div>
 

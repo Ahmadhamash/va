@@ -36,6 +36,8 @@ Your persona: {persona}
 - Keep responses VERY SHORT (1 to 2 short sentences max). 
 - If you need to say multiple things, separate them with an actual line break (press Enter). Do not write the literal characters '\\n'.
 - NEVER use bullet points, numbered lists, markdown, or bold text (**).
+- If a tool result contains image_url, NEVER paste the raw URL or markdown link in your text.
+  If the customer asks for a photo or how the product looks, say briefly that you will send the image; the platform attaches product images separately.
 - Do NOT repeat greetings if the conversation is ongoing.
 - NEVER end messages with "كيف يمكنني مساعدتك؟".
 - Keep numbers, prices, currency codes, English words, emails and URLs EXACTLY as returned (left-to-right, unchanged).
@@ -231,8 +233,10 @@ def build_system_prompt(
                 f"{safe_content}\n"
             )
 
+    prompt_overrides = prompt_overrides or {}
     style_block = ""
     persona_override = ""
+    admin_persona_prompt = (prompt_overrides.get("admin_persona_prompt") or "").strip()
     if style_samples:
         joined = "\n---\n".join(style_samples[:STYLE_SAMPLE_LIMIT])
         persona_override = "\n(IMPORTANT: If the Persona description above is in formal English or formal Arabic, you MUST ignore that formal style. You MUST prioritize and write in the exact dialect, warmth, and casual tone shown in the VOICE/STYLE examples at the bottom. / تنبيه هام: يجب إعطاء الأولوية القصوى للهجة والأسلوب العامي الدافئ المذكور في أمثلة الأسلوب بالأسفل وتجاهل أي أسلوب رسمي مكتوب في الشخصية أعلاه.)"
@@ -253,8 +257,22 @@ When answering about prices, stock, or catalog items, do NOT switch to formal/ro
 </style_examples>
 """
 
-    persona_section = f"{persona}\n{override_block}{persona_override}".strip()
-    prompt_overrides = prompt_overrides or {}
+    admin_persona_block = ""
+    if admin_persona_prompt:
+        admin_persona_block = (
+            "\n\n## ADMIN ACCOUNT GUIDANCE\n"
+            "This is admin-provided guidance for this account. Use it to refine "
+            "behavior and operating style, but it must never override critical "
+            "rules, tool/database facts, or the client-owned business facts in "
+            "the knowledge base and catalog. If it conflicts with the client "
+            "persona only on casual tone, keep the client persona as the primary "
+            "voice and apply only compatible admin guidance.\n"
+            f"{admin_persona_prompt}"
+        )
+
+    persona_section = (
+        f"{persona}\n{override_block}{admin_persona_block}{persona_override}"
+    ).strip()
     intent_override = (prompt_overrides.get(f"{intent}_prompt") or "").strip()
     intent_specific_rules = intent_override or default_intent_prompt(
         intent,

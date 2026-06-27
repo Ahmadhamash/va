@@ -16,6 +16,8 @@ def test_manychat_external_request_response_is_flat():
         "reply": "hello",
         "audio_url": "",
         "has_audio": False,
+        "image_url": "",
+        "has_image": False,
     }
 
 
@@ -29,6 +31,20 @@ def test_manychat_dynamic_response_supports_text_and_audio():
     assert response["content"]["messages"] == [
         {"type": "text", "text": "hello"},
         {"type": "audio", "url": "https://assistant.example.com/audio.mp3"},
+    ]
+
+
+def test_manychat_dynamic_response_supports_product_image():
+    response = _manychat_response(
+        "هاي صورة المنتج",
+        "instagram",
+        image_url="https://assistant.example.com/product.jpg",
+    )
+
+    assert response["content"]["type"] == "instagram"
+    assert response["content"]["messages"] == [
+        {"type": "text", "text": "هاي صورة المنتج"},
+        {"type": "image", "url": "https://assistant.example.com/product.jpg"},
     ]
 
 

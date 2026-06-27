@@ -69,6 +69,14 @@ _CONTEXTUAL_TERMS = (
     "it", "this", "that", "its", "them",
 )
 
+_URL_RE = re.compile(r"https?://[^\s)\]]+")
+_IMAGE_REQUEST_TERMS = (
+    "image", "photo", "picture", "pic", "look", "looks", "show me",
+    "صورة", "صوره", "صور", "شكل", "شكلها", "شكله", "شكلو", "شكلهم",
+    "بتطلع", "تطلع",
+)
+
+
 def _client_for(api_key: str):
     return get_openai_client(api_key, timeout=OPENAI_TIMEOUT_SECONDS)
 
@@ -141,6 +149,69 @@ def _store_cached_reply(
     if keys and not all(key.startswith(_CACHEABLE_TOOL_PREFIXES) for key in keys):
         return
     _response_cache[(str(user_id), key_text)] = (monotonic(), reply)
+
+
+def _customer_asked_for_image(text: str | None) -> bool:
+    clean = (text or "").casefold()
+    return any(term.casefold() in clean for term in _IMAGE_REQUEST_TERMS)
+
+
+def _catalog_image_url_from_data(retrieved_data: dict) -> str | None:
+    for result in retrieved_data.values():
+        if not isinstance(result, dict):
+            continue
+        if result.get("overview_only") or result.get("matched") is False:
+            continue
+        items = result.get("items")
+        if not isinstance(items, list):
+            continue
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            image_url = str(item.get("image_url") or "").strip()
+            if image_url:
+                return image_url
+    return None
+
+
+def _reply_contains_image_url(reply: str | None, image_url: str) -> bool:
+    target = image_url.strip().rstrip(".,،)")
+    if not target:
+        return False
+    urls = [url.rstrip(".,،)") for url in _URL_RE.findall(reply or "")]
+    return target in (reply or "") or target in urls
+
+
+def _reply_image_url(
+    customer_message: str | None,
+    retrieved_data: dict,
+    reply: str | None,
+) -> str | None:
+    image_url = _catalog_image_url_from_data(retrieved_data)
+    if not image_url:
+        return None
+    if _customer_asked_for_image(customer_message) or _reply_contains_image_url(reply, image_url):
+        return image_url
+    return None
+
+
+def _strip_sent_image_url(reply: str, image_url: str | None) -> str:
+    if not reply or not image_url:
+        return reply
+    target = image_url.strip().rstrip(".,،)")
+    if not target:
+        return reply
+
+    lines: list[str] = []
+    for line in reply.splitlines():
+        clean_line = line.strip()
+        urls = [url.rstrip(".,،)") for url in _URL_RE.findall(clean_line)]
+        if target in clean_line or target in urls:
+            continue
+        lines.append(line)
+
+    cleaned = "\n".join(lines).strip()
+    return cleaned or reply.replace(image_url, "").strip() or reply
 
 
 async def _run_pre_ai_automations(
@@ -1339,6 +1410,9 @@ async def process_message(
         user, session_id, db,
         ai_trace=ai_trace,
     )
+    reply_image_url = _reply_image_url(customer_text, retrieved_data, reply)
+    if reply_image_url:
+        reply = _strip_sent_image_url(reply, reply_image_url)
     _store_cached_reply(user_id, customer_text, reply, retrieved_data, action)
 
     # ── Run post-AI automations ──
@@ -1365,6 +1439,9 @@ async def process_message(
     # ── Voice reply (uses new VoiceService abstraction) ──
     reply_media_type = "text"
     reply_media_url = None
+    if reply_image_url:
+        reply_media_type = "image"
+        reply_media_url = reply_image_url
     ERROR_REPLIES = (SERVICE_UNAVAILABLE_REPLY, RETRIEVAL_ERROR_REPLY)
     if reply and reply not in ERROR_REPLIES:
         should_voice, voice, speed, voice_config, tts_provider, audio_format = await _determine_voice_mode(
@@ -1391,7 +1468,13 @@ async def process_message(
     await save_message(session_id, "assistant", reply, reply_media_type, reply_media_url, db)
     await db.commit()
 
-    return {"reply": reply, "transcription": transcription, "audio_url": reply_media_url, "action": action}
+    return {
+        "reply": reply,
+        "transcription": transcription,
+        "audio_url": reply_media_url if reply_media_type == "audio" else None,
+        "image_url": reply_image_url,
+        "action": action,
+    }
 
 
 # ─── Debounced path (channels/widget via worker) ─────────────────────────────
@@ -1558,6 +1641,7 @@ async def process_pending(session_id: uuid.UUID, db: AsyncSession) -> dict | Non
     else:
         content = combined_text
 
+    reply_image_url = None
     action = "sent"
     if combined_text and is_prompt_injection(combined_text):
         reply = PROMPT_INJECTION_REPLY
@@ -1577,6 +1661,9 @@ async def process_pending(session_id: uuid.UUID, db: AsyncSession) -> dict | Non
                 user, session_id, db,
                 ai_trace=ai_trace,
             )
+            reply_image_url = _reply_image_url(customer_text, retrieved_data, reply)
+            if reply_image_url:
+                reply = _strip_sent_image_url(reply, reply_image_url)
             _store_cached_reply(user_id, customer_text, reply, retrieved_data, action)
 
             # ── Run post-AI automations ──
@@ -1609,6 +1696,9 @@ async def process_pending(session_id: uuid.UUID, db: AsyncSession) -> dict | Non
     # ── Voice reply (uses new VoiceService) ──
     reply_media_type = "text"
     reply_media_url = None
+    if reply_image_url:
+        reply_media_type = "image"
+        reply_media_url = reply_image_url
     ERROR_REPLIES = (SERVICE_UNAVAILABLE_REPLY, RETRIEVAL_ERROR_REPLY)
     if reply and reply not in ERROR_REPLIES:
         should_voice, voice, speed, voice_config, tts_provider, audio_format = await _determine_voice_mode(
@@ -1643,6 +1733,7 @@ async def process_pending(session_id: uuid.UUID, db: AsyncSession) -> dict | Non
         "channel": session_channel,
         "external_user_id": session_external_user_id,
         "user_id": str(user_id),
-        "audio_url": reply_media_url,
+        "audio_url": reply_media_url if reply_media_type == "audio" else None,
+        "image_url": reply_image_url,
         "action": action,
     }

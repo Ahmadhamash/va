@@ -8,6 +8,7 @@ class ChatSendResponse(BaseModel):
     session_id: uuid.UUID
     reply: str
     transcription: str | None = None  # populated when an audio message was sent
+    image_url: str | None = None
 
 
 class MessageOut(BaseModel):

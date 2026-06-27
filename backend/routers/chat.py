@@ -192,6 +192,7 @@ async def send_message(
         session_id=session.id,
         reply=result["reply"],
         transcription=result.get("transcription"),
+        image_url=result.get("image_url"),
     )
 
 @router.post("/preview")

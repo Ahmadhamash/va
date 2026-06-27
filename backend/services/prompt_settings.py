@@ -14,6 +14,7 @@ PROMPT_FIELDS = (
     "support_prompt",
     "booking_prompt",
     "general_prompt",
+    "admin_persona_prompt",
     "humanizer_prompt",
     "voice_prompt",
 )
@@ -41,6 +42,10 @@ PROMPT_SECTION_META = {
     "general_prompt": PromptSectionMeta(
         "General chat",
         "Rules used for greetings, casual chat, and non-business redirection.",
+    ),
+    "admin_persona_prompt": PromptSectionMeta(
+        "Admin account guidance",
+        "Account-level guidance added by admins. It supplements the client persona but does not replace client-owned business facts.",
     ),
     "humanizer_prompt": PromptSectionMeta(
         "Humanizer",
@@ -111,6 +116,7 @@ def default_prompt_sections(*, human_handoff_enabled: bool = True) -> dict[str, 
         "support_prompt": default_intent_prompt("support", human_handoff_enabled),
         "booking_prompt": default_intent_prompt("booking", human_handoff_enabled),
         "general_prompt": default_intent_prompt("general", human_handoff_enabled),
+        "admin_persona_prompt": "",
         "humanizer_prompt": HUMANIZER_SYSTEM_PROMPT.strip(),
         "voice_prompt": DEFAULT_VOICE_PROMPT.strip(),
     }
@@ -141,6 +147,8 @@ def prompt_settings_payload(
         "client_id": str(user.id),
         "username": user.username,
         "business_name": user.business_name,
+        "client_ai_persona": user.ai_persona or "",
+        "admin_persona_prompt": row.admin_persona_prompt or "",
         "ai_persona": user.ai_persona or "",
         "sections": sections,
     }

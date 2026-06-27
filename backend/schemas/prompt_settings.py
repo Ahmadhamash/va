@@ -17,12 +17,15 @@ class ClientPromptSettingsOut(BaseModel):
     client_id: uuid.UUID
     username: str
     business_name: str | None
+    client_ai_persona: str
+    admin_persona_prompt: str
     ai_persona: str
     sections: dict[str, PromptSectionOut]
 
 
 class ClientPromptSettingsUpdate(BaseModel):
     ai_persona: str | None = Field(default=None, max_length=12000)
+    admin_persona_prompt: str | None = Field(default=None, max_length=12000)
     sales_prompt: str | None = Field(default=None, max_length=16000)
     support_prompt: str | None = Field(default=None, max_length=16000)
     booking_prompt: str | None = Field(default=None, max_length=16000)

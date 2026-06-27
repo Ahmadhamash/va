@@ -35,6 +35,7 @@ class ClientPromptSettings(Base):
     support_prompt: Mapped[str | None] = mapped_column(Text, nullable=True)
     booking_prompt: Mapped[str | None] = mapped_column(Text, nullable=True)
     general_prompt: Mapped[str | None] = mapped_column(Text, nullable=True)
+    admin_persona_prompt: Mapped[str | None] = mapped_column(Text, nullable=True)
     humanizer_prompt: Mapped[str | None] = mapped_column(Text, nullable=True)
     voice_prompt: Mapped[str | None] = mapped_column(Text, nullable=True)
 
