@@ -7,6 +7,7 @@ class SettingsOut(BaseModel):
     ai_model: str
     debounce_seconds: int
     master_system_prompt: str = ""
+    human_handoff_enabled: bool = True
 
 
 class SettingsUpdate(BaseModel):
@@ -15,6 +16,7 @@ class SettingsUpdate(BaseModel):
     ai_model: str | None = Field(default=None, max_length=50)
     debounce_seconds: int | None = Field(default=None, ge=0, le=120)
     master_system_prompt: str | None = Field(default=None, max_length=12000)
+    human_handoff_enabled: bool | None = None
 
 
 class StatsOut(BaseModel):

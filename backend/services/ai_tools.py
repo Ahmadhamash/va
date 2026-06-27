@@ -255,16 +255,23 @@ _INTENT_TOOL_NAMES = {
 }
 
 
-def get_tools_for_intents(intents: list[str] | tuple[str, ...] | set[str]) -> list[dict]:
-    base = [t for t in TOOLS if t["function"]["name"] == "escalate_to_human"]
+def get_tools_for_intents(
+    intents: list[str] | tuple[str, ...] | set[str],
+    *,
+    include_handoff: bool = True,
+) -> list[dict]:
+    base = [
+        t for t in TOOLS
+        if include_handoff and t["function"]["name"] == "escalate_to_human"
+    ]
     allowed: set[str] = set()
     for intent in intents:
         allowed.update(_INTENT_TOOL_NAMES.get(intent, set()))
     return base + [t for t in TOOLS if t["function"]["name"] in allowed]
 
 
-def get_tools_for_intent(intent: str) -> list[dict]:
-    return get_tools_for_intents([intent])
+def get_tools_for_intent(intent: str, *, include_handoff: bool = True) -> list[dict]:
+    return get_tools_for_intents([intent], include_handoff=include_handoff)
 
 
 # ─── DB tools ────────────────────────────────────────────────────────────────

@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from models import ChatSession, Message, User, BusinessWorkflow, VoiceSettings
 from services.file_service import encode_image_base64
 from services.settings_service import (
+    effective_human_handoff_enabled,
     effective_master_system_prompt,
     effective_model,
     effective_openai_key,
@@ -68,6 +69,21 @@ _CONTEXTUAL_TERMS = (
 
 def _client_for(api_key: str):
     return get_openai_client(api_key, timeout=OPENAI_TIMEOUT_SECONDS)
+
+
+def _handoff_disabled_fallback(customer_message: str) -> str:
+    latin_chars = sum(1 for ch in customer_message if ("a" <= ch.lower() <= "z"))
+    arabic_chars = sum(1 for ch in customer_message if "\u0600" <= ch <= "\u06ff")
+    if latin_chars > arabic_chars:
+        return (
+            "I can keep helping you here. Please send the key details, like the "
+            "order number, product name, or what happened, and I will do my best "
+            "with the information available."
+        )
+    return (
+        "بقدر أكمل أساعدك هون. ابعتلي التفاصيل المهمة مثل رقم الطلب أو اسم المنتج "
+        "أو شو صار بالضبط، وبرجعلك بأفضل جواب حسب المعلومات المتوفرة."
+    )
 
 
 def _max_tokens_for_intent(intent: str, *, after_tools: bool = False) -> int:
@@ -378,6 +394,7 @@ async def _generate_reply(
     api_key = await effective_openai_key(db)
     model = await effective_model(db)
     master_system_prompt = await effective_master_system_prompt(db)
+    human_handoff_enabled = await effective_human_handoff_enabled(db)
     client = _client_for(api_key)
 
     history = await get_session_history(session_id, db, limit=HISTORY_LIMIT)
@@ -405,7 +422,10 @@ async def _generate_reply(
     intents = heuristic_intents_for_message(text_content)
     if intent not in intents:
         intents.insert(0, intent)
-    allowed_tools = get_tools_for_intents(intents)
+    allowed_tools = get_tools_for_intents(
+        intents,
+        include_handoff=human_handoff_enabled,
+    )
     trace: dict = {
         "intent": intent,
         "intents": intents,
@@ -414,6 +434,7 @@ async def _generate_reply(
         "tool_calls": [],
         "tool_rounds": 0,
         "max_tool_rounds": MAX_TOOL_ROUNDS,
+        "human_handoff_enabled": human_handoff_enabled,
     }
     
     if settings.LOCAL_LLM_ENABLED and intent in ("support", "general"):
@@ -437,6 +458,7 @@ async def _generate_reply(
                 workflows,
                 intent=intent,
                 master_system_prompt=master_system_prompt,
+                human_handoff_enabled=human_handoff_enabled,
             ),
         },
         *history,
@@ -515,6 +537,7 @@ async def generate_preview_reply(
     api_key = await effective_openai_key(db)
     model = await effective_model(db)
     master_system_prompt = await effective_master_system_prompt(db)
+    human_handoff_enabled = await effective_human_handoff_enabled(db)
     client = _client_for(api_key)
 
     # We mock a User object just to pass the persona to the prompt builder
@@ -529,6 +552,7 @@ async def generate_preview_reply(
         workflows=None,
         intent="general",
         master_system_prompt=master_system_prompt,
+        human_handoff_enabled=human_handoff_enabled,
     )
 
     messages = [
@@ -656,6 +680,7 @@ async def _verify_and_finalize(
     """
     user_id = user.id
     api_key = await effective_openai_key(db)
+    human_handoff_enabled = await effective_human_handoff_enabled(db)
     ai_trace = dict(ai_trace or {})
     ai_trace.setdefault("verification", {})
     ai_trace.setdefault("fact_guard", {})
@@ -724,6 +749,17 @@ async def _verify_and_finalize(
         result = await verifier.verify(customer_message, retrieved_data, humanized_draft)
     except Exception:
         logger.exception("Answer verification failed")
+        if not human_handoff_enabled:
+            safe_reply = _handoff_disabled_fallback(customer_message)
+            return safe_reply, "modified", VerificationResult(
+                verdict=ASK_CLARIFICATION,
+                risk_score=0.8,
+                reasons=[
+                    "Verification process encountered an exception",
+                    "Human handoff disabled; continued with safe clarification",
+                ],
+                safe_response=safe_reply,
+            )
         return SAFE_RESPONSES.get(
             "handoff",
             "لحظة من فضلك، رح أحولك لزميلي ليقدر يساعدك بشكل أفضل.",
@@ -744,6 +780,7 @@ async def _verify_and_finalize(
         "reasons": result.reasons,
         "flagged_claims": result.flagged_claims,
     }
+    ai_trace["verification"]["human_handoff_enabled"] = human_handoff_enabled
 
     draft_answer_for_log = draft_answer
     more_data_repaired = False
@@ -862,6 +899,23 @@ async def _verify_and_finalize(
             "خليني أتأكد من المعلومة وأرجعلك."
         )
         action = "modified"
+
+    elif result.verdict == HUMAN_HANDOFF_REQUIRED and not human_handoff_enabled:
+        final_reply = humanized_draft or _handoff_disabled_fallback(customer_message)
+        action = "modified"
+        ai_trace["verification"]["handoff_disabled_override"] = True
+        result = VerificationResult(
+            verdict=ASK_CLARIFICATION,
+            risk_score=result.risk_score,
+            reasons=[
+                *result.reasons,
+                "Human handoff disabled; AI continued with best safe response",
+            ],
+            flagged_claims=result.flagged_claims,
+            grounding_data_used=result.grounding_data_used,
+            safe_response=final_reply,
+            modified_answer=final_reply,
+        )
 
     elif result.verdict == HUMAN_HANDOFF_REQUIRED:
         # Create a handoff session
@@ -1123,7 +1177,7 @@ async def process_message(
                     "product photo, payment receipt, error screenshot, delivery/order evidence, or other. "
                     "Only if it is a product photo, identify the product and call get_catalog. "
                     "For receipts, screenshots, complaints, or unclear evidence, do not search the catalog; "
-                    "ask a short clarifying question or escalate to a human if needed."
+                    "ask a short clarifying question before continuing."
                 ),
             },
             {
@@ -1442,7 +1496,7 @@ async def process_pending(session_id: uuid.UUID, db: AsyncSession) -> dict | Non
                     "product photo, payment receipt, error screenshot, delivery/order evidence, or other. "
                     "Only if it is a product photo, identify the product and call get_catalog. "
                     "For receipts, screenshots, complaints, or unclear evidence, do not search the catalog; "
-                    "ask a short clarifying question or escalate to a human if needed."
+                    "ask a short clarifying question before continuing."
                 ),
             },
         ]

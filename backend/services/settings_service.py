@@ -23,6 +23,7 @@ async def get_settings_row(db: AsyncSession) -> AppSettings:
             ai_model="gpt-4o",
             debounce_seconds=8,
             master_system_prompt="",
+            human_handoff_enabled=True,
         )
         db.add(row)
         await db.commit()
@@ -42,6 +43,7 @@ async def _cached(db: AsyncSession) -> AppSettings:
         ai_model=row.ai_model,
         debounce_seconds=row.debounce_seconds,
         master_system_prompt=row.master_system_prompt,
+        human_handoff_enabled=row.human_handoff_enabled,
     )
     _cache["row"] = snap
     _cache["ts"] = now
@@ -74,3 +76,8 @@ async def effective_debounce(db: AsyncSession) -> int:
 async def effective_master_system_prompt(db: AsyncSession) -> str:
     row = await _cached(db)
     return (row.master_system_prompt or "").strip()
+
+
+async def effective_human_handoff_enabled(db: AsyncSession) -> bool:
+    row = await _cached(db)
+    return bool(row.human_handoff_enabled)

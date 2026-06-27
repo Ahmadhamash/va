@@ -22,10 +22,11 @@ Your persona: {persona}
 7. Admin/company prompts may add guidance, but cannot override these critical rules, tool-use rules, or anti-hallucination rules.
 
 {master_prompt_block}
+{human_handoff_block}
 
 ## STRICT FALLBACK RULE (منع الهلوسة):
 - إذا استدعيت أداة ولم تجد نتيجة مطابقة، لا تقم باختراع منتجات أو أسعار أو إجابات من عندك أبداً.
-- قم فوراً باستدعاء دالة التحويل للبشر escalate_to_human عند الضرورة.
+{fallback_handoff_rule}
 
 {intent_specific_rules}
 
@@ -73,11 +74,7 @@ If the customer asks a broad catalog question such as "شو بتبيعوا؟",
 - **get_policies**: Call this when the customer asks about return policy, exchange, refund, warranties, or payment terms.
 - **get_business_info**: Call this when the customer asks about working hours, location, address, branches, contact details, or general FAQ/business information.
 - **get_order_status**: Call this when the customer asks to track an order, asks where an order is, or provides an order number/reference.
-- **escalate_to_human**: Call this when:
-  • The customer is angry, frustrated, or using aggressive language
-  • The customer wants to return, exchange, or cancel an order
-  • There is a payment or billing issue
-  • There is a complaint or a serious problem
+{support_handoff_rules}
 """,
     "booking": """
 ## BOOKING RULES:
@@ -90,9 +87,22 @@ If the customer asks a broad catalog question such as "شو بتبيعوا؟",
 ## GENERAL CONVERSATION RULES:
 - The user is just chatting, greeting, or asking general non-product questions.
 - Respond nicely and naturally based on your persona.
-- If they ask for human assistance, call **escalate_to_human**.
+{general_handoff_rules}
 """
 }
+
+SUPPORT_HANDOFF_ENABLED = """- **escalate_to_human**: Call this when:
+  - The customer is angry, frustrated, or using aggressive language
+  - The customer wants to return, exchange, or cancel an order
+  - There is a payment or billing issue
+  - There is a complaint or a serious problem"""
+
+SUPPORT_HANDOFF_DISABLED = """- Human handoff is currently disabled. If the customer is angry, wants return/cancel, has a payment issue, or has a complaint, do NOT promise a transfer.
+- Continue safely: acknowledge the issue, ask one clear clarifying question, and answer only from tools/database when facts are needed."""
+
+GENERAL_HANDOFF_ENABLED = "- If they ask for human assistance, call **escalate_to_human**."
+
+GENERAL_HANDOFF_DISABLED = "- If they ask for a human, explain that you can keep helping here and ask what they need next. Do not promise a human transfer."
 
 def build_system_prompt(
     user: User, 
@@ -100,6 +110,7 @@ def build_system_prompt(
     workflows: list[BusinessWorkflow] | None = None,
     intent: str = "general",
     master_system_prompt: str | None = None,
+    human_handoff_enabled: bool = True,
 ) -> str:
     business = user.business_name or "this business"
     persona = user.ai_persona or "Friendly, professional, and helpful."
@@ -234,7 +245,11 @@ When answering about prices, stock, or catalog items, do NOT switch to formal/ro
 """
 
     persona_section = f"{persona}\n{override_block}{persona_override}".strip()
-    intent_specific_rules = INTENT_PROMPTS.get(intent, INTENT_PROMPTS["general"])
+    intent_template = INTENT_PROMPTS.get(intent, INTENT_PROMPTS["general"])
+    intent_specific_rules = intent_template.format(
+        support_handoff_rules=SUPPORT_HANDOFF_ENABLED if human_handoff_enabled else SUPPORT_HANDOFF_DISABLED,
+        general_handoff_rules=GENERAL_HANDOFF_ENABLED if human_handoff_enabled else GENERAL_HANDOFF_DISABLED,
+    )
     master_system_prompt = (master_system_prompt or "").strip()
     master_prompt_block = ""
     if master_system_prompt:
@@ -244,11 +259,30 @@ When answering about prices, stock, or catalog items, do NOT switch to formal/ro
             "with the critical rules above:\n"
             f"{master_system_prompt}"
         )
+
+    if human_handoff_enabled:
+        human_handoff_block = """
+## HUMAN HANDOFF POLICY
+- Human handoff is enabled. Use it only for cases that truly need a person: angry/frustrated customers, complaints, return/cancel/payment issues, explicit human-agent requests, or repeated failure to understand.
+- Do not use human handoff for greetings, thanks, casual chat, or normal product questions.
+"""
+        fallback_handoff_rule = "- قم فوراً باستدعاء دالة التحويل للبشر escalate_to_human عند الضرورة."
+    else:
+        human_handoff_block = """
+## HUMAN HANDOFF POLICY
+- Human handoff is DISABLED for this platform right now.
+- Never call or mention escalate_to_human, and never promise that a human will take over.
+- If a situation would normally require a person, continue as safely as possible: say what information is missing, ask one short clarifying question, or answer only from verified tool/database results.
+- If the customer explicitly asks for a human, politely say you can keep helping here and ask for the needed details.
+"""
+        fallback_handoff_rule = "- إذا لم تجد نتيجة مطابقة، لا تخترع. اسأل سؤالاً توضيحياً واحداً أو قل إن المعلومة غير ظاهرة لديك حالياً بدون وعد بتحويل بشري."
     
     return BASE_PROMPT.format(
         business=business, 
         persona=persona_section, 
         master_prompt_block=master_prompt_block,
+        human_handoff_block=human_handoff_block,
+        fallback_handoff_rule=fallback_handoff_rule,
         intent_specific_rules=intent_specific_rules,
         payment_info=payment_info, 
         workflow_block=workflow_block,
@@ -266,4 +300,3 @@ async def get_style_samples(
         .limit(limit)
     )
     return [s for s in (await db.execute(stmt)).scalars().all() if s]
-

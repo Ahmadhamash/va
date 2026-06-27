@@ -37,6 +37,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useAuthStore } from "@/store/use-auth-store";
 import { GradientCard } from "@/components/gradient-card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ToggleSetting } from "@/components/toggle-setting";
 import { useLanguageStore } from "@/store/use-language-store";
 import { cn } from "@/lib/utils";
 
@@ -82,6 +83,7 @@ interface PlatformSettings {
   ai_model: string;
   debounce_seconds: number;
   master_system_prompt: string;
+  human_handoff_enabled: boolean;
 }
 
 interface BusinessTypeOption {
@@ -182,6 +184,7 @@ export default function AdminDashboardPage() {
   const [aiModelInput, setAiModelInput] = useState("gpt-4o");
   const [debounceSecondsInput, setDebounceSecondsInput] = useState(2);
   const [masterSystemPromptInput, setMasterSystemPromptInput] = useState("");
+  const [humanHandoffEnabled, setHumanHandoffEnabled] = useState(true);
   const [updatingSettings, setUpdatingSettings] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
 
@@ -337,6 +340,7 @@ export default function AdminDashboardPage() {
         setAiModelInput(settingsData.ai_model || "gpt-4o");
         setDebounceSecondsInput(settingsData.debounce_seconds ?? 2);
         setMasterSystemPromptInput(settingsData.master_system_prompt || "");
+        setHumanHandoffEnabled(settingsData.human_handoff_enabled ?? true);
       }
       if (businessTypesRes.ok) {
         const typesData = await businessTypesRes.json().catch(() => []);
@@ -646,7 +650,8 @@ export default function AdminDashboardPage() {
           openai_api_key: apiKeyInput || null,
           ai_model: aiModelInput,
           debounce_seconds: debounceSecondsInput,
-          master_system_prompt: masterSystemPromptInput
+          master_system_prompt: masterSystemPromptInput,
+          human_handoff_enabled: humanHandoffEnabled
         })
       });
 
@@ -654,6 +659,7 @@ export default function AdminDashboardPage() {
         const updatedSettings = await res.json();
         setSystemSettings(updatedSettings);
         setMasterSystemPromptInput(updatedSettings.master_system_prompt || "");
+        setHumanHandoffEnabled(updatedSettings.human_handoff_enabled ?? true);
         setApiKeyInput(""); // Clear the input sensitive string
         showNotice(isRtl ? "⚙️ تم تحديث وحفظ إعدادات المنصة والذكاء الاصطناعي بنجاح." : "⚙️ Platform config and AI parameters successfully saved.");
       } else {
@@ -1093,6 +1099,17 @@ export default function AdminDashboardPage() {
                           Applies below critical safety and grounding rules; company prompts can still add local tone and business behavior.
                         </span>
                       </div>
+
+                      <ToggleSetting
+                        title={isRtl ? "التحويل البشري التلقائي" : "Automatic human handoff"}
+                        description={
+                          isRtl
+                            ? "عند إيقافه سيحاول الذكاء الاصطناعي إكمال المساعدة بسؤال توضيحي أو رد آمن بدل تحويل المحادثة لموظف."
+                            : "When disabled, the AI keeps trying with a safe answer or clarifying question instead of transferring the conversation to a human."
+                        }
+                        checked={humanHandoffEnabled}
+                        onChange={setHumanHandoffEnabled}
+                      />
 
                       <div className="space-y-1.5">
                         <label className="text-xs font-semibold text-white/50 block">

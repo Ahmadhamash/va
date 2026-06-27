@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Integer, String, Text, func
+from sqlalchemy import Boolean, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from database import Base
@@ -26,6 +26,9 @@ class AppSettings(Base):
     )
     master_system_prompt: Mapped[str] = mapped_column(
         Text, default="", server_default=""
+    )
+    human_handoff_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default="true"
     )
     updated_at: Mapped[datetime] = mapped_column(
         server_default=func.now(), onupdate=func.now()

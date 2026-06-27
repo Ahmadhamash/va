@@ -433,6 +433,7 @@ async def get_platform_settings(
         ai_model=row.ai_model,
         debounce_seconds=row.debounce_seconds,
         master_system_prompt=row.master_system_prompt or "",
+        human_handoff_enabled=row.human_handoff_enabled,
     )
 
 
@@ -451,6 +452,8 @@ async def update_platform_settings(
         row.debounce_seconds = payload.debounce_seconds
     if payload.master_system_prompt is not None:
         row.master_system_prompt = payload.master_system_prompt.strip()
+    if payload.human_handoff_enabled is not None:
+        row.human_handoff_enabled = payload.human_handoff_enabled
     await db.commit()
     await db.refresh(row)
     invalidate_cache()
@@ -468,6 +471,7 @@ async def update_platform_settings(
         ai_model=row.ai_model,
         debounce_seconds=row.debounce_seconds,
         master_system_prompt=row.master_system_prompt or "",
+        human_handoff_enabled=row.human_handoff_enabled,
     )
 
 
