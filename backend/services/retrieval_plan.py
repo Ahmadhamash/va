@@ -159,14 +159,16 @@ def supplemental_tool_plan(customer_message: str, intent: str) -> list[ToolCallP
     if intent == "support":
         if _has_any(text, _ORDER_TERMS) and not _has_any(text, _POLICY_TERMS):
             calls.append(ToolCallPlan("get_order_status", _order_args(customer_message)))
-        if _has_any(text, _DELIVERY_TERMS) or not _has_any(text, _POLICY_TERMS):
+        if _has_any(text, _DELIVERY_TERMS):
             calls.append(ToolCallPlan("get_delivery_info", {}))
-        if _has_any(text, _POLICY_TERMS) or not _has_any(text, _DELIVERY_TERMS):
+        if _has_any(text, _POLICY_TERMS):
             calls.append(ToolCallPlan("get_policies", {}))
         if _has_any(text, _BUSINESS_INFO_TERMS):
             calls.append(ToolCallPlan("get_business_info", {}))
         if _has_any(text, _PAYMENT_TERMS):
             calls.append(ToolCallPlan("get_payment_methods", {}))
+        if not calls:
+            calls.append(ToolCallPlan("get_business_info", {}))
         return _dedupe(calls)
 
     if intent == "sales":

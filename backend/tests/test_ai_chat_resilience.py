@@ -1,13 +1,26 @@
 import uuid
+from types import SimpleNamespace
 
 import pytest
 from sqlalchemy import select
 
-from models import BusinessPolicy, ChatSession, Message, User
+from models import (
+    AutomationRule,
+    BusinessPolicy,
+    ChatSession,
+    DeliveryRule,
+    Item,
+    Message,
+    User,
+)
 from services.answer_verifier import SAFE_TO_SEND, VerificationResult
 from services.ai_chat import (
     AI_PAUSED_REPLY,
+    _get_cached_reply,
     _generate_reply,
+    _run_pre_ai_automations,
+    _response_cache,
+    _store_cached_reply,
     _verify_and_finalize,
     process_pending,
 )
@@ -25,6 +38,46 @@ def _user(**overrides):
     }
     data.update(overrides)
     return User(**data)
+
+
+def _fake_chat_response(text: str = "رد منظم من البيانات"):
+    return SimpleNamespace(
+        choices=[
+            SimpleNamespace(
+                finish_reason="stop",
+                message=SimpleNamespace(content=text, tool_calls=None),
+            )
+        ],
+        usage=None,
+    )
+
+
+class RecordingOpenAIClient:
+    def __init__(self):
+        self.calls = []
+        self.chat = SimpleNamespace(
+            completions=SimpleNamespace(create=self._create)
+        )
+
+    async def _create(self, **kwargs):
+        self.calls.append(kwargs)
+        return _fake_chat_response()
+
+
+def test_response_cache_is_disabled_by_default():
+    user = _user()
+    _response_cache.clear()
+
+    _store_cached_reply(
+        user.id,
+        "كم رسوم التوصيل؟",
+        "التوصيل 2 JOD",
+        {"get_delivery_info:{}": {"delivery_zones": []}},
+        "sent",
+    )
+
+    assert _get_cached_reply(user.id, "كم رسوم التوصيل؟") is None
+    assert _response_cache == {}
 
 
 @pytest.mark.asyncio
@@ -201,6 +254,132 @@ async def test_static_business_fast_path_filters_delivery_by_requested_city(
     assert "\u0639\u0645\u0627\u0646" not in reply
     assert "\u0622\u0647" in reply
     assert trace["static_fast_path"] is True
+
+
+@pytest.mark.asyncio
+async def test_mixed_delivery_and_price_question_uses_pre_llm_retrieval(
+    db_session,
+    monkeypatch,
+):
+    user = _user(business_type="food")
+    session_id = uuid.uuid4()
+    session = ChatSession(id=session_id, user_id=user.id, channel="web")
+    item = Item(
+        user_id=user.id,
+        name="البوكس العائلي",
+        description="بوكس مناسب للجمعات",
+        category="بوكسات",
+        price=12,
+        currency="JOD",
+        available=True,
+    )
+    delivery = DeliveryRule(
+        user_id=user.id,
+        zone_name="Amman",
+        delivery_fee=2,
+        currency="JOD",
+        estimated_days="same day",
+        is_active=True,
+    )
+    db_session.add_all([user, session, item, delivery])
+    await db_session.commit()
+    await db_session.refresh(user)
+
+    client = RecordingOpenAIClient()
+
+    async def fake_openai_key(_db):
+        return "sk-test"
+
+    async def fake_model(_db):
+        return "gpt-4o-mini"
+
+    async def fake_master_prompt(_db):
+        return ""
+
+    async def fake_handoff_enabled(_db):
+        return False
+
+    monkeypatch.setattr("services.ai_chat.effective_openai_key", fake_openai_key)
+    monkeypatch.setattr("services.ai_chat.effective_model", fake_model)
+    monkeypatch.setattr("services.ai_chat.effective_master_system_prompt", fake_master_prompt)
+    monkeypatch.setattr("services.ai_chat.effective_human_handoff_enabled", fake_handoff_enabled)
+    monkeypatch.setattr("services.ai_chat._client_for", lambda *_args, **_kwargs: client)
+
+    reply, retrieved_data, trace = await _generate_reply(
+        user,
+        session_id,
+        "عندكم توصيل وكم سعر البوكس؟",
+        db_session,
+    )
+
+    assert reply == "رد منظم من البيانات"
+    assert trace.get("static_fast_path") is not True
+    assert trace["retrieval"]["pre_llm"]["attempted"] is True
+    assert any(key.startswith("get_catalog:") for key in retrieved_data)
+    assert any(key.startswith("get_delivery_info:") for key in retrieved_data)
+    assert any(
+        call["source"] == "pre_llm_retrieval" and call["name"] == "get_catalog"
+        for call in trace["tool_calls"]
+    )
+    prefetch_messages = [
+        msg["content"]
+        for call in client.calls
+        for msg in call["messages"]
+        if msg["role"] == "system"
+        and msg["content"].startswith("PRE-RETRIEVED VERIFIED DATA")
+    ]
+    assert prefetch_messages
+    assert "get_catalog" in prefetch_messages[0]
+    assert "get_delivery_info" in prefetch_messages[0]
+
+
+@pytest.mark.asyncio
+async def test_pre_ai_automation_shadow_mode_does_not_hijack_price_question(
+    db_session,
+):
+    user = _user()
+    session_id = uuid.uuid4()
+    session = ChatSession(id=session_id, user_id=user.id, channel="web")
+    rule = AutomationRule(
+        user_id=user.id,
+        name="Price keyword hijack",
+        trigger_type="keyword_match",
+        trigger_config={"keywords": ["سعر"], "match_mode": "any"},
+        conditions=[],
+        actions=[
+            {
+                "type": "send_message",
+                "config": {"text": "رد ثابت عن السعر"},
+            }
+        ],
+        is_active=True,
+    )
+    db_session.add_all([user, session, rule])
+    await db_session.commit()
+    await db_session.refresh(user)
+    await db_session.refresh(session)
+
+    reply, paused, results = await _run_pre_ai_automations(
+        user=user,
+        session=session,
+        customer_message="كم سعر البوكس؟",
+        db=db_session,
+    )
+
+    assert reply is None
+    assert paused is False
+    assert any(result["status"] == "would_execute" for result in results)
+    assert all(result.get("dry_run") is True for result in results)
+
+    rows = (
+        await db_session.execute(
+            select(Message).where(
+                Message.session_id == session_id,
+                Message.role == "assistant",
+            )
+        )
+    ).scalars().all()
+    assert rows == []
 
 
 @pytest.mark.asyncio

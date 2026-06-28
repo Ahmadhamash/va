@@ -52,6 +52,16 @@ RETRIEVAL_ERROR_REPLY = "ما قدرت أجيب المعلومة حاليا، خ
 PROMPT_INJECTION_REPLY = "ما فهمت عليك، ممكن توضحلي شو بالضبط تحتاج؟"
 AI_PAUSED_REPLY = "الرد الآلي متوقف حاليا، رح يرجعلك أحد من الفريق بأقرب وقت."
 RESPONSE_CACHE_TTL_SECONDS = 300
+RESPONSE_CACHE_ENABLED = os.getenv("AI_RESPONSE_CACHE_ENABLED", "false").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
+PRE_AI_AUTOMATIONS_SHADOW_MODE = os.getenv(
+    "AI_PRE_AI_AUTOMATIONS_SHADOW_MODE",
+    "true",
+).strip().lower() in {"1", "true", "yes", "on"}
 _response_cache: dict[tuple[str, str], tuple[float, str]] = {}
 _CACHEABLE_TOOL_PREFIXES = (
     "get_business_info:",
@@ -187,6 +197,15 @@ _STATIC_GENERIC_AREA_TERMS = (
     "all areas",
     "all governorates",
 )
+_STATIC_FAST_PATH_BLOCKING_TERMS = (
+    "سعر", "السعر", "بكم", "قديش", "كم سعر", "حقه", "حقها",
+    "متوفر", "متوفرة", "موجود", "موجودة", "منتج", "منتجات",
+    "كتالوج", "بوكس", "بوكسات", "نكهة", "نكهات", "عرض", "عروض",
+    "خصم", "خصومات", "حجز", "موعد", "مواعيد",
+    "price", "cost", "available", "stock", "product", "products",
+    "catalog", "box", "boxes", "flavor", "flavors", "offer",
+    "discount", "booking", "appointment",
+)
 
 
 def _client_for(api_key: str):
@@ -231,6 +250,8 @@ def _normalise_cache_text(text: str | None) -> str | None:
 
 
 def _get_cached_reply(user_id: uuid.UUID, text: str | None) -> str | None:
+    if not RESPONSE_CACHE_ENABLED:
+        return None
     key_text = _normalise_cache_text(text)
     if not key_text:
         return None
@@ -252,6 +273,8 @@ def _store_cached_reply(
     retrieved_data: dict,
     action: str,
 ) -> None:
+    if not RESPONSE_CACHE_ENABLED:
+        return
     key_text = _normalise_cache_text(text)
     if not key_text or not reply or action not in {"sent", "modified"}:
         return
@@ -296,6 +319,14 @@ def _static_business_topics(customer_message: str | None) -> list[str]:
         if _contains_static_term(text, terms):
             topics.append(topic)
     return topics
+
+
+def _static_fast_path_is_safe(customer_message: str | None) -> bool:
+    """Allow direct static replies only for pure business-info questions."""
+    text = _normalise_static_text(customer_message)
+    if not text:
+        return False
+    return not _contains_static_term(text, _STATIC_FAST_PATH_BLOCKING_TERMS)
 
 
 def _fact_text(fact: dict) -> str:
@@ -467,6 +498,8 @@ async def _try_static_business_reply(
 ) -> tuple[str, dict] | None:
     topics = _static_business_topics(customer_message)
     if not topics:
+        return None
+    if not _static_fast_path_is_safe(customer_message):
         return None
     requested_place = _static_requested_place(customer_message)
 
@@ -645,6 +678,7 @@ async def _run_pre_ai_automations(
             context,
             user.id,
             db,
+            dry_run=PRE_AI_AUTOMATIONS_SHADOW_MODE,
         )
         results.extend(trigger_results)
 
@@ -843,6 +877,107 @@ def _summarize_tool_result(result: dict) -> dict:
     return summary
 
 
+def _tool_result_key(name: str, args: dict | None, *, prefix: str = "") -> str:
+    return f"{prefix}{name}:{json.dumps(args or {}, ensure_ascii=False, sort_keys=True)}"
+
+
+async def _load_previous_retrieved_data(
+    session_id: uuid.UUID,
+    db: AsyncSession,
+    retrieved_data: dict,
+) -> list[str]:
+    """Merge recent verified data for follow-up questions."""
+    loaded_keys: list[str] = []
+    try:
+        from models.verification_log import AIVerificationLog
+
+        stmt_v = (
+            select(AIVerificationLog.retrieved_data)
+            .where(AIVerificationLog.session_id == session_id)
+            .order_by(AIVerificationLog.created_at.desc())
+            .limit(10)
+        )
+        prev_logs = list((await db.execute(stmt_v)).scalars().all())
+        for prev_data in reversed(prev_logs):
+            if not isinstance(prev_data, dict):
+                continue
+            for key, value in prev_data.items():
+                if key not in retrieved_data:
+                    loaded_keys.append(key)
+                retrieved_data[key] = value
+    except Exception as e:
+        logger.warning("Failed to load previous verification logs: %s", e)
+    return loaded_keys
+
+
+async def _run_pre_llm_retrieval(
+    customer_message: str,
+    user: User,
+    session_id: uuid.UUID,
+    db: AsyncSession,
+    intents: list[str],
+) -> tuple[dict, list[dict]]:
+    """Fetch obvious DB facts before asking the model to draft a reply."""
+    planned = []
+    seen: set[tuple[str, str]] = set()
+    for intent in intents:
+        for call in supplemental_tool_plan(customer_message, intent):
+            key = (call.name, json.dumps(call.args or {}, ensure_ascii=False, sort_keys=True))
+            if key in seen:
+                continue
+            seen.add(key)
+            planned.append(call)
+
+    retrieved: dict = {}
+    executed: list[dict] = []
+    for call in planned:
+        result = await execute_db_function(
+            call.name,
+            call.args,
+            user.id,
+            db,
+            session_id=session_id,
+        )
+        retrieved[_tool_result_key(call.name, call.args)] = result
+        executed.append(
+            {
+                "name": call.name,
+                "args": call.args,
+                "result_summary": _summarize_tool_result(result),
+            }
+        )
+    return retrieved, executed
+
+
+def _build_pre_retrieved_data_message(
+    retrieved_data: dict,
+    current_turn_keys: list[str],
+) -> dict | None:
+    current_turn_data = {
+        key: retrieved_data[key]
+        for key in current_turn_keys
+        if key in retrieved_data
+    }
+    if not current_turn_data:
+        return None
+
+    data_json = json.dumps(current_turn_data, ensure_ascii=False)
+    if len(data_json) > 12000:
+        data_json = data_json[:12000] + "...[truncated]"
+
+    return {
+        "role": "system",
+        "content": (
+            "PRE-RETRIEVED VERIFIED DATA FOR THIS CUSTOMER TURN:\n"
+            f"{data_json}\n\n"
+            "Treat this exactly like current-turn database/tool results. Answer "
+            "from it when it covers the customer question. You may still call a "
+            "tool if a needed fact is missing, but do not ask the customer to "
+            "clarify information that is already present here."
+        ),
+    }
+
+
 # ─── Core model loop ─────────────────────────────────────────────────────────
 async def _generate_reply(
     user: User, session_id: uuid.UUID, content, db: AsyncSession
@@ -931,6 +1066,14 @@ async def _generate_reply(
         "max_tool_rounds": MAX_TOOL_ROUNDS,
         "human_handoff_enabled": human_handoff_enabled,
         "prompt_overrides": sorted(prompt_overrides.keys()),
+        "retrieval": {
+            "previous_keys": [],
+            "pre_llm": {
+                "attempted": False,
+                "executed": [],
+                "keys": [],
+            },
+        },
     }
     
     if settings.LOCAL_LLM_ENABLED and intent in ("support", "general"):
@@ -944,6 +1087,48 @@ async def _generate_reply(
     else:
         trace["local_llm_enabled"] = False
     trace["model"] = model
+
+    # Collect grounding data before the model writes whenever the intent is clear.
+    # This keeps the bot helpful without relying only on tool-choice behavior.
+    retrieved_data: dict = {}
+    if assistant_profile:
+        retrieved_data["assistant_settings:profile"] = assistant_profile
+    if user.ai_persona:
+        retrieved_data["assistant_settings:persona"] = user.ai_persona
+
+    previous_keys = await _load_previous_retrieved_data(session_id, db, retrieved_data)
+    trace["retrieval"]["previous_keys"] = previous_keys
+
+    pre_llm_data, pre_llm_calls = await _run_pre_llm_retrieval(
+        text_content,
+        user,
+        session_id,
+        db,
+        intents,
+    )
+    if pre_llm_calls:
+        retrieved_data.update(pre_llm_data)
+        pre_llm_keys = list(pre_llm_data.keys())
+        trace["retrieval"]["pre_llm"] = {
+            "attempted": True,
+            "executed": pre_llm_calls,
+            "keys": pre_llm_keys,
+        }
+        for call in pre_llm_calls:
+            trace["tool_calls"].append(
+                {
+                    "round": 0,
+                    "source": "pre_llm_retrieval",
+                    **call,
+                }
+            )
+    else:
+        pre_llm_keys = []
+
+    pre_retrieved_message = _build_pre_retrieved_data_message(
+        retrieved_data,
+        pre_llm_keys,
+    )
 
     messages: list[dict] = [
         {
@@ -960,8 +1145,10 @@ async def _generate_reply(
             ),
         },
         *history,
-        {"role": "user", "content": content},
     ]
+    if pre_retrieved_message is not None:
+        messages.append(pre_retrieved_message)
+    messages.append({"role": "user", "content": content})
 
     # Dynamic Temperature: higher for general chat, lower for sales/support (precision)
     dynamic_temp = 0.6 if intent == "general" else 0.2
@@ -979,31 +1166,6 @@ async def _generate_reply(
         model=model,
         response=response,
     )
-
-    # Collect all tool results for the verifier
-    retrieved_data: dict = {}
-    if assistant_profile:
-        retrieved_data["assistant_settings:profile"] = assistant_profile
-    if user.ai_persona:
-        retrieved_data["assistant_settings:persona"] = user.ai_persona
-
-    # Load previously retrieved data from session's verification logs to support follow-up questions
-    try:
-        from models.verification_log import AIVerificationLog
-        stmt_v = (
-            select(AIVerificationLog.retrieved_data)
-            .where(
-                AIVerificationLog.session_id == session_id,
-            )
-            .order_by(AIVerificationLog.created_at.desc())
-            .limit(10)
-        )
-        prev_logs = list((await db.execute(stmt_v)).scalars().all())
-        for prev_data in reversed(prev_logs):
-            if isinstance(prev_data, dict):
-                retrieved_data.update(prev_data)
-    except Exception as e:
-        logger.warning("Failed to load previous verification logs: %s", e)
 
     rounds = 0
     while (
@@ -1023,7 +1185,7 @@ async def _generate_reply(
                 session_id=session_id,
             )
             # Store tool result for verification grounding
-            tool_key = f"{tool_call.function.name}:{json.dumps(func_args, ensure_ascii=False)}"
+            tool_key = _tool_result_key(tool_call.function.name, func_args)
             retrieved_data[tool_key] = result
             trace["tool_calls"].append(
                 {
@@ -1164,8 +1326,10 @@ async def _generate_grounded_retry_reply(
                 "If the data does not contain the answer, say you do not have "
                 "that information or ask for clarification. If catalog data says "
                 "no item matched, do not mention unrelated products. Keep the "
-                "answer to 1-2 short sentences, no markdown, no bullet points, "
-                "and use the same language as the customer."
+                "answer compact but complete: use one warm line for simple "
+                "questions, 2-4 short lines for product or policy details, and "
+                "a short line-separated list for multiple options. Use the same "
+                "language as the customer."
             ),
         },
         {
