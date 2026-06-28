@@ -20,6 +20,7 @@ from models import (
     BusinessPolicy,
     BusinessWorkflow,
     AIVerificationLog,
+    ClientPromptVersion,
 )
 from seed_test_store import seed_store
 from schemas.chat import MessageOut, SessionOut
@@ -40,8 +41,16 @@ from services.settings_service import get_settings_row, invalidate_cache
 from services.business_templates import get_template
 from services.prompt_settings import (
     PROMPT_FIELDS,
+    activate_prompt_draft,
+    ensure_initial_active_prompt_version,
+    get_active_prompt_version,
+    get_draft_prompt_version,
     get_or_create_prompt_settings,
+    list_prompt_versions,
     prompt_settings_payload,
+    rollback_to_prompt_version,
+    save_prompt_draft,
+    evaluate_prompt_draft,
 )
 from services.ai_usage import normalise_model, usage_summary_from_trace
 from services.ai_persona_settings import sync_persona_settings_from_text
@@ -187,6 +196,39 @@ async def set_client_persona(
     return client
 
 
+async def _client_prompt_settings_response(
+    *,
+    client: User,
+    db: AsyncSession,
+) -> dict:
+    row = await get_or_create_prompt_settings(client.id, db)
+    active_version = await ensure_initial_active_prompt_version(
+        user_id=client.id,
+        row=row,
+        db=db,
+    )
+    draft_version = await get_draft_prompt_version(client.id, db)
+    versions = await list_prompt_versions(client.id, db)
+    app_settings = await get_settings_row(db)
+    return prompt_settings_payload(
+        user=client,
+        row=row,
+        human_handoff_enabled=app_settings.human_handoff_enabled,
+        active_version=active_version,
+        draft_version=draft_version,
+        versions=versions,
+    )
+
+
+def _prompt_update_payload(payload: ClientPromptSettingsUpdate) -> dict[str, str]:
+    updates = payload.model_dump(exclude_unset=True)
+    return {
+        field: str(updates.get(field) or "").strip()
+        for field in PROMPT_FIELDS
+        if field in updates
+    }
+
+
 @router.get(
     "/clients/{client_id}/prompt-settings",
     response_model=ClientPromptSettingsOut,
@@ -197,14 +239,9 @@ async def get_client_prompt_settings(
     db: AsyncSession = Depends(get_db),
 ):
     client = await _get_client(client_id, db)
-    row = await get_or_create_prompt_settings(client.id, db)
-    app_settings = await get_settings_row(db)
+    response = await _client_prompt_settings_response(client=client, db=db)
     await db.commit()
-    return prompt_settings_payload(
-        user=client,
-        row=row,
-        human_handoff_enabled=app_settings.human_handoff_enabled,
-    )
+    return response
 
 
 @router.put(
@@ -214,27 +251,136 @@ async def get_client_prompt_settings(
 async def update_client_prompt_settings(
     client_id: uuid.UUID,
     payload: ClientPromptSettingsUpdate,
+    admin: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    client = await _get_client(client_id, db)
+    row = await get_or_create_prompt_settings(client.id, db)
+    await ensure_initial_active_prompt_version(user_id=client.id, row=row, db=db)
+
+    current = {
+        field: getattr(row, field, None) or ""
+        for field in PROMPT_FIELDS
+    }
+    current.update(_prompt_update_payload(payload))
+    await save_prompt_draft(
+        user_id=client.id,
+        payload=current,
+        db=db,
+        admin_id=admin.id,
+        title=payload.title,
+        notes=payload.notes,
+    )
+
+    await db.commit()
+    await db.refresh(client)
+    return await _client_prompt_settings_response(client=client, db=db)
+
+
+@router.post(
+    "/clients/{client_id}/prompt-settings/test",
+    response_model=ClientPromptSettingsOut,
+)
+async def test_client_prompt_settings(
+    client_id: uuid.UUID,
+    payload: ClientPromptSettingsUpdate,
+    admin: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    client = await _get_client(client_id, db)
+    row = await get_or_create_prompt_settings(client.id, db)
+    await ensure_initial_active_prompt_version(user_id=client.id, row=row, db=db)
+
+    current = {
+        field: getattr(row, field, None) or ""
+        for field in PROMPT_FIELDS
+    }
+    current.update(_prompt_update_payload(payload))
+    draft = await save_prompt_draft(
+        user_id=client.id,
+        payload=current,
+        db=db,
+        admin_id=admin.id,
+        title=payload.title,
+        notes=payload.notes,
+    )
+    await evaluate_prompt_draft(draft=draft, db=db)
+    await db.commit()
+    await db.refresh(client)
+    return await _client_prompt_settings_response(client=client, db=db)
+
+
+@router.post(
+    "/clients/{client_id}/prompt-settings/activate",
+    response_model=ClientPromptSettingsOut,
+)
+async def activate_client_prompt_settings(
+    client_id: uuid.UUID,
     _: User = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
 ):
     client = await _get_client(client_id, db)
     row = await get_or_create_prompt_settings(client.id, db)
-    updates = payload.model_dump(exclude_unset=True)
+    await ensure_initial_active_prompt_version(user_id=client.id, row=row, db=db)
+    draft = await get_draft_prompt_version(client.id, db)
+    if draft is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No draft prompt version to activate.",
+        )
+    try:
+        await activate_prompt_draft(
+            user_id=client.id,
+            row=row,
+            draft=draft,
+            db=db,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
 
-    for field in PROMPT_FIELDS:
-        if field in updates:
-            value = updates[field]
-            setattr(row, field, (value or "").strip() or None)
-
-    app_settings = await get_settings_row(db)
     await db.commit()
     await db.refresh(client)
-    await db.refresh(row)
-    return prompt_settings_payload(
-        user=client,
-        row=row,
-        human_handoff_enabled=app_settings.human_handoff_enabled,
-    )
+    return await _client_prompt_settings_response(client=client, db=db)
+
+
+@router.post(
+    "/clients/{client_id}/prompt-settings/versions/{version_id}/rollback",
+    response_model=ClientPromptSettingsOut,
+)
+async def rollback_client_prompt_settings(
+    client_id: uuid.UUID,
+    version_id: uuid.UUID,
+    admin: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    client = await _get_client(client_id, db)
+    row = await get_or_create_prompt_settings(client.id, db)
+    await ensure_initial_active_prompt_version(user_id=client.id, row=row, db=db)
+    target = await db.get(ClientPromptVersion, version_id)
+    if target is None or target.user_id != client.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Prompt version not found.",
+        )
+    try:
+        await rollback_to_prompt_version(
+            user_id=client.id,
+            row=row,
+            target=target,
+            db=db,
+            admin_id=admin.id,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    await db.commit()
+    await db.refresh(client)
+    return await _client_prompt_settings_response(client=client, db=db)
 
 
 @router.patch("/clients/{client_id}/active", response_model=UserOut)

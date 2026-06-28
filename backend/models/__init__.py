@@ -14,7 +14,7 @@ from models.offer import Offer, Package
 from models.policy import BusinessPolicy
 from models.pricing import PricingRule
 from models.product_recognition import ProductCandidate, SocialPostMapping
-from models.prompt_settings import ClientPromptSettings
+from models.prompt_settings import ClientPromptSettings, ClientPromptVersion
 from models.settings import AppSettings
 from models.user import User
 from models.variant import ItemVariant
@@ -62,6 +62,7 @@ __all__ = [
     "ProductCandidate",
     "SocialPostMapping",
     "ClientPromptSettings",
+    "ClientPromptVersion",
     "PlatformSupportAgent",
     "HandoffSession",
     "HandoffAssignment",

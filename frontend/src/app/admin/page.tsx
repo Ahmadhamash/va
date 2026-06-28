@@ -100,8 +100,30 @@ interface PromptSection {
   description: string;
   default_prompt: string;
   custom_prompt: string;
+  active_custom_prompt: string;
+  draft_prompt: string;
   effective_prompt: string;
+  draft_effective_prompt: string;
   is_custom: boolean;
+  is_draft_custom: boolean;
+  has_unpublished_changes: boolean;
+}
+
+interface PromptVersion {
+  id: string;
+  version_number: number;
+  status: "draft" | "active" | "archived" | string;
+  title: string;
+  notes: string;
+  prompt_payload: Record<string, string>;
+  test_status: "untested" | "passed" | "failed" | string;
+  test_report?: {
+    status?: string;
+    checks?: Array<{ name: string; status: string; message: string }>;
+  } | null;
+  created_at: string;
+  updated_at: string;
+  activated_at?: string | null;
 }
 
 interface ClientPromptSettings {
@@ -111,6 +133,9 @@ interface ClientPromptSettings {
   client_ai_persona: string;
   admin_persona_prompt: string;
   ai_persona: string;
+  active_version: PromptVersion | null;
+  draft_version: PromptVersion | null;
+  versions: PromptVersion[];
   sections: Record<PromptKey, PromptSection>;
 }
 
@@ -270,6 +295,9 @@ export default function AdminDashboardPage() {
   const [personaDraft, setPersonaDraft] = useState("");
   const [loadingPrompts, setLoadingPrompts] = useState(false);
   const [savingPrompts, setSavingPrompts] = useState(false);
+  const [testingPrompts, setTestingPrompts] = useState(false);
+  const [activatingPrompts, setActivatingPrompts] = useState(false);
+  const [rollbackVersionId, setRollbackVersionId] = useState<string | null>(null);
 
   // AI Testing Store States
   const [resettingTesting, setResettingTesting] = useState(false);
@@ -504,7 +532,7 @@ export default function AdminDashboardPage() {
       const data: ClientPromptSettings = await res.json();
       const drafts: Partial<Record<PromptKey, string>> = {};
       promptKeys.forEach((key) => {
-        drafts[key] = data.sections[key]?.custom_prompt || "";
+        drafts[key] = data.sections[key]?.draft_prompt ?? data.sections[key]?.custom_prompt ?? "";
       });
       setPromptSettings(data);
       setPromptDrafts(drafts);
@@ -523,7 +551,134 @@ export default function AdminDashboardPage() {
     }
   }, [promptClientId, token]);
 
+  const buildPromptSettingsBody = () => {
+    const body: Record<string, string> = {
+      admin_persona_prompt: personaDraft,
+      title: promptSettings?.draft_version?.title || "Prompt draft",
+    };
+    promptKeys.forEach((key) => {
+      body[key] = promptDrafts[key] || "";
+    });
+    return body;
+  };
+
+  const applyPromptSettingsResponse = (data: ClientPromptSettings) => {
+    const drafts: Partial<Record<PromptKey, string>> = {};
+    promptKeys.forEach((key) => {
+      drafts[key] = data.sections[key]?.draft_prompt ?? data.sections[key]?.custom_prompt ?? "";
+    });
+    setPromptSettings(data);
+    setPromptDrafts(drafts);
+    setPersonaDraft(data.admin_persona_prompt || "");
+  };
+
   const handleSavePromptSettings = async () => {
+    if (!token || !promptClientId) return;
+    setSavingPrompts(true);
+    try {
+      const res = await fetch(`/api/admin/clients/${promptClientId}/prompt-settings`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(buildPromptSettingsBody()),
+      });
+      if (!res.ok) {
+        showNotice(isRtl ? "فشل حفظ مسودة البرومبت." : "Failed to save prompt draft.", "error");
+        return;
+      }
+      const data: ClientPromptSettings = await res.json();
+      applyPromptSettingsResponse(data);
+      showNotice(isRtl ? "تم حفظ المسودة. اختبرها قبل التفعيل." : "Draft saved. Test it before activation.");
+    } catch (err) {
+      console.error("Prompt settings save error", err);
+      showNotice(isRtl ? "حدث خطأ أثناء حفظ مسودة البرومبت." : "Error saving prompt draft.", "error");
+    } finally {
+      setSavingPrompts(false);
+    }
+  };
+
+  const handleTestPromptSettings = async () => {
+    if (!token || !promptClientId) return;
+    setTestingPrompts(true);
+    try {
+      const res = await fetch(`/api/admin/clients/${promptClientId}/prompt-settings/test`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(buildPromptSettingsBody()),
+      });
+      const data: ClientPromptSettings | null = await res.json().catch(() => null);
+      if (!res.ok || !data) {
+        showNotice(isRtl ? "فشل اختبار المسودة." : "Failed to test draft.", "error");
+        return;
+      }
+      applyPromptSettingsResponse(data);
+      const passed = data.draft_version?.test_status === "passed";
+      showNotice(
+        passed
+          ? isRtl ? "نجح الاختبار. يمكنك التفعيل الآن." : "Draft passed. You can activate it now."
+          : isRtl ? "فشل الاختبار. راجع التقرير قبل التفعيل." : "Draft failed. Review the report before activation.",
+        passed ? "success" : "error",
+      );
+    } catch (err) {
+      console.error("Prompt settings test error", err);
+      showNotice(isRtl ? "حدث خطأ أثناء اختبار المسودة." : "Error testing draft.", "error");
+    } finally {
+      setTestingPrompts(false);
+    }
+  };
+
+  const handleActivatePromptSettings = async () => {
+    if (!token || !promptClientId) return;
+    setActivatingPrompts(true);
+    try {
+      const res = await fetch(`/api/admin/clients/${promptClientId}/prompt-settings/activate`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data: ClientPromptSettings | null = await res.json().catch(() => null);
+      if (!res.ok || !data) {
+        showNotice(isRtl ? "لا يمكن التفعيل قبل نجاح الاختبار." : "Cannot activate before the draft passes tests.", "error");
+        return;
+      }
+      applyPromptSettingsResponse(data);
+      showNotice(isRtl ? "تم تفعيل نسخة البرومبت بنجاح." : "Prompt version activated successfully.");
+    } catch (err) {
+      console.error("Prompt settings activate error", err);
+      showNotice(isRtl ? "حدث خطأ أثناء تفعيل البرومبت." : "Error activating prompt.", "error");
+    } finally {
+      setActivatingPrompts(false);
+    }
+  };
+
+  const handleRollbackPromptVersion = async (versionId: string) => {
+    if (!token || !promptClientId) return;
+    setRollbackVersionId(versionId);
+    try {
+      const res = await fetch(`/api/admin/clients/${promptClientId}/prompt-settings/versions/${versionId}/rollback`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data: ClientPromptSettings | null = await res.json().catch(() => null);
+      if (!res.ok || !data) {
+        showNotice(isRtl ? "فشل الرجوع لهذه النسخة." : "Failed to roll back to this version.", "error");
+        return;
+      }
+      applyPromptSettingsResponse(data);
+      showNotice(isRtl ? "تم الرجوع للنسخة المحددة." : "Rolled back to the selected version.");
+    } catch (err) {
+      console.error("Prompt rollback error", err);
+      showNotice(isRtl ? "حدث خطأ أثناء الرجوع للنسخة." : "Error rolling back prompt version.", "error");
+    } finally {
+      setRollbackVersionId(null);
+    }
+  };
+
+  const handleSavePromptSettingsLegacy = async () => {
     if (!token || !promptClientId) return;
     setSavingPrompts(true);
     try {
@@ -1467,9 +1622,17 @@ export default function AdminDashboardPage() {
                     {loadingPrompts ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                     {isRtl ? "تحديث" : "Refresh"}
                   </Button>
-                  <Button type="button" onClick={handleSavePromptSettings} disabled={!promptClientId || savingPrompts || loadingPrompts}>
+                  <Button type="button" variant="secondary" onClick={handleSavePromptSettings} disabled={!promptClientId || savingPrompts || loadingPrompts}>
                     {savingPrompts ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-                    {isRtl ? "حفظ البرومبتات" : "Save prompts"}
+                    {isRtl ? "حفظ مسودة" : "Save draft"}
+                  </Button>
+                  <Button type="button" variant="secondary" onClick={handleTestPromptSettings} disabled={!promptClientId || testingPrompts || loadingPrompts}>
+                    {testingPrompts ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
+                    {isRtl ? "اختبار" : "Test"}
+                  </Button>
+                  <Button type="button" onClick={handleActivatePromptSettings} disabled={!promptClientId || activatingPrompts || loadingPrompts || promptSettings?.draft_version?.test_status !== "passed"}>
+                    {activatingPrompts ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                    {isRtl ? "تفعيل" : "Activate"}
                   </Button>
                 </div>
               </div>
@@ -1516,7 +1679,7 @@ export default function AdminDashboardPage() {
                       setPersonaDraft(promptSettings?.admin_persona_prompt || "");
                       const drafts: Partial<Record<PromptKey, string>> = {};
                       promptKeys.forEach((key) => {
-                        drafts[key] = promptSettings?.sections[key]?.custom_prompt || "";
+                        drafts[key] = promptSettings?.sections[key]?.draft_prompt ?? promptSettings?.sections[key]?.custom_prompt ?? "";
                       });
                       setPromptDrafts(drafts);
                     }}
@@ -1542,6 +1705,36 @@ export default function AdminDashboardPage() {
                     <Database className="h-4 w-4" />
                     {isRtl ? "استخدام كل الافتراضيات" : "Use all defaults"}
                   </Button>
+
+                  {promptSettings && (
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-4 text-xs text-white/55">
+                      <div className="flex items-center justify-between gap-3">
+                        <span>{isRtl ? "النسخة النشطة" : "Active version"}</span>
+                        <span className="font-mono text-white">
+                          v{promptSettings.active_version?.version_number ?? 0}
+                        </span>
+                      </div>
+                      <div className="mt-3 flex items-center justify-between gap-3">
+                        <span>{isRtl ? "المسودة" : "Draft"}</span>
+                        <span className="font-mono text-white">
+                          {promptSettings.draft_version ? `v${promptSettings.draft_version.version_number}` : "-"}
+                        </span>
+                      </div>
+                      <div className="mt-3 flex items-center justify-between gap-3">
+                        <span>{isRtl ? "الاختبار" : "Test"}</span>
+                        <span className={cn(
+                          "rounded-full px-2 py-1 text-[10px] font-bold",
+                          promptSettings.draft_version?.test_status === "passed"
+                            ? "bg-emerald-500/15 text-emerald-300"
+                            : promptSettings.draft_version?.test_status === "failed"
+                              ? "bg-rose-500/15 text-rose-300"
+                              : "bg-white/10 text-white/50",
+                        )}>
+                          {promptSettings.draft_version?.test_status || "no draft"}
+                        </span>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-4">
@@ -1585,6 +1778,69 @@ export default function AdminDashboardPage() {
                         </p>
                       </div>
 
+                      {promptSettings.draft_version?.test_report?.checks?.length ? (
+                        <div className="rounded-2xl border border-white/10 bg-white/[0.025] p-4">
+                          <div className="mb-3 flex items-center justify-between gap-3">
+                            <h4 className="text-sm font-semibold text-white">
+                              {isRtl ? "تقرير اختبار المسودة" : "Draft test report"}
+                            </h4>
+                            <span className={cn(
+                              "rounded-full px-2 py-1 text-[10px] font-bold",
+                              promptSettings.draft_version.test_status === "passed"
+                                ? "bg-emerald-500/15 text-emerald-300"
+                                : "bg-rose-500/15 text-rose-300",
+                            )}>
+                              {promptSettings.draft_version.test_status}
+                            </span>
+                          </div>
+                          <div className="space-y-2">
+                            {promptSettings.draft_version.test_report.checks.map((check) => (
+                              <div key={check.name} className="rounded-xl border border-white/10 bg-black/15 p-3">
+                                <div className="flex items-center justify-between gap-3 text-xs">
+                                  <span className="font-mono text-white/70">{check.name}</span>
+                                  <span className={check.status === "passed" ? "text-emerald-300" : "text-rose-300"}>
+                                    {check.status}
+                                  </span>
+                                </div>
+                                <div className="mt-2 text-xs leading-5 text-white/45">{check.message}</div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+
+                      {promptSettings.versions?.length ? (
+                        <div className="rounded-2xl border border-white/10 bg-white/[0.025] p-4">
+                          <h4 className="mb-3 text-sm font-semibold text-white">
+                            {isRtl ? "تاريخ النسخ" : "Version history"}
+                          </h4>
+                          <div className="space-y-2">
+                            {promptSettings.versions.slice(0, 8).map((version) => (
+                              <div key={version.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/15 p-3">
+                                <div>
+                                  <div className="text-sm font-semibold text-white">
+                                    v{version.version_number} · {version.status}
+                                  </div>
+                                  <div className="mt-1 text-xs text-white/40">
+                                    {new Date(version.updated_at).toLocaleString()}
+                                  </div>
+                                </div>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => void handleRollbackPromptVersion(version.id)}
+                                  disabled={version.status === "active" || rollbackVersionId === version.id}
+                                >
+                                  {rollbackVersionId === version.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                                  {isRtl ? "رجوع" : "Rollback"}
+                                </Button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+
                       {promptKeys.map((key) => {
                         const section = promptSettings.sections[key];
                         const value = promptDrafts[key] ?? "";
@@ -1598,7 +1854,12 @@ export default function AdminDashboardPage() {
                               <div className="flex gap-2">
                                 {section.is_custom && (
                                   <span className="rounded-full bg-primary-500/15 px-2 py-1 text-[10px] font-bold text-primary-300">
-                                    {isRtl ? "مخصص" : "Custom"}
+                                    {isRtl ? "نشط مخصص" : "Active custom"}
+                                  </span>
+                                )}
+                                {section.has_unpublished_changes && (
+                                  <span className="rounded-full bg-amber-500/15 px-2 py-1 text-[10px] font-bold text-amber-300">
+                                    {isRtl ? "غير مفعّل" : "Unpublished"}
                                   </span>
                                 )}
                                 <Button
