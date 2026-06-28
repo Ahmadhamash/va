@@ -65,8 +65,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
         toastOptions={{
           className: "text-right font-medium text-sm border border-white/10",
           style: {
-            background: "#16161a",
-            color: "#fff",
+            background: "var(--toast-bg, #16161a)",
+            color: "var(--toast-fg, #fff)",
+            borderColor: "var(--toast-border, rgba(255, 255, 255, 0.10))",
           },
           success: {
             iconTheme: {

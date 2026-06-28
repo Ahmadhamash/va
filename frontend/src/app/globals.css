@@ -18,24 +18,38 @@
   --card-bg: rgba(255, 255, 255, 0.06);
   --card-border: rgba(255, 255, 255, 0.10);
   --text-muted: rgba(255, 255, 255, 0.58);
+  --text-strong: rgba(255, 255, 255, 0.92);
+  --surface-raised: rgba(255, 255, 255, 0.06);
+  --surface-soft: rgba(255, 255, 255, 0.04);
+  --border-subtle: rgba(255, 255, 255, 0.10);
+  --toast-bg: #16161a;
+  --toast-fg: #ffffff;
+  --toast-border: rgba(255, 255, 255, 0.10);
 }
 
 html.light {
   color-scheme: light;
   
-  --ink-950: #f4f7fb;
-  --ink-900: #edf2f8;
-  --ink-850: #e5ecf4;
-  --ink-800: #dbe4ef;
-  --ink-700: #cad6e2;
+  --ink-950: #fbfcfe;
+  --ink-900: #f5f7fb;
+  --ink-850: #eef2f7;
+  --ink-800: #e5ebf2;
+  --ink-700: #d6dee9;
   
   --primary-400: #3b82f6;
-  --primary-500: #1d4ed8;
-  --primary-600: #1e40af;
+  --primary-500: #2563eb;
+  --primary-600: #1d4ed8;
 
-  --card-bg: rgba(248, 250, 252, 0.82);
-  --card-border: rgba(15, 23, 42, 0.08);
-  --text-muted: rgba(15, 23, 42, 0.62);
+  --card-bg: rgba(255, 255, 255, 0.84);
+  --card-border: rgba(15, 23, 42, 0.10);
+  --text-muted: rgba(51, 65, 85, 0.68);
+  --text-strong: #0f172a;
+  --surface-raised: rgba(255, 255, 255, 0.86);
+  --surface-soft: rgba(248, 250, 252, 0.78);
+  --border-subtle: rgba(15, 23, 42, 0.10);
+  --toast-bg: #ffffff;
+  --toast-fg: #0f172a;
+  --toast-border: rgba(15, 23, 42, 0.12);
 }
 
 * {
@@ -53,14 +67,14 @@ body {
     radial-gradient(circle at 18% 4%, rgba(37, 99, 235, 0.18), transparent 28rem),
     radial-gradient(circle at 88% 10%, rgba(14, 165, 233, 0.16), transparent 30rem),
     linear-gradient(135deg, var(--ink-950) 0%, var(--ink-900) 48%, #0b1020 100%);
-  color: rgba(255, 255, 255, 0.92);
+  color: var(--text-strong);
   font-family: Tajawal, Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
 html.light body {
   background:
-    linear-gradient(135deg, #d9e3ef 0%, #e8edf5 46%, #d7e1ec 100%);
-  color: #162033;
+    linear-gradient(135deg, #f8fafc 0%, #eef5f8 48%, #f8f4ed 100%);
+  color: var(--text-strong);
 }
 
 ::selection {
@@ -87,59 +101,348 @@ html.light body {
 
 /* Light mode overrides for Tailwind utilities */
 html.light .glass-card {
-  background-color: var(--card-bg) !important;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), var(--card-bg)) !important;
   border-color: var(--card-border) !important;
+  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.08) !important;
 }
 
-html.light [class*="bg-white/"] {
-  background-color: rgb(15 23 42 / var(--tw-bg-opacity, 0.06)) !important;
+html.light .premium-ring {
+  --tw-ring-color: rgba(37, 99, 235, 0.18) !important;
+}
+
+html.light .bg-ink-950,
+html.light .bg-ink-950\/90,
+html.light .bg-ink-950\/70,
+html.light .bg-ink-900 {
+  background-color: rgba(255, 255, 255, 0.88) !important;
+}
+
+html.light .from-ink-900 {
+  --tw-gradient-from: #f8fafc var(--tw-gradient-from-position) !important;
+  --tw-gradient-to: rgb(248 250 252 / 0) var(--tw-gradient-to-position) !important;
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important;
+}
+
+html.light .to-ink-950 {
+  --tw-gradient-to: #eef3f8 var(--tw-gradient-to-position) !important;
+}
+
+html.light .border-ink-950 {
+  border-color: rgba(15, 23, 42, 0.14) !important;
+}
+
+html.light .bg-white {
+  background-color: #ffffff !important;
+}
+
+html.light .bg-white\/40 {
+  background-color: rgba(255, 255, 255, 0.92) !important;
+}
+
+html.light .bg-white\/20,
+html.light .bg-white\/14,
+html.light .bg-white\/12,
+html.light .bg-white\/10,
+html.light .bg-white\/9,
+html.light .bg-white\/8,
+html.light .bg-white\/7 {
+  background-color: rgba(255, 255, 255, 0.80) !important;
+}
+
+html.light .bg-white\/5,
+html.light .bg-white\/\[0\.005\],
+html.light .bg-white\/\[0\.01\],
+html.light .bg-white\/\[0\.015\],
+html.light .bg-white\/\[0\.02\] {
+  background-color: rgba(248, 250, 252, 0.72) !important;
+}
+
+html.light .bg-white\/\[0\.025\],
+html.light .bg-white\/\[0\.03\],
+html.light .bg-white\/\[0\.035\],
+html.light .bg-white\/\[0\.04\],
+html.light .bg-white\/\[0\.045\] {
+  background-color: rgba(255, 255, 255, 0.78) !important;
+}
+
+html.light .bg-white\/\[0\.05\],
+html.light .bg-white\/\[0\.055\],
+html.light .bg-white\/\[0\.06\],
+html.light .bg-white\/\[0\.07\],
+html.light .bg-white\/\[0\.075\],
+html.light .bg-white\/\[0\.08\] {
+  background-color: rgba(255, 255, 255, 0.88) !important;
+}
+
+html.light .hover\:bg-white\/5:hover,
+html.light .hover\:bg-white\/8:hover,
+html.light .hover\:bg-white\/10:hover,
+html.light .hover\:bg-white\/12:hover,
+html.light .hover\:bg-white\/\[0\.07\]:hover,
+html.light .hover\:bg-white\/\[0\.075\]:hover {
+  background-color: rgba(241, 245, 249, 0.96) !important;
 }
 
 html.light [class*="border-white/"] {
-  border-color: rgb(15 23 42 / var(--tw-border-opacity, 0.08)) !important;
+  border-color: var(--border-subtle) !important;
 }
 
 html.light .text-white {
-  color: #111827 !important;
+  color: var(--text-strong) !important;
 }
 
-html.light [class*="text-white/"] {
-  color: rgb(17 24 39 / var(--tw-text-opacity, 0.9)) !important;
+html.light .text-white\/90,
+html.light .text-white\/85,
+html.light .text-white\/80,
+html.light .text-white\/78,
+html.light .text-white\/75,
+html.light .text-white\/70 {
+  color: rgba(15, 23, 42, 0.84) !important;
+}
+
+html.light .text-white\/68,
+html.light .text-white\/65,
+html.light .text-white\/62,
+html.light .text-white\/60,
+html.light .text-white\/58,
+html.light .text-white\/55,
+html.light .text-white\/52,
+html.light .text-white\/50 {
+  color: rgba(51, 65, 85, 0.70) !important;
+}
+
+html.light .text-white\/48,
+html.light .text-white\/45,
+html.light .text-white\/42,
+html.light .text-white\/40,
+html.light .text-white\/38,
+html.light .text-white\/35,
+html.light .text-white\/32,
+html.light .text-white\/30,
+html.light .text-white\/28 {
+  color: rgba(71, 85, 105, 0.52) !important;
+}
+
+html.light .text-white\/20,
+html.light .text-white\/15,
+html.light .text-white\/12 {
+  color: rgba(100, 116, 139, 0.36) !important;
+}
+
+html.light .hover\:text-white:hover,
+html.light .hover\:text-white\/70:hover {
+  color: var(--text-strong) !important;
 }
 
 html.light [class*="bg-black/"] {
-  background-color: rgba(15, 23, 42, 0.055) !important;
+  background-color: rgba(15, 23, 42, 0.06) !important;
 }
 
-html.light input,
-html.light textarea,
-html.light select {
-  color: #102033 !important;
-  background-color: rgba(255, 255, 255, 0.8) !important;
-  border-color: rgba(15, 23, 42, 0.15) !important;
-}
-
-html.light input::placeholder,
-html.light textarea::placeholder {
-  color: rgba(15, 23, 42, 0.38) !important;
-}
-
-html.light .shadow-black\/20,
-html.light .shadow-black\/40 {
-  --tw-shadow-color: rgba(15, 23, 42, 0.08) !important;
-}
-
-html.light .shadow-glow {
-  --tw-shadow: 0 0 42px rgba(37, 99, 235, 0.12) !important;
-  --tw-shadow-colored: 0 0 42px var(--tw-shadow-color) !important;
+html.light .bg-black\/60,
+html.light .bg-black\/75 {
+  background-color: rgba(15, 23, 42, 0.46) !important;
 }
 
 html.light .bg-primary-500 {
   background-color: var(--primary-500) !important;
 }
 
+html.light .bg-primary-400,
+html.light .hover\:bg-primary-400:hover {
+  background-color: var(--primary-400) !important;
+}
+
+html.light .bg-primary-500\/5,
+html.light .bg-primary-500\/8,
+html.light .bg-primary-500\/10,
+html.light .bg-primary-500\/12,
+html.light .bg-primary-500\/14,
+html.light .bg-primary-500\/15,
+html.light .bg-primary-500\/20,
+html.light .bg-primary-500\/\[0\.045\],
+html.light .bg-primary-400\/10 {
+  background-color: rgba(37, 99, 235, 0.10) !important;
+}
+
+html.light .hover\:bg-primary-500\/20:hover {
+  background-color: rgba(37, 99, 235, 0.14) !important;
+}
+
+html.light [class*="border-primary-"] {
+  border-color: rgba(37, 99, 235, 0.24) !important;
+}
+
+html.light [class*="text-primary-"] {
+  color: #1d4ed8 !important;
+}
+
+html.light .bg-cyan-400\/10,
+html.light .bg-cyan-500\/5,
+html.light .bg-cyan-500\/10,
+html.light .bg-cyan-500\/20,
+html.light .bg-cyanx-500\/10,
+html.light .bg-cyanx-500\/12,
+html.light .bg-cyanx-500\/14,
+html.light .bg-cyanx-500\/20 {
+  background-color: rgba(2, 132, 199, 0.10) !important;
+}
+
+html.light .hover\:bg-cyan-400\/10:hover {
+  background-color: rgba(2, 132, 199, 0.12) !important;
+}
+
+html.light [class*="border-cyan-"],
+html.light [class*="border-cyanx-"] {
+  border-color: rgba(2, 132, 199, 0.24) !important;
+}
+
+html.light [class*="text-cyan-"],
+html.light [class*="text-cyanx-"] {
+  color: #0369a1 !important;
+}
+
+html.light .bg-violet-300\/\[0\.06\],
+html.light .bg-violet-400\/\[0\.04\],
+html.light .bg-violet-400\/5,
+html.light .bg-violet-400\/10,
+html.light .bg-violet-500\/5,
+html.light .bg-violetrx-500\/16 {
+  background-color: rgba(109, 40, 217, 0.10) !important;
+}
+
+html.light .hover\:bg-violet-400\/10:hover {
+  background-color: rgba(109, 40, 217, 0.12) !important;
+}
+
+html.light [class*="border-violet-"],
+html.light [class*="border-violetrx-"] {
+  border-color: rgba(109, 40, 217, 0.22) !important;
+}
+
+html.light [class*="text-violet-"],
+html.light [class*="text-violetrx-"] {
+  color: #6d28d9 !important;
+}
+
+html.light .bg-emerald-400\/12,
+html.light .bg-emerald-400\/\[0\.07\],
+html.light .bg-emerald-500\/10,
+html.light .bg-emerald-500\/15,
+html.light .bg-emerald-500\/\[0\.055\],
+html.light .bg-emerald-500\/\[0\.08\] {
+  background-color: rgba(5, 150, 105, 0.10) !important;
+}
+
+html.light [class*="border-emerald-"] {
+  border-color: rgba(5, 150, 105, 0.24) !important;
+}
+
+html.light [class*="text-emerald-"] {
+  color: #047857 !important;
+}
+
+html.light .bg-amber-300\/\[0\.06\],
+html.light .bg-amber-400\/10,
+html.light .bg-amber-500\/5,
+html.light .bg-amber-500\/10,
+html.light .bg-amber-500\/14,
+html.light .bg-amber-500\/15,
+html.light .bg-amber-500\/20 {
+  background-color: rgba(217, 119, 6, 0.11) !important;
+}
+
+html.light .hover\:bg-amber-400\/10:hover {
+  background-color: rgba(217, 119, 6, 0.14) !important;
+}
+
+html.light [class*="border-amber-"] {
+  border-color: rgba(217, 119, 6, 0.24) !important;
+}
+
+html.light [class*="text-amber-"] {
+  color: #b45309 !important;
+}
+
+html.light .bg-red-500\/5,
+html.light .bg-red-500\/10,
+html.light .bg-red-500\/12,
+html.light .bg-red-500\/16,
+html.light .bg-red-500\/20,
+html.light .bg-red-500\/\[0\.02\],
+html.light .bg-red-600\/30,
+html.light .bg-red-600\/50 {
+  background-color: rgba(220, 38, 38, 0.10) !important;
+}
+
+html.light .hover\:bg-red-500\/5:hover,
+html.light .hover\:bg-red-500\/10:hover,
+html.light .hover\:bg-red-500\/20:hover,
+html.light .hover\:bg-red-600\/50:hover {
+  background-color: rgba(220, 38, 38, 0.14) !important;
+}
+
+html.light .hover\:bg-red-500:hover {
+  background-color: #dc2626 !important;
+}
+
+html.light [class*="border-red-"] {
+  border-color: rgba(220, 38, 38, 0.24) !important;
+}
+
+html.light [class*="text-red-"] {
+  color: #dc2626 !important;
+}
+
+html.light .bg-blue-500\/10,
+html.light .bg-blue-500\/20 {
+  background-color: rgba(37, 99, 235, 0.10) !important;
+}
+
+html.light [class*="border-blue-"] {
+  border-color: rgba(37, 99, 235, 0.24) !important;
+}
+
+html.light [class*="text-blue-"] {
+  color: #1d4ed8 !important;
+}
+
+html.light .bg-primary-500.text-white,
+html.light .bg-primary-400.text-white,
+html.light .bg-red-500.text-white,
+html.light .bg-amber-500.text-white {
+  color: #ffffff !important;
+}
+
+html.light input,
+html.light textarea,
+html.light select {
+  color: var(--text-strong) !important;
+  background-color: rgba(255, 255, 255, 0.92) !important;
+  border-color: rgba(15, 23, 42, 0.14) !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04) !important;
+}
+
+html.light input::placeholder,
+html.light textarea::placeholder {
+  color: rgba(71, 85, 105, 0.48) !important;
+}
+
+html.light .shadow-black\/20,
+html.light .shadow-black\/40 {
+  --tw-shadow-color: rgba(15, 23, 42, 0.10) !important;
+}
+
+html.light .shadow-glow {
+  --tw-shadow: 0 14px 34px rgba(37, 99, 235, 0.18) !important;
+  --tw-shadow-colored: 0 0 42px var(--tw-shadow-color) !important;
+}
+
 html.light .text-ink-950 {
   color: #f8fafc !important;
+}
+
+html.light .text-ink-950\/50 {
+  color: rgba(248, 250, 252, 0.72) !important;
 }
 
 /* Custom scrollbar */
