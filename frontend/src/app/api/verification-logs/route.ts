@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { backendFetch, getTokenFromRequest } from "@/lib/backend-api";
 
+export const dynamic = "force-dynamic";
+
 const FORWARDED_PARAMS = ["limit", "verifier_status", "session_id"] as const;
 
 export async function GET(request: Request) {

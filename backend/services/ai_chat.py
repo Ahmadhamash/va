@@ -585,7 +585,6 @@ async def _generate_reply(
             select(AIVerificationLog.retrieved_data)
             .where(
                 AIVerificationLog.session_id == session_id,
-                AIVerificationLog.verifier_status == "SAFE_TO_SEND",
             )
             .order_by(AIVerificationLog.created_at.desc())
             .limit(10)
