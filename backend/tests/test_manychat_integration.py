@@ -7,7 +7,7 @@ from sqlalchemy import select
 from config import settings
 from main import app
 from middleware.auth_middleware import get_current_admin, get_current_user
-from models import ChannelIntegration, User, VoiceSettings
+from models import ChannelIntegration, ChatSession, Message, User, VoiceSettings
 
 
 def _client_user(**overrides):
@@ -350,6 +350,80 @@ async def test_manychat_webhook_returns_fallback_on_timeout(client, db_session, 
     assert len(messages) == 1
     assert messages[0]["type"] == "text"
     assert messages[0]["text"]
+
+
+@pytest.mark.asyncio
+async def test_manychat_timeout_reschedules_persisted_message(client, db_session, monkeypatch):
+    user = _client_user()
+    user_id = user.id
+    public_id = f"manychat_{uuid.uuid4().hex}"
+    integration = ChannelIntegration(
+        user_id=user.id,
+        platform="webhook",
+        public_id=public_id,
+        credentials={"webhook_secret": "test-secret"},
+        is_active=True,
+    )
+    db_session.add_all([user, integration])
+    await db_session.commit()
+
+    scheduled = []
+
+    async def fake_schedule_session(session_id, _db):
+        scheduled.append(session_id)
+
+    async def slow_sync_reply_result(integration_arg, sender_id, text, db, **kwargs):
+        session = ChatSession(
+            user_id=integration_arg.user_id,
+            channel=kwargs.get("channel") or "messenger",
+            external_user_id=sender_id,
+            title=f"manychat:{sender_id}",
+        )
+        db.add(session)
+        await db.commit()
+        await db.refresh(session)
+        db.add(
+            Message(
+                session_id=session.id,
+                role="user",
+                content=text,
+                media_type="text",
+                processed=False,
+            )
+        )
+        await db.commit()
+        await asyncio.sleep(1)
+        return {"reply": "late", "audio_url": None}
+
+    monkeypatch.setattr("routers.webhooks.sync_reply_result", slow_sync_reply_result)
+    monkeypatch.setattr("routers.webhooks.schedule_session", fake_schedule_session)
+    monkeypatch.setattr("routers.webhooks.MANYCHAT_REPLY_TIMEOUT_SECONDS", 0.2)
+
+    response = await client.post(
+        f"/api/webhooks/manychat/{public_id}",
+        json={"text": "where are your sales points?", "subscriber_id": "sub_timeout_saved"},
+        headers={"X-Webhook-Secret": "test-secret"},
+    )
+
+    assert response.status_code == 200
+    session = (
+        await db_session.execute(
+            select(ChatSession).where(
+                ChatSession.user_id == user_id,
+                ChatSession.external_user_id == "sub_timeout_saved",
+            )
+        )
+    ).scalar_one()
+    inbound = (
+        await db_session.execute(
+            select(Message).where(
+                Message.session_id == session.id,
+                Message.role == "user",
+            )
+        )
+    ).scalar_one()
+    assert inbound.processed is False
+    assert scheduled == [session.id]
 
 
 @pytest.mark.asyncio

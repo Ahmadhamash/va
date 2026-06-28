@@ -3,9 +3,14 @@ import uuid
 import pytest
 from sqlalchemy import select
 
-from models import ChatSession, Message, User
+from models import BusinessPolicy, ChatSession, Message, User
 from services.answer_verifier import SAFE_TO_SEND, VerificationResult
-from services.ai_chat import AI_PAUSED_REPLY, _verify_and_finalize, process_pending
+from services.ai_chat import (
+    AI_PAUSED_REPLY,
+    _generate_reply,
+    _verify_and_finalize,
+    process_pending,
+)
 
 
 def _user(**overrides):
@@ -62,6 +67,48 @@ async def test_process_pending_sends_ai_paused_reply_when_auto_reply_disabled(db
     ).scalars().all()
     assert len(rows) == 1
     assert rows[0].content == AI_PAUSED_REPLY
+
+
+@pytest.mark.asyncio
+async def test_static_business_fast_path_skips_openai_key(db_session, monkeypatch):
+    user = _user()
+    session_id = uuid.uuid4()
+    session = ChatSession(id=session_id, user_id=user.id, channel="web")
+    sales_points = BusinessPolicy(
+        user_id=user.id,
+        policy_type="sales_points",
+        title="Sales points",
+        content="Amman branch\nIrbid branch",
+        is_active=True,
+    )
+    delivery = BusinessPolicy(
+        user_id=user.id,
+        policy_type="ordering",
+        title="Delivery",
+        content="Delivery is available inside Amman.",
+        is_active=True,
+    )
+    db_session.add_all([user, session, sales_points, delivery])
+    await db_session.commit()
+    await db_session.refresh(user)
+
+    async def fail_openai_key(_db):
+        raise AssertionError("static business questions should not need OpenAI")
+
+    monkeypatch.setattr("services.ai_chat.effective_openai_key", fail_openai_key)
+
+    reply, retrieved_data, trace = await _generate_reply(
+        user,
+        session_id,
+        "\u0634\u0648 \u0646\u0642\u0627\u0637 \u0627\u0644\u0628\u064a\u0639 \u0648 \u0647\u0644 \u0641\u064a \u062a\u0648\u0635\u064a\u0644\u061f",
+        db_session,
+    )
+
+    assert "Amman branch" in reply
+    assert "Delivery is available" in reply
+    assert "get_business_info:{}" in retrieved_data
+    assert trace["static_fast_path"] is True
+    assert trace["model"] == "deterministic"
 
 
 @pytest.mark.asyncio

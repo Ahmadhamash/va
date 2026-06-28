@@ -81,6 +81,72 @@ _IMAGE_REQUEST_TERMS = (
 )
 
 
+_STATIC_TEXT_DIACRITICS_RE = re.compile(r"[\u064b-\u065f\u0670\u0640]")
+_STATIC_ORDER_STATUS_TERMS = (
+    "\u0637\u0644\u0628\u064a", "\u0637\u0644\u0628\u0643",
+    "\u0627\u0644\u0637\u0644\u0628", "\u0627\u0648\u0631\u062f\u0631",
+    "\u0623\u0648\u0631\u062f\u0631", "order", "tracking", "track order",
+)
+_STATIC_TOPIC_TERMS = {
+    "location": (
+        "\u0645\u0648\u0642\u0639", "\u0639\u0646\u0648\u0627\u0646",
+        "\u0648\u064a\u0646\u0643\u0645", "\u0641\u064a\u0646\u0643\u0645",
+        "\u0645\u062d\u0644\u0643\u0645", "\u0645\u0643\u0627\u0646\u0643\u0645",
+        "\u0627\u0645\u0627\u0643\u0646\u0643\u0645", "\u0639\u0646\u0627\u0648\u064a\u0646\u0643\u0645",
+        "\u0641\u0631\u0639", "\u0641\u0631\u0648\u0639",
+        "\u0646\u0642\u0627\u0637 \u0627\u0644\u0628\u064a\u0639",
+        "\u0646\u0642\u0637\u0629 \u0628\u064a\u0639",
+        "\u0645\u0648\u0632\u0639", "\u0627\u0644\u0645\u0648\u0632\u0639\u064a\u0646",
+        "\u0648\u064a\u0646 \u0627\u0634\u062a\u0631\u064a",
+        "location", "address", "branch", "branches", "sales point",
+        "sales points", "where to buy", "distributor",
+    ),
+    "delivery": (
+        "\u062a\u0648\u0635\u064a\u0644", "\u062f\u064a\u0644\u064a\u0641\u0631\u064a",
+        "\u0634\u062d\u0646", "\u0628\u062a\u0648\u0635\u0644\u0648",
+        "\u0628\u062a\u0648\u0635\u0644\u0648\u0627", "delivery", "shipping",
+        "deliver",
+    ),
+    "hours": (
+        "\u062f\u0648\u0627\u0645", "\u0633\u0627\u0639\u0627\u062a",
+        "\u0633\u0627\u0639\u0629", "\u0628\u062a\u0641\u062a\u062d",
+        "\u062a\u0641\u062a\u062d", "\u0628\u062a\u0633\u0643\u0631",
+        "\u062a\u0633\u0643\u0631", "hours", "opening", "closing",
+        "open", "close",
+    ),
+    "payment": (
+        "\u062f\u0641\u0639", "\u0628\u062f\u0641\u0639", "\u0643\u0627\u0634",
+        "\u0641\u064a\u0632\u0627", "\u0643\u0631\u062f\u062a",
+        "\u0645\u062d\u0641\u0638\u0629", "payment", "pay", "cash",
+        "visa", "credit",
+    ),
+    "contact": (
+        "\u062a\u0648\u0627\u0635\u0644", "\u0631\u0642\u0645\u0643\u0645",
+        "\u0627\u0644\u0631\u0642\u0645", "\u0647\u0627\u062a\u0641",
+        "\u0648\u0627\u062a\u0633", "contact", "phone", "whatsapp",
+    ),
+    "identity": (
+        "\u0647\u0648\u064a\u0629 \u0627\u0644\u0635\u0641\u062d\u0629",
+        "\u0647\u0648\u064a\u0647 \u0627\u0644\u0635\u0641\u062d\u0647",
+        "\u0645\u0639\u0644\u0648\u0645\u0627\u062a \u0627\u0644\u0635\u0641\u062d\u0629",
+        "\u0627\u0644\u0628\u0631\u0627\u0646\u062f",
+        "page identity", "account identity", "brand info",
+    ),
+}
+_STATIC_TOPIC_LABELS = {
+    "location": "\u0646\u0642\u0627\u0637 \u0627\u0644\u0628\u064a\u0639",
+    "delivery": "\u0627\u0644\u062a\u0648\u0635\u064a\u0644",
+    "hours": "\u0627\u0644\u062f\u0648\u0627\u0645",
+    "payment": "\u0627\u0644\u062f\u0641\u0639",
+    "contact": "\u0627\u0644\u062a\u0648\u0627\u0635\u0644",
+    "identity": "\u0645\u0639\u0644\u0648\u0645\u0627\u062a\u0646\u0627",
+}
+_STATIC_STRONG_FACT_CATEGORIES = {
+    "location": {"sales_points"},
+    "identity": {"business_profile"},
+}
+
+
 def _client_for(api_key: str):
     return get_openai_client(api_key, timeout=OPENAI_TIMEOUT_SECONDS)
 
@@ -153,6 +219,121 @@ def _store_cached_reply(
     if keys and not all(key.startswith(_CACHEABLE_TOOL_PREFIXES) for key in keys):
         return
     _response_cache[(str(user_id), key_text)] = (monotonic(), reply)
+
+
+def _normalise_static_text(text: str | None) -> str:
+    clean = re.sub(r"\s+", " ", (text or "").strip().casefold())
+    clean = _STATIC_TEXT_DIACRITICS_RE.sub("", clean)
+    return clean.replace("\u0623", "\u0627").replace("\u0625", "\u0627").replace("\u0622", "\u0627")
+
+
+def _contains_static_term(text: str, terms: tuple[str, ...]) -> bool:
+    return any(term.casefold() in text for term in terms)
+
+
+def _static_business_topics(customer_message: str | None) -> list[str]:
+    text = _normalise_static_text(customer_message)
+    if not text:
+        return []
+    if _contains_static_term(text, _STATIC_ORDER_STATUS_TERMS):
+        return []
+
+    topics: list[str] = []
+    for topic, terms in _STATIC_TOPIC_TERMS.items():
+        if _contains_static_term(text, terms):
+            topics.append(topic)
+    return topics
+
+
+def _fact_text(fact: dict) -> str:
+    return " ".join(
+        str(fact.get(key) or "")
+        for key in ("category", "policy_type", "title", "content")
+    )
+
+
+def _fact_matches_static_topic(fact: dict, topic: str) -> bool:
+    category = str(fact.get("category") or fact.get("policy_type") or "").casefold()
+    if category in _STATIC_STRONG_FACT_CATEGORIES.get(topic, set()):
+        return True
+    return _contains_static_term(
+        _normalise_static_text(_fact_text(fact)),
+        _STATIC_TOPIC_TERMS[topic],
+    )
+
+
+def _clean_static_fact_block(fact: dict) -> str:
+    title = str(fact.get("title") or "").strip()
+    content = str(fact.get("content") or "").strip()
+    if title and content and title.casefold() not in content[: len(title) + 20].casefold():
+        text = f"{title}\n{content}"
+    else:
+        text = content or title
+    lines = [line.rstrip() for line in text.splitlines()]
+    return "\n".join(line for line in lines if line.strip()).strip()
+
+
+def _trim_static_reply(reply: str, limit: int = 4200) -> str:
+    if len(reply) <= limit:
+        return reply
+    cut_at = reply.rfind("\n", 0, limit)
+    if cut_at < int(limit * 0.6):
+        cut_at = reply.rfind(" ", 0, limit)
+    if cut_at < int(limit * 0.6):
+        cut_at = limit
+    return reply[:cut_at].rstrip() + "\n..."
+
+
+async def _try_static_business_reply(
+    user: User,
+    session_id: uuid.UUID,
+    customer_message: str | None,
+    db: AsyncSession,
+) -> tuple[str, dict] | None:
+    topics = _static_business_topics(customer_message)
+    if not topics:
+        return None
+
+    result = await execute_db_function(
+        "get_business_info",
+        {},
+        user.id,
+        db,
+        session_id=session_id,
+    )
+    retrieved_data = {"get_business_info:{}": result}
+    info = result.get("business_info") if isinstance(result, dict) else None
+    facts = []
+    if isinstance(info, dict):
+        facts = list(info.get("assistant_facts") or info.get("general_policies") or [])
+
+    selected: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    for topic in topics:
+        for fact in facts:
+            if not isinstance(fact, dict) or not _fact_matches_static_topic(fact, topic):
+                continue
+            block = _clean_static_fact_block(fact)
+            key = f"{topic}:{block}"
+            if block and key not in seen:
+                selected.append((topic, block))
+                seen.add(key)
+
+    if not selected:
+        return (
+            "\u0647\u0627\u064a \u0627\u0644\u0645\u0639\u0644\u0648\u0645\u0629 \u0645\u0634 \u0645\u0636\u0627\u0641\u0629 \u0639\u0646\u062f\u064a \u062d\u0627\u0644\u064a\u0627\n"
+            "\u0627\u0628\u0639\u062a\u0644\u064a \u062a\u0641\u0627\u0635\u064a\u0644 \u0627\u0643\u062b\u0631 \u0648\u0628\u0633\u0627\u0639\u062f\u0643 \u0628\u0627\u0644\u0645\u062a\u0627\u062d \u0639\u0646\u062f\u064a",
+            retrieved_data,
+        )
+
+    include_labels = len({topic for topic, _ in selected}) > 1
+    parts = []
+    for topic, block in selected:
+        if include_labels:
+            parts.append(f"{_STATIC_TOPIC_LABELS.get(topic, topic)}:\n{block}")
+        else:
+            parts.append(block)
+    return _trim_static_reply("\n\n".join(parts)), retrieved_data
 
 
 def _customer_asked_for_image(text: str | None) -> bool:
@@ -474,11 +655,43 @@ async def _generate_reply(
     used by the Answer Verifier for grounding checks. trace is a compact audit
     record for dashboards and debugging.
     """
-    api_key = await effective_openai_key(db)
-    model = await effective_model(db)
-    master_system_prompt = await effective_master_system_prompt(db)
-    human_handoff_enabled = await effective_human_handoff_enabled(db)
-    client = _client_for(api_key)
+    # Extract text content early so deterministic support answers can skip the
+    # OpenAI pipeline entirely.
+    if isinstance(content, str):
+        text_content = content
+    elif isinstance(content, list):
+        text_content = next((item["text"] for item in content if item.get("type") == "text"), "")
+    else:
+        text_content = str(content)
+
+    static_reply = await _try_static_business_reply(user, session_id, text_content, db)
+    if static_reply is not None:
+        reply, retrieved_data = static_reply
+        return reply, retrieved_data, {
+            "intent": "support",
+            "intents": ["support"],
+            "router_text": text_content[:500],
+            "allowed_tools": ["get_business_info"],
+            "tool_calls": [
+                {
+                    "round": 0,
+                    "name": "get_business_info",
+                    "args": {},
+                    "result_summary": _summarize_tool_result(
+                        retrieved_data["get_business_info:{}"]
+                    ),
+                }
+            ],
+            "tool_rounds": 0,
+            "max_tool_rounds": MAX_TOOL_ROUNDS,
+            "human_handoff_enabled": await effective_human_handoff_enabled(db),
+            "prompt_overrides": [],
+            "local_llm_enabled": False,
+            "model": "deterministic",
+            "finish_reason": "static_business_fast_path",
+            "retrieved_keys": list(retrieved_data.keys()),
+            "static_fast_path": True,
+        }
 
     history = await get_session_history(session_id, db, limit=HISTORY_LIMIT)
     style_samples = await get_style_samples(user.id, db)
@@ -493,16 +706,14 @@ async def _generate_reply(
     )
     workflows = list((await db.execute(stmt_wf)).scalars().all())
 
-    # Extract text content for the router
-    if isinstance(content, str):
-        text_content = content
-    elif isinstance(content, list):
-        text_content = next((item["text"] for item in content if item.get("type") == "text"), "")
-    else:
-        text_content = str(content)
-        
     from services.router import get_intent_for_message, heuristic_intents_for_message
     from config import settings
+
+    api_key = await effective_openai_key(db)
+    model = await effective_model(db)
+    master_system_prompt = await effective_master_system_prompt(db)
+    human_handoff_enabled = await effective_human_handoff_enabled(db)
+    client = _client_for(api_key)
     
     intent = await get_intent_for_message(text_content, db, history=history)
     intents = heuristic_intents_for_message(text_content)
@@ -801,33 +1012,69 @@ async def _verify_and_finalize(
     Actions: sent, modified, blocked, handoff, clarification
     """
     user_id = user.id
-    api_key = await effective_openai_key(db)
-    human_handoff_enabled = await effective_human_handoff_enabled(db)
     ai_trace = dict(ai_trace or {})
     ai_trace.setdefault("verification", {})
     ai_trace.setdefault("fact_guard", {})
     ai_trace.setdefault("repair", {"attempted": False})
+
+    if ai_trace.get("static_fast_path"):
+        result = VerificationResult(
+            verdict=SAFE_TO_SEND,
+            risk_score=0.0,
+            reasons=["Static business-info fast path; answered from saved facts."],
+            grounding_data_used=list(retrieved_data.keys()),
+        )
+        ai_trace["verification"]["initial"] = {
+            "verdict": result.verdict,
+            "risk_score": result.risk_score,
+            "reasons": result.reasons,
+            "flagged_claims": result.flagged_claims,
+            "skipped_llm": True,
+        }
+        ai_trace["final"] = {
+            "action": "sent",
+            "verdict": result.verdict,
+            "risk_score": result.risk_score,
+            "answer_length": len(draft_answer or ""),
+        }
+        return draft_answer, "sent", result
+
+    api_key = await effective_openai_key(db)
+    human_handoff_enabled = await effective_human_handoff_enabled(db)
     
-    # 1. Fetch Style Samples and Voice Settings for the Humanizer
-    style_samples = await get_style_samples(user_id, db)
+    # 1. Fetch style/voice settings used by the verifier and optional legacy humanizer.
     prompt_overrides = await get_client_prompt_overrides(user_id, db)
     voice_settings = await get_effective_persona_config(user_id, db, user.ai_persona)
-    conversation_context = _humanizer_context(
-        await get_session_history(session_id, db, limit=8)
-    )
-            
-    # 2. Humanize the draft
-    humanizer = HumanizerAgent(api_key=api_key)
-    logger.info("Sending draft to Humanizer Agent: %s", draft_answer)
-    humanized_draft = await humanizer.rewrite(
-        logic_draft=draft_answer,
-        style_samples=style_samples,
-        voice_settings=voice_settings,
-        conversation_context=conversation_context,
-        system_prompt_override=prompt_overrides.get("humanizer_prompt"),
-    )
-    append_usage_call(ai_trace, humanizer.last_usage_call)
-    logger.info("Humanized draft: %s", humanized_draft)
+    humanizer_prompt = (prompt_overrides.get("humanizer_prompt") or "").strip()
+    use_separate_humanizer = bool(humanizer_prompt)
+    style_samples: list[str] = []
+    conversation_context = ""
+    humanizer: HumanizerAgent | None = None
+
+    # 2. The main agent now writes the final customer-facing style. Keep the
+    # separate Humanizer only for accounts with an explicit legacy override.
+    if use_separate_humanizer:
+        style_samples = await get_style_samples(user_id, db)
+        conversation_context = _humanizer_context(
+            await get_session_history(session_id, db, limit=8)
+        )
+        humanizer = HumanizerAgent(api_key=api_key)
+        logger.info("Sending draft to Humanizer Agent: %s", draft_answer)
+        humanized_draft = await humanizer.rewrite(
+            logic_draft=draft_answer,
+            style_samples=style_samples,
+            voice_settings=voice_settings,
+            conversation_context=conversation_context,
+            system_prompt_override=humanizer_prompt,
+        )
+        append_usage_call(ai_trace, humanizer.last_usage_call)
+        logger.info("Humanized draft: %s", humanized_draft)
+    else:
+        humanized_draft = draft_answer
+        ai_trace["humanizer"] = {
+            "skipped": True,
+            "reason": "final style instructions are merged into the knowledge agent prompt",
+        }
     humanizer_empty_output = False
     if not (humanized_draft or "").strip():
         humanizer_empty_output = True
@@ -953,14 +1200,18 @@ async def _verify_and_finalize(
             )
             if retry_draft:
                 ai_trace["repair"]["retry_generated"] = True
-                retry_humanized = await humanizer.rewrite(
-                    logic_draft=retry_draft,
-                    style_samples=style_samples,
-                    voice_settings=voice_settings,
-                    conversation_context=conversation_context,
-                    system_prompt_override=prompt_overrides.get("humanizer_prompt"),
-                )
-                append_usage_call(ai_trace, humanizer.last_usage_call)
+                if use_separate_humanizer and humanizer is not None:
+                    retry_humanized = await humanizer.rewrite(
+                        logic_draft=retry_draft,
+                        style_samples=style_samples,
+                        voice_settings=voice_settings,
+                        conversation_context=conversation_context,
+                        system_prompt_override=humanizer_prompt,
+                    )
+                    append_usage_call(ai_trace, humanizer.last_usage_call)
+                else:
+                    retry_humanized = retry_draft
+                    ai_trace["repair"]["retry_humanizer_skipped"] = True
                 if not (retry_humanized or "").strip():
                     logger.warning(
                         "Retry humanizer returned an empty draft; using retry logic draft."
@@ -1097,7 +1348,12 @@ async def _verify_and_finalize(
     # 5. If the verifier blocked the guarded draft and fell back to a formal
     # safe_response, humanize the fallback, but keep the original fallback if
     # the rewrite changes protected facts.
-    if result.verdict != SAFE_TO_SEND and final_reply:
+    if (
+        result.verdict != SAFE_TO_SEND
+        and final_reply
+        and use_separate_humanizer
+        and humanizer is not None
+    ):
         logger.info("Humanizing the verifier's fallback response: %s", final_reply)
         fallback_logic = final_reply
         rewritten_fallback = await humanizer.rewrite(
@@ -1105,7 +1361,7 @@ async def _verify_and_finalize(
             style_samples=style_samples,
             voice_settings=voice_settings,
             conversation_context=conversation_context,
-            system_prompt_override=prompt_overrides.get("humanizer_prompt"),
+            system_prompt_override=humanizer_prompt,
         )
         append_usage_call(ai_trace, humanizer.last_usage_call)
         fallback_guard = check_humanizer_preserved_facts(

@@ -22,6 +22,7 @@ from services.messaging_service import (
     verify_meta_signature,
 )
 from services.file_service import signed_upload_url
+from services.queue_service import schedule_session
 from services.ratelimit import limiter
 
 logger = logging.getLogger("webhooks")
@@ -398,6 +399,31 @@ async def _manychat_resolve_delivery(
     return "text"
 
 
+async def _reschedule_manychat_session(
+    *,
+    user_id,
+    channel: str,
+    sender_id: str,
+    db: AsyncSession,
+) -> None:
+    result = await db.execute(
+        select(ChatSession).where(
+            ChatSession.user_id == user_id,
+            ChatSession.channel == channel,
+            ChatSession.external_user_id == sender_id,
+        )
+    )
+    session = result.scalar_one_or_none()
+    if session is None:
+        logger.warning(
+            "ManyChat timeout had no persisted session to reschedule: channel=%s sender_suffix=%s",
+            channel,
+            sender_id[-6:],
+        )
+        return
+    await schedule_session(session.id, db)
+
+
 @router.post("/webhooks/manychat/{public_id}")
 @limiter.limit("60/minute")
 async def manychat_inbound(
@@ -409,6 +435,7 @@ async def manychat_inbound(
     integration = await get_integration(public_id, db)
     if integration is None or integration.platform != "webhook":
         raise HTTPException(status_code=404, detail="Unknown webhook")
+    integration_user_id = integration.user_id
 
     try:
         body = await request.json()
@@ -434,7 +461,7 @@ async def manychat_inbound(
         raise HTTPException(status_code=400, detail="Invalid delivery mode")
     delivery = await _manychat_resolve_delivery(
         requested_delivery,
-        integration.user_id,
+        integration_user_id,
         db,
     )
     
@@ -465,7 +492,19 @@ async def manychat_inbound(
             timeout=MANYCHAT_REPLY_TIMEOUT_SECONDS,
         )
     except asyncio.TimeoutError:
-        await db.rollback()
+        try:
+            await _reschedule_manychat_session(
+                user_id=integration_user_id,
+                channel=channel,
+                sender_id=sender_id,
+                db=db,
+            )
+        except Exception:
+            logger.exception(
+                "Failed to reschedule ManyChat session after timeout: channel=%s sender_suffix=%s",
+                channel,
+                sender_id[-6:],
+            )
         logger.warning(
             "ManyChat reply timed out: channel=%s requested_delivery=%s delivery=%s sender_suffix=%s timeout_s=%.1f elapsed_ms=%d",
             channel,
