@@ -577,6 +577,26 @@ async def _generate_reply(
         retrieved_data["assistant_settings:profile"] = assistant_profile
     if user.ai_persona:
         retrieved_data["assistant_settings:persona"] = user.ai_persona
+
+    # Load previously retrieved data from session's verification logs to support follow-up questions
+    try:
+        from models.verification_log import AIVerificationLog
+        stmt_v = (
+            select(AIVerificationLog.retrieved_data)
+            .where(
+                AIVerificationLog.session_id == session_id,
+                AIVerificationLog.verifier_status == "SAFE_TO_SEND",
+            )
+            .order_by(AIVerificationLog.created_at.desc())
+            .limit(10)
+        )
+        prev_logs = list((await db.execute(stmt_v)).scalars().all())
+        for prev_data in reversed(prev_logs):
+            if isinstance(prev_data, dict):
+                retrieved_data.update(prev_data)
+    except Exception as e:
+        logger.warning("Failed to load previous verification logs: %s", e)
+
     rounds = 0
     while (
         response.choices[0].finish_reason == "tool_calls"
