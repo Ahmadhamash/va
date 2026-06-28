@@ -199,6 +199,12 @@ class TestCatalogHybridSearch:
         assert _is_broad_catalog_query("\u0627\u0634 \u0639\u0646\u062f\u0643\u0645 \u0627\u0643\u0644\u061f")
         assert _is_generic_food_query("\u0627\u0643\u0644")
 
+    def test_colloquial_do_you_have_product_keeps_product_tokens(self):
+        tokens = _tokens("\u0639\u0646\u062f\u0643\u0648 \u0627\u064a\u0633 \u0643\u0631\u064a\u0645\u061f")
+        assert "\u0639\u0646\u062f\u0643\u0648" not in tokens
+        assert "\u0627\u064a\u0633" in tokens
+        assert "\u0643\u0631\u064a\u0645" in tokens
+
     def test_headphone_synonym_expands_to_arabic_speaker_terms(self):
         tokens = _tokens("headphone")
         assert "\u0633\u0645\u0627\u0639\u0647" in tokens
@@ -268,6 +274,11 @@ class TestSupplementalRetrievalPlan:
         calls = supplemental_tool_plan("\u0627\u0634 \u0639\u0646\u062f\u0643\u0645 \u0627\u0643\u0644\u061f", "sales")
         assert calls[0].name == "get_catalog"
         assert calls[0].args["query"] == ""
+
+    def test_colloquial_ice_cream_availability_extracts_product_query(self):
+        calls = supplemental_tool_plan("\u0639\u0646\u062f\u0643\u0648 \u0627\u064a\u0633 \u0643\u0631\u064a\u0645\u061f", "sales")
+        assert calls[0].name == "get_catalog"
+        assert calls[0].args["query"] == "\u0627\u064a\u0633 \u0643\u0631\u064a\u0645"
 
     def test_family_box_detail_question_fetches_catalog_and_business_info(self):
         calls = supplemental_tool_plan(

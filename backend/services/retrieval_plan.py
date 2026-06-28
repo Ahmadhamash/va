@@ -18,6 +18,7 @@ class ToolCallPlan:
 
 _ARABIC_DIACRITICS_RE = re.compile(r"[\u064b-\u065f\u0670\u0640]")
 _ISO_DATE_RE = re.compile(r"\b20\d{2}-\d{2}-\d{2}\b")
+_TOKEN_SPLIT_RE = re.compile(r"[\s,\u060c/\\|+\-_.:;\u061f?!()]+")
 
 _BROAD_CATALOG_TERMS = (
     "\u0634\u0648 \u0639\u0646\u062f\u0643\u0645", "\u0627\u0634 \u0639\u0646\u062f\u0643\u0645",
@@ -99,6 +100,22 @@ _BUSINESS_INFO_TERMS = (
     "distributor", "distributors", "page identity",
     "account identity", "brand info",
 )
+_CATALOG_QUERY_STOPWORDS = {
+    "\u0639\u0646\u062f\u0643\u0645", "\u0639\u0646\u062f\u0643\u0648",
+    "\u0639\u0646\u062f\u0643\u0648\u0627", "\u0639\u0646\u062f\u0643",
+    "\u0639\u0646\u062f\u0643\u0646", "\u0641\u064a", "\u0641\u064a\u0647",
+    "\u0647\u0644", "\u0647\u0644\u0627", "\u0627\u0630\u0627",
+    "\u0644\u0648", "\u0633\u0645\u062d\u062a", "\u0645\u0646", "\u0641\u0636\u0644\u0643",
+    "\u0645\u0648\u062c\u0648\u062f", "\u0645\u0648\u062c\u0648\u062f\u0647",
+    "\u0645\u0648\u062c\u0648\u062f\u0629", "\u0645\u062a\u0648\u0641\u0631",
+    "\u0645\u062a\u0648\u0641\u0631\u0647", "\u0645\u062a\u0648\u0641\u0631\u0629",
+    "\u0633\u0639\u0631", "\u0627\u0644\u0633\u0639\u0631", "\u0643\u0645",
+    "\u0628\u0643\u0645", "\u0642\u062f\u064a\u0634", "\u062d\u0642\u0647",
+    "\u062d\u0642\u0647\u0627", "\u0628\u062f\u064a", "\u0628\u062f\u0646\u0627",
+    "\u0627\u0631\u064a\u062f", "\u0627\u0628\u063a\u0649", "\u0639\u0627\u064a\u0632",
+    "\u0639\u0627\u0648\u0632", "do", "you", "have", "is", "there",
+    "available", "availability", "price", "cost", "please",
+}
 
 
 def _normalise(text: str) -> str:
@@ -119,11 +136,23 @@ def _has_any(text: str, terms: tuple[str, ...]) -> bool:
     return any(_normalise(term) in text for term in terms)
 
 
+def _strip_arabic_article(token: str) -> str:
+    if token.startswith("\u0627\u0644") and len(token) > 4:
+        return token[2:]
+    return token
+
+
 def _catalog_query(customer_message: str) -> str:
     text = _normalise(customer_message)
     if _has_any(text, _BROAD_CATALOG_TERMS):
         return ""
-    return customer_message.strip()
+    tokens: list[str] = []
+    for raw in _TOKEN_SPLIT_RE.split(customer_message or ""):
+        token = _strip_arabic_article(_normalise(raw))
+        if len(token) < 2 or token in _CATALOG_QUERY_STOPWORDS:
+            continue
+        tokens.append(token)
+    return " ".join(tokens).strip() or customer_message.strip()
 
 
 def _booking_args(customer_message: str) -> dict:

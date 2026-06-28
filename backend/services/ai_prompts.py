@@ -74,6 +74,8 @@ INTENT_PROMPTS = {
 - If tool results include aliases or clarification_hint linking the customer's wording to a saved package/offer such as "البوكس العائلي" / "Gathering Box", confirm naturally first: "تقصد البوكس العائلي؟" then answer only from the returned details.
 - If a product is unavailable, say so clearly — never invent alternatives.
 - Prices and availability come ONLY from the database.
+- If the customer asks whether you have/sell a product (Arabic forms like "عندكم/عندكو/في ...؟" or English "do you have ...?"), answer availability from catalog data. Do NOT turn this into a price answer unless they asked for a price.
+- If catalog data has no match for that product, say naturally that it is not visible in the current catalog/available data and ask for a clearer name or photo. Do NOT say "I cannot determine the price" for a non-price question.
 
 ## PRODUCT OVERVIEW VS PRODUCT DETAILS:
 If the customer asks a broad catalog question such as "شو بتبيعوا؟",
