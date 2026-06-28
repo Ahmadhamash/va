@@ -145,6 +145,48 @@ _STATIC_STRONG_FACT_CATEGORIES = {
     "location": {"sales_points"},
     "identity": {"business_profile"},
 }
+_STATIC_PLACE_ALIASES = (
+    ("\u0627\u0631\u0628\u062f", "\u0625\u0631\u0628\u062f"),
+    ("irbid", "Irbid"),
+    ("\u0639\u0645\u0627\u0646", "\u0639\u0645\u0627\u0646"),
+    ("amman", "Amman"),
+    ("\u0627\u0644\u0632\u0631\u0642\u0627\u0621", "\u0627\u0644\u0632\u0631\u0642\u0627\u0621"),
+    ("\u0632\u0631\u0642\u0627\u0621", "\u0627\u0644\u0632\u0631\u0642\u0627\u0621"),
+    ("zarqa", "Zarqa"),
+    ("\u0627\u0644\u0633\u0644\u0637", "\u0627\u0644\u0633\u0644\u0637"),
+    ("\u0633\u0644\u0637", "\u0627\u0644\u0633\u0644\u0637"),
+    ("salt", "Salt"),
+    ("\u0627\u0644\u0643\u0631\u0643", "\u0627\u0644\u0643\u0631\u0643"),
+    ("\u0643\u0631\u0643", "\u0627\u0644\u0643\u0631\u0643"),
+    ("karak", "Karak"),
+    ("\u0627\u0644\u0639\u0642\u0628\u0629", "\u0627\u0644\u0639\u0642\u0628\u0629"),
+    ("\u0639\u0642\u0628\u0629", "\u0627\u0644\u0639\u0642\u0628\u0629"),
+    ("aqaba", "Aqaba"),
+    ("\u0627\u0644\u0645\u0641\u0631\u0642", "\u0627\u0644\u0645\u0641\u0631\u0642"),
+    ("\u0645\u0641\u0631\u0642", "\u0627\u0644\u0645\u0641\u0631\u0642"),
+    ("mafraq", "Mafraq"),
+    ("\u062c\u0631\u0634", "\u062c\u0631\u0634"),
+    ("jerash", "Jerash"),
+    ("\u0639\u062c\u0644\u0648\u0646", "\u0639\u062c\u0644\u0648\u0646"),
+    ("ajloun", "Ajloun"),
+    ("\u0645\u0627\u062f\u0628\u0627", "\u0645\u0627\u062f\u0628\u0627"),
+    ("madaba", "Madaba"),
+    ("\u0627\u0644\u0637\u0641\u064a\u0644\u0629", "\u0627\u0644\u0637\u0641\u064a\u0644\u0629"),
+    ("\u0637\u0641\u064a\u0644\u0629", "\u0627\u0644\u0637\u0641\u064a\u0644\u0629"),
+    ("tafileh", "Tafileh"),
+    ("\u0645\u0639\u0627\u0646", "\u0645\u0639\u0627\u0646"),
+    ("maan", "Maan"),
+)
+_STATIC_GENERIC_AREA_TERMS = (
+    "\u0643\u0644 \u0627\u0644\u0645\u0646\u0627\u0637\u0642",
+    "\u0643\u0627\u0641\u0629 \u0627\u0644\u0645\u0646\u0627\u0637\u0642",
+    "\u062c\u0645\u064a\u0639 \u0627\u0644\u0645\u0646\u0627\u0637\u0642",
+    "\u0643\u0644 \u0627\u0644\u0645\u062d\u0627\u0641\u0638\u0627\u062a",
+    "\u0643\u0627\u0641\u0629 \u0627\u0644\u0645\u062d\u0627\u0641\u0638\u0627\u062a",
+    "\u062c\u0645\u064a\u0639 \u0627\u0644\u0645\u062d\u0627\u0641\u0638\u0627\u062a",
+    "all areas",
+    "all governorates",
+)
 
 
 def _client_for(api_key: str):
@@ -231,6 +273,17 @@ def _contains_static_term(text: str, terms: tuple[str, ...]) -> bool:
     return any(term.casefold() in text for term in terms)
 
 
+def _static_requested_place(customer_message: str | None) -> tuple[str, str] | None:
+    text = _normalise_static_text(customer_message)
+    if not text:
+        return None
+    for alias, label in _STATIC_PLACE_ALIASES:
+        normalised_alias = _normalise_static_text(alias)
+        if normalised_alias and normalised_alias in text:
+            return normalised_alias, label
+    return None
+
+
 def _static_business_topics(customer_message: str | None) -> list[str]:
     text = _normalise_static_text(customer_message)
     if not text:
@@ -273,6 +326,128 @@ def _clean_static_fact_block(fact: dict) -> str:
     return "\n".join(line for line in lines if line.strip()).strip()
 
 
+def _prettify_static_line(line: str) -> str:
+    clean = re.sub(r"^\s*[-\u2022]\s*", "", line.strip())
+    if not clean:
+        return ""
+
+    branch_match = re.search(
+        r"Branch\s+Name\s*:\s*([^,\n]+)\s*,\s*City\s*:\s*(.+)",
+        clean,
+        flags=re.IGNORECASE,
+    )
+    if branch_match:
+        return f"{branch_match.group(1).strip()} - {branch_match.group(2).strip()}"
+
+    replacements = (
+        ("Branch Name:", ""),
+        ("City:", ""),
+        ("Question:", "\u0633\u0624\u0627\u0644:"),
+        ("Answer:", ""),
+        ("Content:", ""),
+    )
+    for old, new in replacements:
+        clean = re.sub(re.escape(old), new, clean, flags=re.IGNORECASE)
+    clean = re.sub(r"\s*,\s*", "\u060c ", clean)
+    clean = re.sub(r"\s{2,}", " ", clean)
+    return clean.strip(" \t-:\u060c")
+
+
+def _static_lines_from_block(block: str) -> list[str]:
+    lines = []
+    for raw_line in block.splitlines():
+        clean = _prettify_static_line(raw_line)
+        if clean:
+            lines.append(clean)
+    return lines
+
+
+def _static_lines_for_place(
+    block: str,
+    place: tuple[str, str],
+    *,
+    include_generic: bool = False,
+) -> list[str]:
+    place_key, _ = place
+    raw_lines = [line for line in block.splitlines() if line.strip()]
+    selected: list[str] = []
+    for index, line in enumerate(raw_lines):
+        normalised_line = _normalise_static_text(line)
+        matches_place = place_key in normalised_line
+        matches_generic = include_generic and _contains_static_term(
+            normalised_line,
+            _STATIC_GENERIC_AREA_TERMS,
+        )
+        if not (matches_place or matches_generic):
+            continue
+
+        clean = _prettify_static_line(line)
+        if clean:
+            selected.append(clean)
+
+        if "question:" in line.casefold() and index + 1 < len(raw_lines):
+            next_line = raw_lines[index + 1]
+            if "answer:" in next_line.casefold():
+                answer = _prettify_static_line(next_line)
+                if answer:
+                    selected.append(answer)
+
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for line in selected:
+        key = _normalise_static_text(line)
+        if key and key not in seen:
+            deduped.append(line)
+            seen.add(key)
+    return deduped
+
+
+def _format_static_topic_reply(
+    topic_lines: dict[str, list[str]],
+    requested_place: tuple[str, str] | None,
+) -> str:
+    if requested_place:
+        _, place_label = requested_place
+        parts: list[str] = []
+        location_lines = topic_lines.get("location") or []
+        delivery_lines = topic_lines.get("delivery") or []
+
+        if location_lines:
+            parts.append(
+                f"\u0622\u0647 \u0639\u0646\u062f\u0646\u0627 \u0628{place_label}:\n"
+                + "\n".join(location_lines)
+            )
+        if delivery_lines:
+            prefix = (
+                f"\u0648\u0643\u0645\u0627\u0646 \u0641\u064a \u062a\u0648\u0635\u064a\u0644 \u0644{place_label}:"
+                if location_lines
+                else f"\u0622\u0647 \u0641\u064a \u062a\u0648\u0635\u064a\u0644 \u0644{place_label}:"
+            )
+            parts.append(prefix + "\n" + "\n".join(delivery_lines))
+        for topic, lines in topic_lines.items():
+            if topic in {"location", "delivery"} or not lines:
+                continue
+            parts.append("\n".join(lines))
+        return "\n\n".join(parts)
+
+    labels = {
+        "location": "\u0623\u0643\u064a\u062f\u060c \u0647\u0627\u064a \u0641\u0631\u0648\u0639\u0646\u0627 \u0648\u0646\u0642\u0627\u0637 \u0627\u0644\u0628\u064a\u0639:",
+        "delivery": "\u0628\u0627\u0644\u0646\u0633\u0628\u0629 \u0644\u0644\u062a\u0648\u0635\u064a\u0644:",
+        "hours": "\u0627\u0644\u062f\u0648\u0627\u0645:",
+        "payment": "\u0637\u0631\u0642 \u0627\u0644\u062f\u0641\u0639:",
+        "contact": "\u0644\u0644\u062a\u0648\u0627\u0635\u0644:",
+        "identity": "\u0645\u0639\u0644\u0648\u0645\u0627\u062a\u0646\u0627:",
+    }
+    parts = []
+    for topic, lines in topic_lines.items():
+        if not lines:
+            continue
+        label = labels.get(topic)
+        body = "\n".join(lines)
+        parts.append(f"{label}\n{body}" if label else body)
+    return "\n\n".join(parts)
+
+
 def _trim_static_reply(reply: str, limit: int = 4200) -> str:
     if len(reply) <= limit:
         return reply
@@ -293,6 +468,7 @@ async def _try_static_business_reply(
     topics = _static_business_topics(customer_message)
     if not topics:
         return None
+    requested_place = _static_requested_place(customer_message)
 
     result = await execute_db_function(
         "get_business_info",
@@ -307,33 +483,55 @@ async def _try_static_business_reply(
     if isinstance(info, dict):
         facts = list(info.get("assistant_facts") or info.get("general_policies") or [])
 
-    selected: list[tuple[str, str]] = []
+    topic_lines: dict[str, list[str]] = {}
     seen: set[str] = set()
     for topic in topics:
         for fact in facts:
             if not isinstance(fact, dict) or not _fact_matches_static_topic(fact, topic):
                 continue
             block = _clean_static_fact_block(fact)
-            key = f"{topic}:{block}"
-            if block and key not in seen:
-                selected.append((topic, block))
-                seen.add(key)
+            if not block:
+                continue
+            if requested_place and topic in {"location", "delivery"}:
+                lines = _static_lines_for_place(
+                    block,
+                    requested_place,
+                    include_generic=topic == "delivery",
+                )
+            else:
+                lines = _static_lines_from_block(block)
+            for line in lines:
+                key = f"{topic}:{_normalise_static_text(line)}"
+                if line and key not in seen:
+                    topic_lines.setdefault(topic, []).append(line)
+                    seen.add(key)
 
-    if not selected:
+    if not any(topic_lines.values()):
+        if requested_place and any(topic in {"location", "delivery"} for topic in topics):
+            _, place_label = requested_place
+            missing_bits = []
+            if "location" in topics:
+                missing_bits.append(
+                    f"\u0641\u0631\u0639 \u0628{place_label}"
+                )
+            if "delivery" in topics:
+                missing_bits.append(
+                    f"\u062a\u0648\u0635\u064a\u0644 \u0644{place_label}"
+                )
+            subject = " \u0648 ".join(missing_bits)
+            return (
+                f"\u0627\u0644\u0645\u0648\u062c\u0648\u062f \u0639\u0646\u062f\u064a \u0647\u0644\u0623 \u0645\u0627 \u0641\u064a\u0647 \u0645\u0639\u0644\u0648\u0645\u0629 \u0645\u0624\u0643\u062f\u0629 \u0639\u0646 {subject}\n"
+                "\u0627\u0628\u0639\u062a\u0644\u064a \u0645\u0646\u0637\u0642\u062a\u0643 \u0628\u0627\u0644\u0636\u0628\u0637 \u0648\u0628\u0634\u0648\u0641\u0644\u0643",
+                retrieved_data,
+            )
         return (
             "\u0647\u0627\u064a \u0627\u0644\u0645\u0639\u0644\u0648\u0645\u0629 \u0645\u0634 \u0645\u0636\u0627\u0641\u0629 \u0639\u0646\u062f\u064a \u062d\u0627\u0644\u064a\u0627\n"
             "\u0627\u0628\u0639\u062a\u0644\u064a \u062a\u0641\u0627\u0635\u064a\u0644 \u0627\u0643\u062b\u0631 \u0648\u0628\u0633\u0627\u0639\u062f\u0643 \u0628\u0627\u0644\u0645\u062a\u0627\u062d \u0639\u0646\u062f\u064a",
             retrieved_data,
         )
 
-    include_labels = len({topic for topic, _ in selected}) > 1
-    parts = []
-    for topic, block in selected:
-        if include_labels:
-            parts.append(f"{_STATIC_TOPIC_LABELS.get(topic, topic)}:\n{block}")
-        else:
-            parts.append(block)
-    return _trim_static_reply("\n\n".join(parts)), retrieved_data
+    reply = _format_static_topic_reply(topic_lines, requested_place)
+    return _trim_static_reply(reply), retrieved_data
 
 
 def _customer_asked_for_image(text: str | None) -> bool:

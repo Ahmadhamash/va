@@ -112,6 +112,98 @@ async def test_static_business_fast_path_skips_openai_key(db_session, monkeypatc
 
 
 @pytest.mark.asyncio
+async def test_static_business_fast_path_filters_branch_by_requested_city(
+    db_session,
+    monkeypatch,
+):
+    user = _user()
+    session_id = uuid.uuid4()
+    session = ChatSession(id=session_id, user_id=user.id, channel="web")
+    sales_points = BusinessPolicy(
+        user_id=user.id,
+        policy_type="sales_points",
+        title="Sales points",
+        content=(
+            "Branch:\n"
+            "  - Branch Name: \u0633\u0648\u0628\u0631 \u0645\u0627\u0631\u0643\u062a "
+            "\u0643\u064a\u0648 \u0645\u0627\u0631\u062a, City: \u0625\u0631\u0628\u062f, "
+            "\u0627\u0644\u062d\u064a \u0627\u0644\u0634\u0631\u0642\u064a\n"
+            "  - Branch Name: \u0633\u0648\u0628\u0631 \u0645\u0627\u0631\u0643\u062a "
+            "\u062f\u064a\u0643\u0627\u0646 \u0627\u0644\u062d\u064a, City: "
+            "\u0637\u0628\u0631\u0628\u0648\u0631"
+        ),
+        is_active=True,
+    )
+    db_session.add_all([user, session, sales_points])
+    await db_session.commit()
+    await db_session.refresh(user)
+
+    async def fail_openai_key(_db):
+        raise AssertionError("static city branch questions should not need OpenAI")
+
+    monkeypatch.setattr("services.ai_chat.effective_openai_key", fail_openai_key)
+
+    reply, _retrieved_data, trace = await _generate_reply(
+        user,
+        session_id,
+        "\u0637\u064a\u0628 \u0639\u0646\u062f\u0643\u0645 \u0641\u0631\u0639 \u0641\u064a \u0627\u0631\u0628\u062f\u061f",
+        db_session,
+    )
+
+    assert "\u0643\u064a\u0648 \u0645\u0627\u0631\u062a" in reply
+    assert "\u0627\u0644\u062d\u064a \u0627\u0644\u0634\u0631\u0642\u064a" in reply
+    assert "\u0637\u0628\u0631\u0628\u0648\u0631" not in reply
+    assert "Branch Name:" not in reply
+    assert "City:" not in reply
+    assert "\u0622\u0647" in reply
+    assert trace["static_fast_path"] is True
+
+
+@pytest.mark.asyncio
+async def test_static_business_fast_path_filters_delivery_by_requested_city(
+    db_session,
+    monkeypatch,
+):
+    user = _user()
+    session_id = uuid.uuid4()
+    session = ChatSession(id=session_id, user_id=user.id, channel="web")
+    delivery = BusinessPolicy(
+        user_id=user.id,
+        policy_type="ordering",
+        title="Delivery",
+        content=(
+            "\u062a\u0648\u0635\u064a\u0644 \u0625\u0631\u0628\u062f "
+            "\u0645\u062a\u0627\u062d \u062e\u0644\u0627\u0644 24-48 "
+            "\u0633\u0627\u0639\u0629\n"
+            "\u062a\u0648\u0635\u064a\u0644 \u0639\u0645\u0627\u0646 "
+            "\u0645\u062a\u0627\u062d \u0646\u0641\u0633 \u0627\u0644\u064a\u0648\u0645"
+        ),
+        is_active=True,
+    )
+    db_session.add_all([user, session, delivery])
+    await db_session.commit()
+    await db_session.refresh(user)
+
+    async def fail_openai_key(_db):
+        raise AssertionError("static city delivery questions should not need OpenAI")
+
+    monkeypatch.setattr("services.ai_chat.effective_openai_key", fail_openai_key)
+
+    reply, _retrieved_data, trace = await _generate_reply(
+        user,
+        session_id,
+        "\u0641\u064a \u062a\u0648\u0635\u064a\u0644 \u0641\u064a \u0627\u0631\u0628\u062f\u061f",
+        db_session,
+    )
+
+    assert "\u062a\u0648\u0635\u064a\u0644 \u0625\u0631\u0628\u062f" in reply
+    assert "24-48" in reply
+    assert "\u0639\u0645\u0627\u0646" not in reply
+    assert "\u0622\u0647" in reply
+    assert trace["static_fast_path"] is True
+
+
+@pytest.mark.asyncio
 async def test_verify_and_finalize_uses_draft_when_humanizer_returns_empty(
     db_session,
     monkeypatch,
