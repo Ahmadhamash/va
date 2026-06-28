@@ -188,6 +188,27 @@ export default function KnowledgeBasePage() {
   const [policyForm, setPolicyForm] = useState(emptyKnowledgeForm);
   const [customCategory, setCustomCategory] = useState("");
   const [editingKnowledgeId, setEditingKnowledgeId] = useState<string | null>(null);
+  const [structuredProfile, setStructuredProfile] = useState({
+    website: "",
+    brand_description: "",
+    facebook: "",
+    instagram: "",
+    tiktok: "",
+  });
+  const [structuredFaq, setStructuredFaq] = useState({
+    question: "",
+    answer: "",
+  });
+  const [structuredBranches, setStructuredBranches] = useState<Array<{ branch_name: string; city: string; maps_link: string }>>([
+    { branch_name: "", city: "", maps_link: "" }
+  ]);
+  const [structuredOffer, setStructuredOffer] = useState({
+    offer_name: "",
+    description: "",
+    price: "",
+    validity: "",
+  });
+  const [isFreeform, setIsFreeform] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState<{ text: string; tone: NoticeTone } | null>(null);
@@ -433,30 +454,120 @@ export default function KnowledgeBasePage() {
     setPolicyForm(emptyKnowledgeForm);
     setCustomCategory("");
     setEditingKnowledgeId(null);
+    setIsFreeform(false);
+    setStructuredProfile({ website: "", brand_description: "", facebook: "", instagram: "", tiktok: "" });
+    setStructuredFaq({ question: "", answer: "" });
+    setStructuredBranches([{ branch_name: "", city: "", maps_link: "" }]);
+    setStructuredOffer({ offer_name: "", description: "", price: "", validity: "" });
   }
 
   function startEditKnowledge(item: KnowledgeItem) {
     const knownCategory = knowledgeCategories(isRtl).some((category) => category.value === item.category);
     setEditingKnowledgeId(item.id);
+    
+    // Check if body is valid JSON
+    let isJson = false;
+    let parsedData: any = null;
+    try {
+      parsedData = JSON.parse(item.body);
+      if (parsedData && typeof parsedData === "object") {
+        isJson = true;
+      }
+    } catch (e) {
+      isJson = false;
+    }
+
     setPolicyForm({
       title: item.title || "",
       body: item.body || "",
       category: knownCategory ? item.category || "business_profile" : "custom",
     });
     setCustomCategory(knownCategory ? "" : item.category || "");
+    
+    if (isJson) {
+      setIsFreeform(false);
+      if (item.category === "business_profile") {
+        setStructuredProfile({
+          website: parsedData.website || "",
+          brand_description: parsedData.brand_description || "",
+          facebook: parsedData.facebook || "",
+          instagram: parsedData.instagram || "",
+          tiktok: parsedData.tiktok || "",
+        });
+      } else if (item.category === "faq") {
+        setStructuredFaq({
+          question: parsedData.question || "",
+          answer: parsedData.answer || "",
+        });
+      } else if (item.category === "sales_points") {
+        setStructuredBranches(
+          parsedData.branches && Array.isArray(parsedData.branches)
+            ? parsedData.branches
+            : [{ branch_name: "", city: "", maps_link: "" }]
+        );
+      } else if (item.category === "offers") {
+        setStructuredOffer({
+          offer_name: parsedData.offer_name || "",
+          description: parsedData.description || "",
+          price: parsedData.price || "",
+          validity: parsedData.validity || "",
+        });
+      }
+    } else {
+      setIsFreeform(true);
+    }
+    
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   async function saveKnowledgeItem() {
-    if (!token || !policyForm.title.trim() || !policyForm.body.trim()) return;
+    if (!token) return;
     const finalCategory = policyForm.category === "custom" ? (customCategory.trim() || "general") : policyForm.category;
+    
+    let finalBody = policyForm.body;
+    let finalTitle = policyForm.title;
+
+    if (!isFreeform) {
+      if (finalCategory === "business_profile") {
+        finalBody = JSON.stringify(structuredProfile);
+        if (!finalTitle.trim()) {
+          finalTitle = isRtl ? "ملف البراند" : "Brand Profile";
+        }
+      } else if (finalCategory === "faq") {
+        finalBody = JSON.stringify(structuredFaq);
+        if (!finalTitle.trim()) {
+          finalTitle = structuredFaq.question || (isRtl ? "سؤال متكرر" : "FAQ");
+        }
+      } else if (finalCategory === "sales_points") {
+        const cleanBranches = structuredBranches.filter(b => b.branch_name.trim() || b.city.trim());
+        finalBody = JSON.stringify({ branches: cleanBranches });
+        if (!finalTitle.trim()) {
+          finalTitle = isRtl ? "فروع المتجر ونقاط البيع" : "Store Branches";
+        }
+      } else if (finalCategory === "offers") {
+        finalBody = JSON.stringify(structuredOffer);
+        if (!finalTitle.trim()) {
+          finalTitle = structuredOffer.offer_name || (isRtl ? "عرض ترويجي" : "Promo Offer");
+        }
+      }
+    }
+
+    if (!finalTitle.trim() || !finalBody.trim()) {
+      showNotice(isRtl ? "يرجى تعبئة الحقول المطلوبة." : "Please fill in all required fields.", "error");
+      return;
+    }
+
     const res = await fetch(editingKnowledgeId ? `/api/knowledge/${editingKnowledgeId}` : "/api/knowledge", {
       method: editingKnowledgeId ? "PUT" : "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({ ...policyForm, category: finalCategory }),
+      body: JSON.stringify({
+        title: finalTitle,
+        body: finalBody,
+        category: finalCategory,
+      }),
     });
     const data = await res.json().catch(() => ({}));
     if (res.ok && data.ok) {
@@ -483,6 +594,92 @@ export default function KnowledgeBasePage() {
       showNotice(data.error || (isRtl ? "تعذر حذف المعلومة." : "Could not delete fact."), "error");
     }
   }
+
+  const isSaveDisabled = () => {
+    const finalCategory = policyForm.category;
+    if (isFreeform || (finalCategory !== "business_profile" && finalCategory !== "faq" && finalCategory !== "sales_points" && finalCategory !== "offers")) {
+      return !policyForm.title.trim() || !policyForm.body.trim();
+    }
+    if (finalCategory === "business_profile") {
+      return !structuredProfile.brand_description.trim();
+    }
+    if (finalCategory === "faq") {
+      return !structuredFaq.question.trim() || !structuredFaq.answer.trim();
+    }
+    if (finalCategory === "sales_points") {
+      return structuredBranches.filter(b => b.branch_name.trim()).length === 0;
+    }
+    if (finalCategory === "offers") {
+      return !structuredOffer.offer_name.trim() || !structuredOffer.description.trim();
+    }
+    return false;
+  };
+
+  const renderFactBody = (item: KnowledgeItem) => {
+    try {
+      const data = JSON.parse(item.body);
+      if (data && typeof data === "object") {
+        if (item.category === "business_profile") {
+          return (
+            <div className="mt-2 space-y-1.5 text-xs text-white/60">
+              {data.website && <div><strong>{isRtl ? "الموقع:" : "Website:"}</strong> <a href={data.website} target="_blank" rel="noreferrer" className="text-primary-400 hover:underline">{data.website}</a></div>}
+              {data.brand_description && <div><strong>{isRtl ? "الوصف:" : "Description:"}</strong> {data.brand_description}</div>}
+              {(data.facebook || data.instagram || data.tiktok) && (
+                <div className="flex gap-3 mt-1 text-white/40">
+                  {data.facebook && <span>FB: {data.facebook}</span>}
+                  {data.instagram && <span>IG: {data.instagram}</span>}
+                  {data.tiktok && <span>TT: {data.tiktok}</span>}
+                </div>
+              )}
+            </div>
+          );
+        }
+        if (item.category === "faq") {
+          return (
+            <div className="mt-2 rounded-xl bg-white/[0.02] p-3 border border-white/5 text-xs">
+              <div className="font-semibold text-white/80">Q: {data.question}</div>
+              <div className="mt-1 text-white/60">A: {data.answer}</div>
+            </div>
+          );
+        }
+        if (item.category === "sales_points" && data.branches && Array.isArray(data.branches)) {
+          return (
+            <div className="mt-2 space-y-2 text-xs">
+              <div className="text-[11px] text-white/40 uppercase tracking-wider">{isRtl ? "الفروع ونقاط البيع:" : "Branches & Locations:"}</div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {data.branches.map((b: any, idx: number) => (
+                  <div key={idx} className="rounded-xl bg-white/[0.02] p-2.5 border border-white/5">
+                    <div className="font-medium text-white/85">{b.branch_name}</div>
+                    <div className="text-white/50 text-[11px] mt-0.5">{b.city}</div>
+                    {b.maps_link && (
+                      <a href={b.maps_link} target="_blank" rel="noreferrer" className="text-[10px] text-primary-400 hover:underline block mt-1">
+                        📍 {isRtl ? "خرائط جوجل" : "Google Maps"}
+                      </a>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        }
+        if (item.category === "offers") {
+          return (
+            <div className="mt-2 rounded-xl bg-white/[0.02] p-3 border border-white/5 text-xs space-y-1">
+              <div className="font-semibold text-white/85">{data.offer_name}</div>
+              <div className="text-white/60">{data.description}</div>
+              <div className="flex gap-4 mt-2 text-[11px] text-white/50">
+                {data.price && <span>💰 {isRtl ? "السعر:" : "Price:"} {data.price}</span>}
+                {data.validity && <span>📅 {isRtl ? "الصلاحية:" : "Validity:"} {data.validity}</span>}
+              </div>
+            </div>
+          );
+        }
+      }
+    } catch (e) {
+      // Not JSON
+    }
+    return <p className="mt-2 whitespace-pre-wrap text-xs leading-6 text-white/52">{item.body}</p>;
+  };
 
   async function uploadStyleFile(e: React.FormEvent) {
     e.preventDefault();
@@ -808,7 +1005,11 @@ export default function KnowledgeBasePage() {
                   <select
                     className="h-11 w-full rounded-2xl border border-white/10 bg-white/[0.07] px-4 text-sm text-white outline-none focus:border-primary-400/60"
                     value={policyForm.category}
-                    onChange={(e) => setPolicyForm({ ...policyForm, category: e.target.value })}
+                    onChange={(e) => {
+                      const cat = e.target.value;
+                      setPolicyForm({ ...policyForm, category: cat });
+                      setIsFreeform(cat === "custom" || cat === "general");
+                    }}
                   >
                     {knowledgeCategories(isRtl).map((cat) => (
                       <option key={cat.value} value={cat.value} className="bg-ink-950 text-white">
@@ -818,6 +1019,20 @@ export default function KnowledgeBasePage() {
                   </select>
                 </div>
 
+                {(policyForm.category === "business_profile" || policyForm.category === "faq" || policyForm.category === "sales_points" || policyForm.category === "offers") && (
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => setIsFreeform(!isFreeform)}
+                      className="text-xs text-primary-400 hover:underline font-medium"
+                    >
+                      {isFreeform 
+                        ? (isRtl ? "💻 التبديل إلى النموذج المنظم" : "💻 Switch to Structured Form")
+                        : (isRtl ? "📝 التبديل إلى تعديل نص حر" : "📝 Switch to Freeform Text")}
+                    </button>
+                  </div>
+                )}
+
                 {policyForm.category === "custom" && (
                   <div>
                     <label className="mb-1.5 block text-xs font-medium text-white/70">{isRtl ? "اسم التصنيف" : "Category name"}</label>
@@ -825,17 +1040,147 @@ export default function KnowledgeBasePage() {
                   </div>
                 )}
 
-                <div>
-                  <label className="mb-1.5 block text-xs font-medium text-white/70">{isRtl ? "عنوان قصير" : "Short title"}</label>
-                  <Input placeholder={isRtl ? "مثال: نقاط البيع المعتمدة" : "Example: approved sales points"} value={policyForm.title} onChange={(e) => setPolicyForm({ ...policyForm, title: e.target.value })} />
-                </div>
+                {!isFreeform && policyForm.category === "business_profile" && (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-white/60">{isRtl ? "الموقع الإلكتروني" : "Website URL"}</label>
+                      <Input placeholder="https://example.com" value={structuredProfile.website} onChange={(e) => setStructuredProfile({ ...structuredProfile, website: e.target.value })} />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-white/60">{isRtl ? "وصف مختصر للعلامة التجارية" : "Brand Description"}</label>
+                      <Textarea placeholder={isRtl ? "اكتب نبذة سريعة عن براندك ومنتجاتك..." : "Write a brief description..."} value={structuredProfile.brand_description} onChange={(e) => setStructuredProfile({ ...structuredProfile, brand_description: e.target.value })} />
+                    </div>
+                    <div className="grid gap-2 grid-cols-3">
+                      <div>
+                        <label className="mb-1 block text-[10px] font-medium text-white/50">{isRtl ? "رابط فيسبوك" : "Facebook"}</label>
+                        <Input placeholder="facebook.com/..." value={structuredProfile.facebook} onChange={(e) => setStructuredProfile({ ...structuredProfile, facebook: e.target.value })} className="text-xs h-9 px-2" />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-[10px] font-medium text-white/50">{isRtl ? "يوزر إنستجرام" : "Instagram"}</label>
+                        <Input placeholder="@username" value={structuredProfile.instagram} onChange={(e) => setStructuredProfile({ ...structuredProfile, instagram: e.target.value })} className="text-xs h-9 px-2" />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-[10px] font-medium text-white/50">{isRtl ? "يوزر تيك توك" : "TikTok"}</label>
+                        <Input placeholder="@username" value={structuredProfile.tiktok} onChange={(e) => setStructuredProfile({ ...structuredProfile, tiktok: e.target.value })} className="text-xs h-9 px-2" />
+                      </div>
+                    </div>
+                  </div>
+                )}
 
-                <div>
-                  <label className="mb-1.5 block text-xs font-medium text-white/70">{isRtl ? "المعلومة كاملة" : "Full fact"}</label>
-                  <Textarea className="min-h-44" placeholder={isRtl ? "اكتب المعلومة كما تريد أن يعتمد عليها المساعد عند الرد." : "Write the exact information the assistant can use when replying."} value={policyForm.body} onChange={(e) => setPolicyForm({ ...policyForm, body: e.target.value })} />
-                </div>
+                {!isFreeform && policyForm.category === "faq" && (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-white/60">{isRtl ? "السؤال الشائع" : "Question"}</label>
+                      <Input placeholder={isRtl ? "مثال: هل يتوفر الشحن خارج العاصمة؟" : "Example: Do you ship internationally?"} value={structuredFaq.question} onChange={(e) => setStructuredFaq({ ...structuredFaq, question: e.target.value })} />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-white/60">{isRtl ? "الإجابة النموذجية" : "Answer"}</label>
+                      <Textarea placeholder={isRtl ? "اكتب الإجابة المفصلة التي سيستخدمها البوت..." : "Write the answer..."} value={structuredFaq.answer} onChange={(e) => setStructuredFaq({ ...structuredFaq, answer: e.target.value })} className="min-h-24" />
+                    </div>
+                  </div>
+                )}
 
-                <Button className="w-full" onClick={saveKnowledgeItem} disabled={!policyForm.title.trim() || !policyForm.body.trim()}>
+                {!isFreeform && policyForm.category === "sales_points" && (
+                  <div className="space-y-3">
+                    <label className="block text-xs font-medium text-white/70">{isRtl ? "الفروع ونقاط البيع" : "Branches list"}</label>
+                    <div className="space-y-3 max-h-60 overflow-y-auto pr-1">
+                      {structuredBranches.map((branch, idx) => (
+                        <div key={idx} className="rounded-xl border border-white/5 bg-white/[0.02] p-3 space-y-2 relative">
+                          <div className="flex gap-2">
+                            <Input
+                              placeholder={isRtl ? "اسم الفرع (مثال: فرع خلدا)" : "Branch Name"}
+                              value={branch.branch_name}
+                              onChange={(e) => {
+                                const newBranches = [...structuredBranches];
+                                newBranches[idx].branch_name = e.target.value;
+                                setStructuredBranches(newBranches);
+                              }}
+                              className="text-xs h-9"
+                            />
+                            <Input
+                              placeholder={isRtl ? "المدينة (مثال: عمان)" : "City"}
+                              value={branch.city}
+                              onChange={(e) => {
+                                const newBranches = [...structuredBranches];
+                                newBranches[idx].city = e.target.value;
+                                setStructuredBranches(newBranches);
+                              }}
+                              className="text-xs h-9 w-24 shrink-0"
+                            />
+                          </div>
+                          <Input
+                            placeholder={isRtl ? "رابط خرائط جوجل" : "Google Maps Link"}
+                            value={branch.maps_link}
+                            onChange={(e) => {
+                              const newBranches = [...structuredBranches];
+                              newBranches[idx].maps_link = e.target.value;
+                              setStructuredBranches(newBranches);
+                            }}
+                            className="text-[10px] h-8"
+                          />
+                          {structuredBranches.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => setStructuredBranches(structuredBranches.filter((_, i) => i !== idx))}
+                              className="absolute top-1 right-2 text-red-400 hover:text-red-300 text-[10px]"
+                            >
+                              {isRtl ? "حذف" : "Remove"}
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setStructuredBranches([...structuredBranches, { branch_name: "", city: "", maps_link: "" }])}
+                      className="w-full h-9 border-dashed border-white/10 hover:border-primary-400/20"
+                    >
+                      <Plus className="h-4 w-4 mr-1" />
+                      {isRtl ? "إضافة فرع آخر" : "Add another branch"}
+                    </Button>
+                  </div>
+                )}
+
+                {!isFreeform && policyForm.category === "offers" && (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-white/60">{isRtl ? "اسم العرض الترويجي" : "Offer name"}</label>
+                      <Input placeholder={isRtl ? "مثال: باقة عروض الصيف" : "Example: Summer bundle offer"} value={structuredOffer.offer_name} onChange={(e) => setStructuredOffer({ ...structuredOffer, offer_name: e.target.value })} />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-white/60">{isRtl ? "تفاصيل العرض وما يشمله" : "What is included / Details"}</label>
+                      <Textarea placeholder={isRtl ? "اكتب المنتجات المشمولة وشروط العرض..." : "Write what is included..."} value={structuredOffer.description} onChange={(e) => setStructuredOffer({ ...structuredOffer, description: e.target.value })} className="min-h-24" />
+                    </div>
+                    <div className="grid gap-2 grid-cols-2">
+                      <div>
+                        <label className="mb-1 block text-xs font-medium text-white/50">{isRtl ? "سعر العرض" : "Offer price"}</label>
+                        <Input placeholder="50 JOD" value={structuredOffer.price} onChange={(e) => setStructuredOffer({ ...structuredOffer, price: e.target.value })} />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-xs font-medium text-white/50">{isRtl ? "صلاحية العرض" : "Offer validity"}</label>
+                        <Input placeholder={isRtl ? "مثال: حتى نهاية الشهر" : "Example: Valid until end of June"} value={structuredOffer.validity} onChange={(e) => setStructuredOffer({ ...structuredOffer, validity: e.target.value })} />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {isFreeform && (
+                  <>
+                    <div>
+                      <label className="mb-1.5 block text-xs font-medium text-white/70">{isRtl ? "عنوان قصير" : "Short title"}</label>
+                      <Input placeholder={isRtl ? "مثال: نقاط البيع المعتمدة" : "Example: approved sales points"} value={policyForm.title} onChange={(e) => setPolicyForm({ ...policyForm, title: e.target.value })} />
+                    </div>
+
+                    <div>
+                      <label className="mb-1.5 block text-xs font-medium text-white/70">{isRtl ? "المعلومة كاملة" : "Full fact"}</label>
+                      <Textarea className="min-h-44" placeholder={isRtl ? "اكتب المعلومة كما تريد أن يعتمد عليها المساعد عند الرد." : "Write the exact information the assistant can use when replying."} value={policyForm.body} onChange={(e) => setPolicyForm({ ...policyForm, body: e.target.value })} />
+                    </div>
+                  </>
+                )}
+
+                <Button className="w-full" onClick={saveKnowledgeItem} disabled={isSaveDisabled()}>
                   <Save className="h-4 w-4" />
                   {editingKnowledgeId ? (isRtl ? "حفظ التعديل" : "Save changes") : (isRtl ? "حفظ المعلومة" : "Save fact")}
                 </Button>
@@ -880,7 +1225,7 @@ export default function KnowledgeBasePage() {
                                 <div className="flex items-start justify-between gap-3">
                                   <div className="min-w-0 flex-1">
                                     <h3 className="text-sm font-semibold text-white">{item.title}</h3>
-                                    <p className="mt-2 whitespace-pre-wrap text-xs leading-6 text-white/52">{item.body}</p>
+                                    {renderFactBody(item)}
                                   </div>
                                   <div className="flex shrink-0 gap-1">
                                     <Button type="button" variant="ghost" size="sm" onClick={() => startEditKnowledge(item)} title={isRtl ? "تعديل المعلومة" : "Edit fact"}>

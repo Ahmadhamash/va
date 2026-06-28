@@ -381,11 +381,49 @@ def _serialize_item(item: Item) -> dict:
 
 
 def _serialize_policy_fact(policy: BusinessPolicy) -> dict:
+    content = policy.content
+    try:
+        import json
+        data = json.loads(content)
+        if isinstance(data, dict):
+            lines = []
+            for k, v in data.items():
+                if not v:
+                    continue
+                k_label = k.replace("_", " ").title()
+                if k == "question":
+                    k_label = "Question"
+                elif k == "answer":
+                    k_label = "Answer"
+                
+                if isinstance(v, list):
+                    list_lines = []
+                    for item in v:
+                        if isinstance(item, dict):
+                            item_strs = []
+                            for subk, subv in item.items():
+                                if subv:
+                                    subk_label = subk.replace("_", " ").title()
+                                    item_strs.append(f"{subk_label}: {subv}")
+                            list_lines.append(f"  - {', '.join(item_strs)}")
+                        else:
+                            list_lines.append(f"  - {item}")
+                    v_str = "\n" + "\n".join(list_lines)
+                elif isinstance(v, dict):
+                    v_str = ", ".join(f"{subk.replace('_', ' ').title()}: {subv}" for subk, subv in v.items() if subv)
+                else:
+                    v_str = str(v)
+                lines.append(f"{k_label}: {v_str}")
+            content = "\n".join(lines)
+    except (json.JSONDecodeError, TypeError, ValueError):
+        pass
+
     return {
         "category": policy.policy_type,
         "title": policy.title,
-        "content": policy.content,
+        "content": content,
     }
+
 
 
 async def _assistant_policy_facts(

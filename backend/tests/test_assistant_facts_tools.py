@@ -124,3 +124,63 @@ def test_lammeh_box_rules_are_in_prompts():
     assert "بوكس اللمه" in INTENT_PROMPTS["sales"]
     assert "تقصد البوكس العائلي" in INTENT_PROMPTS["sales"]
     assert "تقصد البوكس العائلي" in HUMANIZER_SYSTEM_PROMPT
+
+
+@pytest.mark.asyncio
+async def test_structured_json_assistant_fact_is_decoded(db_session):
+    user = User(
+        username="json_facts_user",
+        email="json_facts_user@example.com",
+        hashed_password="x",
+        business_name="JSON Brand",
+    )
+    db_session.add(user)
+    await db_session.flush()
+    user_id = user.id
+    
+    import json
+    profile_data = {
+        "website": "https://brand.com",
+        "brand_description": "Custom high quality details.",
+        "facebook": "fb.me/brand",
+    }
+    db_session.add(
+        BusinessPolicy(
+            user_id=user_id,
+            policy_type="business_profile",
+            title="ملف البراند",
+            content=json.dumps(profile_data),
+            is_active=True,
+        )
+    )
+    
+    branch_data = {
+        "branches": [
+            {"branch_name": "فرع مكة", "city": "مكة المكرمة", "maps_link": "https://maps/makkah"},
+            {"branch_name": "فرع المدينة", "city": "المدينة المنورة"},
+        ]
+    }
+    db_session.add(
+        BusinessPolicy(
+            user_id=user_id,
+            policy_type="sales_points",
+            title="الفروع",
+            content=json.dumps(branch_data),
+            is_active=True,
+        )
+    )
+    
+    await db_session.commit()
+
+    result = await _exec_get_business_info(user_id, db_session)
+    facts = result["business_info"]["assistant_facts"]
+    
+    profile_fact = next(f for f in facts if f["category"] == "business_profile")
+    assert "Website: https://brand.com" in profile_fact["content"]
+    assert "Brand Description: Custom high quality details." in profile_fact["content"]
+    assert "Facebook: fb.me/brand" in profile_fact["content"]
+    
+    branches_fact = next(f for f in facts if f["category"] == "sales_points")
+    assert "Branch Name: فرع مكة, City: مكة المكرمة, Maps Link: https://maps/makkah" in branches_fact["content"]
+    assert "Branch Name: فرع المدينة, City: المدينة المنورة" in branches_fact["content"]
+
