@@ -315,7 +315,7 @@ _INTENT_TOOL_NAMES = {
     },
     "support": {"get_delivery_info", "get_policies", "get_business_info", "get_order_status", "analyze_webpage"},
     "booking": {"get_available_slots", "create_booking"},
-    "general": set(),
+    "general": {"get_business_info"},
 }
 
 

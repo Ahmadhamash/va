@@ -1,3 +1,4 @@
+import asyncio
 import uuid
 
 import pytest
@@ -311,12 +312,44 @@ async def test_manychat_webhook_ignores_empty_text(client, db_session, monkeypat
     )
 
     assert response.status_code == 200
-    assert response.json() == {
-        "version": "v2",
-        "content": {
-            "messages": [],
-        },
-    }
+    messages = response.json()["content"]["messages"]
+    assert len(messages) == 1
+    assert messages[0]["type"] == "text"
+    assert messages[0]["text"]
+
+
+@pytest.mark.asyncio
+async def test_manychat_webhook_returns_fallback_on_timeout(client, db_session, monkeypatch):
+    user = _client_user()
+    public_id = f"manychat_{uuid.uuid4().hex}"
+    integration = ChannelIntegration(
+        user_id=user.id,
+        platform="webhook",
+        public_id=public_id,
+        credentials={"webhook_secret": "test-secret"},
+        is_active=True,
+    )
+    db_session.add_all([user, integration])
+    await db_session.commit()
+
+    async def slow_sync_reply_result(*_args, **_kwargs):
+        await asyncio.sleep(1)
+        return {"reply": "late", "audio_url": None}
+
+    monkeypatch.setattr("routers.webhooks.sync_reply_result", slow_sync_reply_result)
+    monkeypatch.setattr("routers.webhooks.MANYCHAT_REPLY_TIMEOUT_SECONDS", 0.01)
+
+    response = await client.post(
+        f"/api/webhooks/manychat/{public_id}",
+        json={"text": "hi", "subscriber_id": "sub_timeout"},
+        headers={"X-Webhook-Secret": "test-secret"},
+    )
+
+    assert response.status_code == 200
+    messages = response.json()["content"]["messages"]
+    assert len(messages) == 1
+    assert messages[0]["type"] == "text"
+    assert messages[0]["text"]
 
 
 @pytest.mark.asyncio

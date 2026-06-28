@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import hmac
 import json
@@ -32,6 +33,18 @@ _CORS = {
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type, X-Webhook-Secret",
 }
+
+MANYCHAT_REPLY_TIMEOUT_SECONDS = 12.0
+MANYCHAT_TIMEOUT_REPLY = (
+    "\u0627\u0644\u0631\u062f \u062a\u0623\u062e\u0631 \u0634\u0648\u064a\u060c "
+    "\u0627\u0628\u0639\u062a\u0644\u064a \u0631\u0633\u0627\u0644\u0629 \u0643\u0645\u0627\u0646 "
+    "\u0648\u0628\u0631\u062c\u0639\u0644\u0643 \u0628\u0623\u0633\u0631\u0639 \u0648\u0642\u062a."
+)
+MANYCHAT_EMPTY_INPUT_REPLY = (
+    "\u0648\u0635\u0644\u0646\u064a \u0645\u062d\u062a\u0648\u0649 \u0628\u062f\u0648\u0646 \u0646\u0635. "
+    "\u0627\u0628\u0639\u062a\u0644\u064a \u0633\u0624\u0627\u0644\u0643 \u0643\u062a\u0627\u0628\u0629 "
+    "\u0648\u0628\u0633\u0627\u0639\u062f\u0643."
+)
 
 
 # ─── Meta (Messenger + Instagram) ────────────────────────────────────────────
@@ -427,22 +440,48 @@ async def manychat_inbound(
     
     if not text:
         if response_mode == "external":
-            return _manychat_external_response(None)
-        return _manychat_response(None, channel, delivery=delivery)
+            return _manychat_external_response(MANYCHAT_EMPTY_INPUT_REPLY)
+        return _manychat_response(
+            MANYCHAT_EMPTY_INPUT_REPLY,
+            channel,
+            delivery=delivery,
+        )
 
     started_at = time.perf_counter()
     wants_voice = delivery in {"voice", "text_and_voice"}
     force_voice = requested_delivery != "auto" and wants_voice
-    result = await sync_reply_result(
-        integration,
-        sender_id,
-        text,
-        db,
-        channel=channel,
-        generate_voice=wants_voice,
-        force_voice=force_voice,
-        voice_output_format="mp3" if wants_voice else None,
-    )
+    try:
+        result = await asyncio.wait_for(
+            sync_reply_result(
+                integration,
+                sender_id,
+                text,
+                db,
+                channel=channel,
+                generate_voice=wants_voice,
+                force_voice=force_voice,
+                voice_output_format="mp3" if wants_voice else None,
+            ),
+            timeout=MANYCHAT_REPLY_TIMEOUT_SECONDS,
+        )
+    except asyncio.TimeoutError:
+        await db.rollback()
+        logger.warning(
+            "ManyChat reply timed out: channel=%s requested_delivery=%s delivery=%s sender_suffix=%s timeout_s=%.1f elapsed_ms=%d",
+            channel,
+            requested_delivery,
+            delivery,
+            sender_id[-6:],
+            MANYCHAT_REPLY_TIMEOUT_SECONDS,
+            round((time.perf_counter() - started_at) * 1000),
+        )
+        if response_mode == "external":
+            return _manychat_external_response(MANYCHAT_TIMEOUT_REPLY)
+        return _manychat_response(
+            MANYCHAT_TIMEOUT_REPLY,
+            channel,
+            delivery=delivery,
+        )
     reply = result.get("reply") or ""
     audio_url = _manychat_public_media_url(result.get("audio_url"))
     result_image_url = result.get("image_url")

@@ -35,6 +35,16 @@ logging.basicConfig(level=logging.INFO, handlers=[logHandler])
 logger = logging.getLogger("worker")
 
 
+def _job_is_superseded(current: bytes | str | int | None, seq: int) -> bool:
+    if current is None:
+        return False
+    try:
+        return int(current) != int(seq)
+    except (TypeError, ValueError):
+        logger.warning("Invalid inbound_seq value %r for seq=%s; processing job", current, seq)
+        return False
+
+
 async def _send_text_bubbles(
     *,
     adapter,
@@ -88,7 +98,7 @@ async def process_session_task(ctx, session_id: str, seq: int) -> str:
     """Coalesce + answer a session, then deliver the reply to its channel."""
     redis = ctx["redis"]
     current = await redis.get(f"inbound_seq:{session_id}")
-    if current is None or int(current) != int(seq):
+    if _job_is_superseded(current, seq):
         # A newer message arrived after this job was scheduled — let the
         # later job handle the whole batch.
         return "superseded"

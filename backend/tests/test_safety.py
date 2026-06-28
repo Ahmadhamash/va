@@ -177,6 +177,15 @@ class TestRouterGuardrails:
         assert "get_business_info" in tool_names
         assert "escalate_to_human" in tool_names
 
+    def test_general_intent_can_fetch_business_info(self):
+        tool_names = {t["function"]["name"] for t in get_tools_for_intent("general")}
+        assert "get_business_info" in tool_names
+
+    def test_jordanian_location_terms_route_to_support_without_llm(self):
+        assert heuristic_intent_for_message("\u0641\u064a\u0646\u0643\u0645\u061f") == "support"
+        assert heuristic_intent_for_message("\u0628\u062f\u064a \u0627\u0639\u0631\u0641 \u0627\u0645\u0627\u0643\u0646\u0643\u0645") == "support"
+        assert heuristic_intent_for_message("\u0646\u0642\u0627\u0637 \u0628\u064a\u0639") == "support"
+
     def test_catalog_no_match_does_not_fall_back_to_full_catalog(self):
         path = os.path.join(os.path.dirname(__file__), "..", "services", "ai_tools.py")
         with open(path, encoding="utf-8") as f:

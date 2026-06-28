@@ -406,7 +406,7 @@ class AnswerVerifier:
         db: AsyncSession,
         ai_trace: dict | None = None,
     ) -> None:
-        """Persist verification result to the database."""
+        """Stage verification result in the current database transaction."""
         from models import AIVerificationLog
 
         log = AIVerificationLog(
@@ -426,4 +426,4 @@ class AnswerVerifier:
             final_answer=final_answer,
         )
         db.add(log)
-        await db.commit()
+        await db.flush()

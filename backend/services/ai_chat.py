@@ -828,6 +828,11 @@ async def _verify_and_finalize(
     )
     append_usage_call(ai_trace, humanizer.last_usage_call)
     logger.info("Humanized draft: %s", humanized_draft)
+    humanizer_empty_output = False
+    if not (humanized_draft or "").strip():
+        humanizer_empty_output = True
+        logger.warning("Humanizer returned an empty draft; using logic draft.")
+        humanized_draft = draft_answer
 
     # 3. Deterministic fact guard before the LLM verifier. If the Humanizer
     # changed a protected fact, discard the rewrite and verify the logic draft.
@@ -844,6 +849,7 @@ async def _verify_and_finalize(
         "added_numbers": fact_guard.added_numbers,
         "missing_products": fact_guard.missing_products,
         "added_products": fact_guard.added_products,
+        "empty_humanizer_output": humanizer_empty_output,
     }
     if not fact_guard.safe:
         fact_guard_triggered = True
@@ -955,6 +961,12 @@ async def _verify_and_finalize(
                     system_prompt_override=prompt_overrides.get("humanizer_prompt"),
                 )
                 append_usage_call(ai_trace, humanizer.last_usage_call)
+                if not (retry_humanized or "").strip():
+                    logger.warning(
+                        "Retry humanizer returned an empty draft; using retry logic draft."
+                    )
+                    retry_humanized = retry_draft
+                    ai_trace["repair"]["retry_empty_humanizer_output"] = True
                 retry_guard = check_humanizer_preserved_facts(
                     retry_draft,
                     retry_humanized,
@@ -1101,7 +1113,9 @@ async def _verify_and_finalize(
             rewritten_fallback,
             retrieved_data,
         )
-        if fallback_guard.safe:
+        if not (rewritten_fallback or "").strip():
+            logger.warning("Fallback humanizer returned an empty response; keeping fallback.")
+        elif fallback_guard.safe:
             final_reply = rewritten_fallback
         else:
             logger.warning(
@@ -1118,21 +1132,21 @@ async def _verify_and_finalize(
 
     # Log the verification decision
     try:
-        await verifier.log_verification(
-            result=result,
-            customer_message=customer_message,
-            retrieved_data=retrieved_data,
-            draft_answer=draft_answer_for_log,
-            final_action=action,
-            final_answer=final_reply,
-            session_id=session_id,
-            user_id=user_id,
-            message_id=message_id,
-            db=db,
-            ai_trace=ai_trace,
-        )
+        async with db.begin_nested():
+            await verifier.log_verification(
+                result=result,
+                customer_message=customer_message,
+                retrieved_data=retrieved_data,
+                draft_answer=draft_answer_for_log,
+                final_action=action,
+                final_answer=final_reply,
+                session_id=session_id,
+                user_id=user_id,
+                message_id=message_id,
+                db=db,
+                ai_trace=ai_trace,
+            )
     except Exception:
-        await db.rollback()
         logger.exception("Failed to log verification result")
 
     return final_reply, action, result
@@ -1539,8 +1553,16 @@ async def process_pending(session_id: uuid.UUID, db: AsyncSession) -> dict | Non
         pending_to_mark = list((await db.execute(stmt)).scalars().all())
         for m in pending_to_mark:
             m.processed = True
-        await db.commit()
-        return None
+        await save_message(session_id, "assistant", AI_PAUSED_REPLY, "text", None, db)
+        return {
+            "reply": AI_PAUSED_REPLY,
+            "channel": session_channel,
+            "external_user_id": session_external_user_id,
+            "user_id": str(user_id),
+            "audio_url": None,
+            "image_url": None,
+            "action": "ai_paused",
+        }
 
     stmt = (
         select(Message)
@@ -1616,15 +1638,15 @@ async def process_pending(session_id: uuid.UUID, db: AsyncSession) -> dict | Non
         for m in pending:
             m.processed = True
         await db.commit()
-        if not automation_reply:
-            return None
+        reply = automation_reply or AI_PAUSED_REPLY
         return {
-            "reply": automation_reply,
+            "reply": reply,
             "channel": session_channel,
             "external_user_id": session_external_user_id,
             "user_id": str(user_id),
             "audio_url": None,
-            "action": "automation",
+            "image_url": None,
+            "action": "automation" if automation_reply else "automation_paused",
             "automation_results": automation_results,
         }
 
