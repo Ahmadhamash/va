@@ -76,6 +76,12 @@ Call rules:
 
 
 PROMPT_VERSION_LIMIT = 20
+
+
+def _utcnow_naive() -> datetime:
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
 BLOCKED_PROMPT_PATTERNS = (
     "ignore previous",
     "ignore all previous",
@@ -233,7 +239,7 @@ async def ensure_initial_active_prompt_version(
                 }
             ],
         },
-        activated_at=datetime.now(timezone.utc),
+        activated_at=_utcnow_naive(),
     )
     db.add(active)
     await db.flush()
@@ -392,7 +398,7 @@ async def activate_prompt_draft(
         version.status = "archived"
 
     draft.status = "active"
-    draft.activated_at = datetime.now(timezone.utc)
+    draft.activated_at = _utcnow_naive()
     _apply_payload_to_row(row, draft.prompt_payload)
     await db.flush()
     return draft
@@ -437,7 +443,7 @@ async def rollback_to_prompt_version(
                 }
             ],
         },
-        activated_at=datetime.now(timezone.utc),
+        activated_at=_utcnow_naive(),
     )
     db.add(restored)
     _apply_payload_to_row(row, restored.prompt_payload)

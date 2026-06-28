@@ -40,6 +40,8 @@ async def test_prompt_draft_does_not_change_active_settings_until_activated(db_s
     await db_session.flush()
 
     assert active.status == "active"
+    assert active.activated_at is not None
+    assert active.activated_at.tzinfo is None
     assert draft.status == "draft"
     assert row.sales_prompt == "ACTIVE SALES RULE"
 
@@ -52,6 +54,8 @@ async def test_prompt_draft_does_not_change_active_settings_until_activated(db_s
     )
 
     assert draft.status == "active"
+    assert draft.activated_at is not None
+    assert draft.activated_at.tzinfo is None
     assert row.sales_prompt == "DRAFT SALES RULE"
 
 
@@ -126,6 +130,8 @@ async def test_prompt_rollback_creates_new_active_version(db_session):
     )
 
     assert restored.status == "active"
+    assert restored.activated_at is not None
+    assert restored.activated_at.tzinfo is None
     assert restored.version_number > draft.version_number
     assert row.sales_prompt == "FIRST ACTIVE"
 
