@@ -575,6 +575,8 @@ async def _generate_reply(
     retrieved_data: dict = {}
     if assistant_profile:
         retrieved_data["assistant_settings:profile"] = assistant_profile
+    if user.ai_persona:
+        retrieved_data["assistant_settings:persona"] = user.ai_persona
     rounds = 0
     while (
         response.choices[0].finish_reason == "tool_calls"
