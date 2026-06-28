@@ -210,6 +210,7 @@ class AnswerVerifier:
         draft_answer: str,
         *,
         force_high_risk: bool = False,
+        banned_phrases: list[str] | None = None,
     ) -> VerificationResult:
         """Verify a draft answer against retrieved data.
 
@@ -227,7 +228,7 @@ class AnswerVerifier:
         if smalltalk_check is not None:
             return smalltalk_check
 
-        pre_check = self._pre_check(draft_answer)
+        pre_check = self._pre_check(draft_answer, banned_phrases=banned_phrases)
         if pre_check is not None:
             return pre_check
 
@@ -282,6 +283,7 @@ class AnswerVerifier:
                     retrieved_data,
                     draft_answer,
                     force_high_risk=True,
+                    banned_phrases=banned_phrases,
                 )
 
             return VerificationResult(
@@ -310,18 +312,26 @@ class AnswerVerifier:
                 reasons=["Verification service unavailable. Proceed with caution."],
             )
 
-    def _pre_check(self, draft_answer: str) -> VerificationResult | None:
+    def _pre_check(
+        self,
+        draft_answer: str,
+        *,
+        banned_phrases: list[str] | None = None,
+    ) -> VerificationResult | None:
         """Fast local checks before calling the LLM."""
         lower = draft_answer.lower()
 
         # Check banned phrases
-        for phrase in BANNED_PHRASES_AR + BANNED_PHRASES_EN:
-            if phrase in lower or phrase in draft_answer:
+        for phrase in BANNED_PHRASES_AR + BANNED_PHRASES_EN + (banned_phrases or []):
+            phrase_text = str(phrase or "").strip()
+            if not phrase_text:
+                continue
+            if phrase_text.lower() in lower or phrase_text in draft_answer:
                 return VerificationResult(
                     verdict=BLOCKED_UNGROUNDED,
                     risk_score=0.9,
-                    reasons=[f"Contains banned phrase: '{phrase}'"],
-                    flagged_claims=[phrase],
+                    reasons=[f"Contains banned phrase: '{phrase_text}'"],
+                    flagged_claims=[phrase_text],
                     safe_response=SAFE_RESPONSES["hallucination_blocked"],
                 )
 

@@ -27,6 +27,7 @@ export function AgentPreview({
   agentName = "مساعد chatter",
   dialect = "jordanian",
   tone = "friendly",
+  emoji = "low",
   strictness = "balanced",
   workingHours = "9 صباحاً - 6 مساءً",
   fallbackMessage = "ثواني بس، رح أحولك لموظف يساعدك بشكل أدق.",
@@ -36,6 +37,7 @@ export function AgentPreview({
   agentName?: string;
   dialect?: string;
   tone?: string;
+  emoji?: string;
   strictness?: string;
   workingHours?: string;
   fallbackMessage?: string;
@@ -82,7 +84,7 @@ export function AgentPreview({
       prompt_mode: "custom_settings",
       dialect,
       tone,
-      emoji: "low",
+      emoji,
       strictness,
       agent_name: agentName,
       working_hours: workingHours,
@@ -98,6 +100,7 @@ export function AgentPreview({
       `اسم الوكيل الظاهر للعملاء: ${agentName}.`,
       `أوقات العمل: ${workingHours}.`,
       `مستوى الالتزام: ${strictness}. لا تخترع منتجات أو أسعار أو وعود غير موجودة في قاعدة المعرفة.`,
+      `مستوى الإيموجي: ${emoji}.`,
       bannedPhrases.length ? `تجنب هذه العبارات: ${bannedPhrases.join(", ")}.` : "",
       `رسالة التحويل البشري: ${fallbackMessage}`,
     ].filter(Boolean).join("\n");
@@ -256,4 +259,3 @@ export function AgentPreview({
     </GradientCard>
   );
 }
-

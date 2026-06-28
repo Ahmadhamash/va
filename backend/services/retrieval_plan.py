@@ -40,6 +40,9 @@ _PACKAGE_TERMS = (
     "\u0628\u0648\u0643\u0633", "\u0628\u0648\u0643\u0633\u0627\u062a",
     "\u0627\u0644\u0628\u0648\u0643\u0633", "\u0627\u0644\u0639\u0627\u0626\u0644\u064a",
     "\u0639\u0627\u0626\u0644\u064a", "\u062c\u0645\u0639\u0627\u062a",
+    "\u0644\u0645\u0647", "\u0644\u0645\u0629",
+    "\u0627\u0644\u0644\u0645\u0647", "\u0627\u0644\u0644\u0645\u0629",
+    "\u0627\u0644\u0644\u0645\u0627", "\u0644\u0645\u0627",
     "bundle", "bundles", "package", "packages", "combo",
     "box", "boxes", "gathering", "family box",
 )
@@ -74,6 +77,27 @@ _POLICY_TERMS = (
     "\u0625\u0644\u063a\u0627\u0621", "\u0636\u0645\u0627\u0646",
     "\u0633\u064a\u0627\u0633\u0647", "\u0633\u064a\u0627\u0633\u0627\u062a",
     "return", "refund", "exchange", "cancel", "warranty", "policy",
+)
+_BUSINESS_INFO_TERMS = (
+    "\u0646\u0642\u0627\u0637 \u0627\u0644\u0628\u064a\u0639",
+    "\u0646\u0642\u0637\u0629 \u0628\u064a\u0639",
+    "\u0646\u0642\u0637\u0647 \u0628\u064a\u0639",
+    "\u0641\u0631\u0639", "\u0641\u0631\u0648\u0639",
+    "\u0645\u0648\u0642\u0639", "\u0639\u0646\u0648\u0627\u0646",
+    "\u0648\u064a\u0646", "\u0627\u064a\u0646",
+    "\u0645\u0648\u0632\u0639\u064a\u0646", "\u0627\u0644\u0645\u0648\u0632\u0639\u064a\u0646",
+    "\u0648\u064a\u0646 \u0627\u0634\u062a\u0631\u064a",
+    "\u0647\u0648\u064a\u0629 \u0627\u0644\u0635\u0641\u062d\u0629",
+    "\u0647\u0648\u064a\u0647 \u0627\u0644\u0635\u0641\u062d\u0647",
+    "\u0645\u0639\u0644\u0648\u0645\u0627\u062a \u0627\u0644\u0635\u0641\u062d\u0629",
+    "\u0647\u0648\u064a\u0629 \u0627\u0644\u062d\u0633\u0627\u0628",
+    "\u0647\u0648\u064a\u0647 \u0627\u0644\u062d\u0633\u0627\u0628",
+    "\u0645\u0639\u0644\u0648\u0645\u0627\u062a \u0627\u0644\u062d\u0633\u0627\u0628",
+    "\u0627\u0644\u0628\u0631\u0627\u0646\u062f",
+    "sales point", "sales points", "where to buy",
+    "location", "locations", "branch", "branches",
+    "distributor", "distributors", "page identity",
+    "account identity", "brand info",
 )
 
 
@@ -139,6 +163,8 @@ def supplemental_tool_plan(customer_message: str, intent: str) -> list[ToolCallP
             calls.append(ToolCallPlan("get_delivery_info", {}))
         if _has_any(text, _POLICY_TERMS) or not _has_any(text, _DELIVERY_TERMS):
             calls.append(ToolCallPlan("get_policies", {}))
+        if _has_any(text, _BUSINESS_INFO_TERMS):
+            calls.append(ToolCallPlan("get_business_info", {}))
         if _has_any(text, _PAYMENT_TERMS):
             calls.append(ToolCallPlan("get_payment_methods", {}))
         return _dedupe(calls)
@@ -155,6 +181,8 @@ def supplemental_tool_plan(customer_message: str, intent: str) -> list[ToolCallP
             calls.append(ToolCallPlan("get_payment_methods", {}))
         return _dedupe(calls)
 
+    if _has_any(text, _BUSINESS_INFO_TERMS):
+        return [ToolCallPlan("get_business_info", {})]
     if _has_any(text, _DELIVERY_TERMS + _POLICY_TERMS):
         return supplemental_tool_plan(customer_message, "support")
     if _has_any(text, _OFFER_TERMS + _PACKAGE_TERMS + _PAYMENT_TERMS):

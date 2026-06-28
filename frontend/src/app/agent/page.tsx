@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Bot, CheckCircle2, Handshake, MessageCircle, ShieldCheck, Sparkles, X, Plus } from "lucide-react";
+import { Bot, CheckCircle2, Handshake, MessageCircle, ShieldCheck, Sparkles, X, Plus, SmilePlus } from "lucide-react";
 import { AgentPreview } from "@/components/agent-preview";
 import { AppShell } from "@/components/app-shell";
 import { ToggleSetting } from "@/components/toggle-setting";
@@ -40,6 +40,20 @@ const tonesEn = [
   { id: "salesy", label: "Sales", hint: "Active and persuasive without exaggeration" },
 ] as const;
 
+const emojiOptionsAr = [
+  { id: "none", label: "بدون", hint: "ردود نصية فقط" },
+  { id: "low", label: "خفيف", hint: "إيموجي واحد عند الحاجة" },
+  { id: "medium", label: "متوسط", hint: "دفء واضح بدون مبالغة" },
+  { id: "high", label: "عالي", hint: "أسلوب حيوي أكثر" },
+] as const;
+
+const emojiOptionsEn = [
+  { id: "none", label: "None", hint: "Text-only replies" },
+  { id: "low", label: "Light", hint: "One emoji when useful" },
+  { id: "medium", label: "Medium", hint: "Warm without overdoing it" },
+  { id: "high", label: "High", hint: "More expressive energy" },
+] as const;
+
 const strictnessOptionsAr = [
   { id: "strict", label: "صارم", hint: "لا يجاوب إلا من قاعدة المعرفة" },
   { id: "balanced", label: "متوازن", hint: "يسأل توضيح ويرفض التخمين" },
@@ -69,12 +83,14 @@ export default function AgentSettingsPage() {
 
   const dialects = isRtl ? dialectsAr : dialectsEn;
   const tones = isRtl ? tonesAr : tonesEn;
+  const emojiOptions = isRtl ? emojiOptionsAr : emojiOptionsEn;
   const strictnessOptions = isRtl ? strictnessOptionsAr : strictnessOptionsEn;
 
   const [notice, setNotice] = useState("");
   const [agentName, setAgentName] = useState(isRtl ? "مساعد chatter" : "chatter Assistant");
   const [dialect, setDialect] = useState("jordanian");
   const [tone, setTone] = useState("friendly");
+  const [emoji, setEmoji] = useState("low");
   const [strictness, setStrictness] = useState("balanced");
   const [workingHours, setWorkingHours] = useState(isRtl ? "9 صباحاً - 6 مساءً" : "9 AM - 6 PM");
   const [fallbackMessage, setFallbackMessage] = useState(isRtl ? "ثواني بس، رح أحولك لموظف يساعدك بشكل أدق." : "Just a second, I will connect you to a staff member to assist you better.");
@@ -89,6 +105,7 @@ export default function AgentSettingsPage() {
     const config = parsePersonaConfig(user?.ai_persona);
     if (typeof config.dialect === "string") setDialect(config.dialect);
     if (typeof config.tone === "string") setTone(config.tone);
+    if (typeof config.emoji === "string") setEmoji(config.emoji);
     if (typeof config.strictness === "string") setStrictness(config.strictness);
     if (typeof config.agent_name === "string") setAgentName(config.agent_name);
     if (typeof config.working_hours === "string") setWorkingHours(config.working_hours);
@@ -107,7 +124,7 @@ export default function AgentSettingsPage() {
       prompt_mode: "custom_settings",
       dialect,
       tone,
-      emoji: "low",
+      emoji,
       strictness,
       agent_name: agentName,
       working_hours: workingHours,
@@ -122,6 +139,7 @@ export default function AgentSettingsPage() {
       `اسم الوكيل الظاهر للعملاء: ${agentName}.`,
       `أوقات العمل: ${workingHours}.`,
       `مستوى الالتزام: ${strictness}. لا تخترع منتجات أو أسعار أو وعود غير موجودة في قاعدة المعرفة.`,
+      `مستوى الإيموجي: ${emoji}.`,
       bannedPhrases.length ? `تجنب هذه العبارات: ${bannedPhrases.join(", ")}.` : "",
       `رسالة التحويل البشري: ${fallbackMessage}`,
     ].filter(Boolean).join("\n");
@@ -228,6 +246,27 @@ export default function AgentSettingsPage() {
                 </button>
               ))}
             </div>
+            <div className="mt-4">
+              <div className="mb-3 flex items-center justify-between">
+                <SmilePlus className="h-4 w-4 text-primary-400" />
+                <h3 className="text-sm font-semibold text-white">{isRtl ? "مستوى الإيموجي" : "Emoji Level"}</h3>
+              </div>
+              <div className="grid gap-3 md:grid-cols-4">
+                {emojiOptions.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => setEmoji(item.id)}
+                    className={`rounded-2xl border p-4 text-start transition ${
+                      emoji === item.id ? "border-primary-400/40 bg-primary-500/12 text-white" : "border-white/10 bg-white/[0.035] text-white/65"
+                    }`}
+                  >
+                    <div className="font-semibold">{item.label}</div>
+                    <div className="mt-2 text-xs leading-5 text-white/42">{item.hint}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
             <div className="mt-4 grid gap-3 md:grid-cols-3">
               {strictnessOptions.map((item) => (
                 <button
@@ -319,6 +358,7 @@ export default function AgentSettingsPage() {
               agentName={agentName}
               dialect={dialect}
               tone={tone}
+              emoji={emoji}
               strictness={strictness}
               workingHours={workingHours}
               fallbackMessage={fallbackMessage}
@@ -335,4 +375,3 @@ export default function AgentSettingsPage() {
     </AppShell>
   );
 }
-

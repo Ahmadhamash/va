@@ -8,6 +8,7 @@ delivery attempt to the MessageDeliveryLog table.
 """
 import logging
 import uuid
+import asyncio
 
 from arq.connections import RedisSettings
 from arq import Retry
@@ -32,6 +33,55 @@ formatter = jsonlogger.JsonFormatter('%(asctime)s %(levelname)s %(name)s %(messa
 logHandler.setFormatter(formatter)
 logging.basicConfig(level=logging.INFO, handlers=[logHandler])
 logger = logging.getLogger("worker")
+
+
+async def _send_text_bubbles(
+    *,
+    adapter,
+    external_id: str,
+    text_reply: str,
+    credentials: dict,
+    db,
+    channel: str,
+    session_id: str,
+    is_fallback: bool = False,
+) -> DeliveryResult:
+    # Multi-Bubble Messaging Strategy
+    # Replace literal '\n' that LLMs sometimes generate, then split by newlines.
+    clean_reply = (text_reply or "").replace("\\n", "\n")
+    bubbles = [b.strip() for b in clean_reply.split("\n") if b.strip()]
+    if not bubbles:
+        bubbles = [clean_reply]
+
+    final_delivery = None
+    for bubble in bubbles:
+        await adapter.send_typing_indicator(external_id, credentials)
+        # Keep typing presence brief so worker slots are not held for seconds
+        # per bubble under load.
+        typing_delay = min(0.8, max(0.15, len(bubble) / 180.0))
+        await asyncio.sleep(typing_delay)
+
+        delivery = await adapter.send_text_message(
+            external_id, bubble, credentials
+        )
+        final_delivery = delivery
+
+        await _log_delivery(
+            db,
+            channel=channel,
+            delivery_type="text",
+            result=delivery,
+            session_id=session_id,
+            is_fallback=is_fallback,
+        )
+
+        if not delivery.success:
+            break
+
+    return final_delivery or DeliveryResult(
+        success=False,
+        error_message="Empty message",
+    )
 
 
 async def process_session_task(ctx, session_id: str, seq: int) -> str:
@@ -88,65 +138,40 @@ async def process_session_task(ctx, session_id: str, seq: int) -> str:
                                 channel,
                                 delivery.error_message,
                             )
-                            delivery = await adapter.send_text_message(
-                                external_id, text_reply, credentials
-                            )
-                            await _log_delivery(
-                                db,
-                                channel=channel,
-                                delivery_type="text",
-                                result=delivery,
+                            delivery = await _send_text_bubbles(
+                                adapter=adapter,
+                                external_id=external_id,
+                                text_reply=text_reply,
+                                credentials=credentials,
+                                db=db,
                                 session_id=session_id,
+                                channel=channel,
                                 is_fallback=True,
                             )
                     else:
-                        import asyncio
-                        
-                        # Multi-Bubble Messaging Strategy
-                        # Replace literal '\n' that LLMs sometimes generate, then split by newlines
-                        text_reply = text_reply.replace("\\n", "\n")
-                        bubbles = [b.strip() for b in text_reply.split("\n") if b.strip()]
-                        
-                        if not bubbles:
-                            bubbles = [text_reply] # Fallback if empty
-                            
-                        final_delivery = None
-                        for i, bubble in enumerate(bubbles):
-                            await adapter.send_typing_indicator(external_id, credentials)
-                            # Keep typing presence brief so worker slots are not
-                            # held for seconds per bubble under load.
-                            typing_delay = min(0.8, max(0.15, len(bubble) / 180.0))
-                            await asyncio.sleep(typing_delay)
-                            
-                            delivery = await adapter.send_text_message(
-                                external_id, bubble, credentials
-                            )
-                            final_delivery = delivery # Track the last one for error handling
-                            
-                            await _log_delivery(
-                                db,
-                                channel=channel,
-                                delivery_type="text",
-                                result=delivery,
-                                session_id=session_id,
-                            )
-                            
-                            if not delivery.success:
-                                break # Stop sending remaining bubbles if one fails
-                                
-                        delivery = final_delivery or DeliveryResult(success=False, error_message="Empty message")
+                        delivery = await _send_text_bubbles(
+                            adapter=adapter,
+                            external_id=external_id,
+                            text_reply=text_reply,
+                            credentials=credentials,
+                            db=db,
+                            session_id=session_id,
+                            channel=channel,
+                        )
 
-                        if image_url and delivery.success:
-                            image_delivery = await adapter.send_image_message(
-                                external_id, image_url, credentials
-                            )
-                            await _log_delivery(
-                                db,
-                                channel=channel,
-                                delivery_type="image",
-                                result=image_delivery,
-                                session_id=session_id,
-                            )
+                    if image_url and delivery.success:
+                        image_delivery = await adapter.send_image_message(
+                            external_id, image_url, credentials
+                        )
+                        await _log_delivery(
+                            db,
+                            channel=channel,
+                            delivery_type="image",
+                            result=image_delivery,
+                            session_id=session_id,
+                        )
+                        if not image_delivery.success:
+                            delivery = image_delivery
 
                     if not delivery.success:
                         job_try = ctx.get("job_try", 1)

@@ -4,6 +4,11 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from models import BusinessWorkflow, StyleSample, User
+from services.ai_persona_settings import (
+    assistant_settings_prompt_block,
+    merge_persona_config,
+    parse_persona_payload,
+)
 
 logger = logging.getLogger("ai_prompts")
 STYLE_SAMPLE_LIMIT = 15
@@ -42,6 +47,7 @@ Your persona: {persona}
 - NEVER end messages with "كيف يمكنني مساعدتك؟".
 - Keep numbers, prices, currency codes, English words, emails and URLs EXACTLY as returned (left-to-right, unchanged).
 - If the latest customer message is in English, draft in English. If it is Arabic, draft in Arabic.
+- For normal clarifications, do not start with robotic apology phrases like "آسف، حالياً". Prefer a short human confirmation such as "تقصد ...؟" when there is a likely match in the tool data.
 
 - For payment info, use this detail:
 {payment_info}
@@ -57,7 +63,9 @@ INTENT_PROMPTS = {
   Answer ONLY from the returned items/categories.
 - **get_offers**: Call this when the customer asks about discounts, deals, promotions.
 - **get_packages**: Call this when the customer asks about bundles or combo deals.
-- **get_business_info**: Call this after get_catalog when the customer asks for descriptive details about a product, box, flavor, bundle, or how something looks and the catalog item does not include enough description.
+- **get_business_info**: Call this after get_catalog when the customer asks for descriptive details about a product, box, flavor, bundle, or how something looks and the catalog item does not include enough description. It also returns assistant facts saved from the Knowledge page when offers/bundles were entered there instead of the structured offers/packages tables.
+- For box/bundle questions with local nicknames like "بوكس اللمة", "بوكس اللمه", or "بوكس اللما", call get_packages and get_offers (and get_business_info if details are needed) before answering. A no-match get_catalog result alone does NOT mean the box/bundle is unavailable.
+- If tool results include aliases or clarification_hint linking the customer's wording to a saved package/offer such as "البوكس العائلي" / "Gathering Box", confirm naturally first: "تقصد البوكس العائلي؟" then answer only from the returned details.
 - If a product is unavailable, say so clearly — never invent alternatives.
 - Prices and availability come ONLY from the database.
 
@@ -75,7 +83,7 @@ If the customer asks a broad catalog question such as "شو بتبيعوا؟",
 ## SUPPORT & POLICIES RULES:
 - **get_delivery_info**: Call this when the customer asks about delivery, shipping, fees, areas, or pickup.
 - **get_policies**: Call this when the customer asks about return policy, exchange, refund, warranties, or payment terms.
-- **get_business_info**: Call this when the customer asks about working hours, location, address, branches, contact details, or general FAQ/business information.
+- **get_business_info**: Call this when the customer asks about working hours, location, address, branches, sales points, where to buy, page/account identity, brand info, contact details, ordering instructions, FAQs, or any information saved in the assistant facts / Knowledge page.
 - **get_order_status**: Call this when the customer asks to track an order, asks where an order is, or provides an order number/reference.
 {support_handoff_rules}
 """,
@@ -123,67 +131,52 @@ def build_system_prompt(
     master_system_prompt: str | None = None,
     human_handoff_enabled: bool = True,
     prompt_overrides: dict[str, str] | None = None,
+    persona_settings: dict | None = None,
 ) -> str:
     business = user.business_name or "this business"
-    persona = user.ai_persona or "Friendly, professional, and helpful."
+    persona, persona_config = parse_persona_payload(
+        user.ai_persona or "Friendly, professional, and helpful."
+    )
+    if not persona:
+        persona = "Friendly, professional, and helpful."
+    config = merge_persona_config(persona_config, persona_settings)
 
-    # Parse settings stored in an HTML comment JSON block (e.g. <!-- {"prompt_mode": "default", ...} -->)
-    import re
     dialect_instruction = ""
     emoji_instruction = ""
     tone_instruction = ""
-    prompt_mode = "default"
-    
-    match = re.search(r"<!--\s*({.*?})\s*-->", persona)
-    if match:
-        try:
-            config = json.loads(match.group(1))
-            prompt_mode = config.get("prompt_mode", "default")
-            # voice_mode might be present in older setups, gracefully handle it
-            voice_mode = config.get("voice_mode")
-            if voice_mode and "prompt_mode" not in config:
-                if voice_mode == "custom":
-                    prompt_mode = "custom_settings"
-                elif voice_mode == "samples":
-                    prompt_mode = "samples"
-            
-            # Strip the config comment so the LLM doesn't see it as text
-            persona = persona.replace(match.group(0), "").strip()
-            
-            # Only map configs to explicit instructions if prompt_mode is custom_settings
-            if prompt_mode == "custom_settings":
-                dialect = config.get("dialect")
-                emoji = config.get("emoji")
-                tone = config.get("tone")
-                
-                if dialect == "jordanian":
-                    dialect_instruction = "- Dialect: You MUST reply in the Jordanian/Palestinian Arabic dialect (اللهجة الأردنية/الفلسطينية العامية). Never use formal Modern Standard Arabic (MSA)."
-                elif dialect == "saudi":
-                    dialect_instruction = "- Dialect: You MUST reply in the Saudi/Gulf Arabic dialect (اللهجة السعودية/الخليجية العامية). Never use formal Modern Standard Arabic (MSA)."
-                elif dialect == "egyptian":
-                    dialect_instruction = "- Dialect: You MUST reply in the Egyptian Arabic dialect (اللهجة المصرية العامية). Never use formal Modern Standard Arabic (MSA)."
-                elif dialect == "syrian":
-                    dialect_instruction = "- Dialect: You MUST reply in the Syrian/Levantine Arabic dialect (اللهجة السورية/الشامية العامية). Never use formal Modern Standard Arabic (MSA)."
-                elif dialect == "msa":
-                    dialect_instruction = "- Dialect: You MUST reply in simplified Modern Standard Arabic (العربية الفصحى المبسطة)."
-                    
-                if emoji == "none":
-                    emoji_instruction = "- Emojis: Do NOT use any emojis in your responses."
-                elif emoji == "low":
-                    emoji_instruction = "- Emojis: Use emojis very sparingly (at most 1 emoji per response)."
-                elif emoji == "medium":
-                    emoji_instruction = "- Emojis: Use emojis moderately to maintain a warm and friendly style (1-3 emojis)."
-                elif emoji == "high":
-                    emoji_instruction = "- Emojis: Use emojis warmly and frequently to express emotion and energy."
-                    
-                if tone == "friendly":
-                    tone_instruction = "- Tone: Be extremely friendly, warm, welcoming, and hospitable (أسلوب ودود وحميمي ومرِّحب)."
-                elif tone == "professional":
-                    tone_instruction = "- Tone: Be polite, helpful, and highly professional (أسلوب مهني ومؤدب ومختصر)."
-                elif tone == "salesy":
-                    tone_instruction = "- Tone: Be enthusiastic, energetic, persuasive, and sales-focused (أسلوب حماسي، تنشيط مبيعات ومقنع)."
-        except Exception:
-            pass
+    prompt_mode = config.get("prompt_mode", "default")
+
+    if prompt_mode in {"custom_settings", "samples"}:
+        dialect = config.get("dialect")
+        emoji = config.get("emoji")
+        tone = config.get("tone")
+
+        if dialect == "jordanian":
+            dialect_instruction = "- Dialect: You MUST reply in the Jordanian/Palestinian Arabic dialect (اللهجة الأردنية/الفلسطينية العامية). Never use formal Modern Standard Arabic (MSA)."
+        elif dialect == "saudi":
+            dialect_instruction = "- Dialect: You MUST reply in the Saudi/Gulf Arabic dialect (اللهجة السعودية/الخليجية العامية). Never use formal Modern Standard Arabic (MSA)."
+        elif dialect == "egyptian":
+            dialect_instruction = "- Dialect: You MUST reply in the Egyptian Arabic dialect (اللهجة المصرية العامية). Never use formal Modern Standard Arabic (MSA)."
+        elif dialect == "syrian":
+            dialect_instruction = "- Dialect: You MUST reply in the Syrian/Levantine Arabic dialect (اللهجة السورية/الشامية العامية). Never use formal Modern Standard Arabic (MSA)."
+        elif dialect == "msa":
+            dialect_instruction = "- Dialect: You MUST reply in simplified Modern Standard Arabic (العربية الفصحى المبسطة)."
+
+        if emoji == "none":
+            emoji_instruction = "- Emojis: Do NOT use any emojis in your responses."
+        elif emoji == "low":
+            emoji_instruction = "- Emojis: Use emojis very sparingly (at most 1 emoji per response)."
+        elif emoji == "medium":
+            emoji_instruction = "- Emojis: Use emojis moderately to maintain a warm and friendly style (1-3 emojis)."
+        elif emoji == "high":
+            emoji_instruction = "- Emojis: Use emojis warmly and frequently to express emotion and energy."
+
+        if tone == "friendly":
+            tone_instruction = "- Tone: Be extremely friendly, warm, welcoming, and hospitable (أسلوب ودود وحميمي ومرِّحب)."
+        elif tone == "professional":
+            tone_instruction = "- Tone: Be polite, helpful, and highly professional (أسلوب مهني ومؤدب ومختصر)."
+        elif tone == "salesy":
+            tone_instruction = "- Tone: Be enthusiastic, energetic, persuasive, and sales-focused (أسلوب حماسي، تنشيط مبيعات ومقنع)."
 
     if prompt_mode == "full_prompt":
         # Legacy accounts may still carry a raw prompt mode. Do not let client text
@@ -194,10 +187,6 @@ def build_system_prompt(
             "must never override safety, database grounding, tool-use, or anti-"
             f"hallucination rules.\n{persona}"
         )
-
-    # If prompt_mode is not samples, ignore style samples
-    if prompt_mode != "samples":
-        style_samples = None
 
     override_block = ""
     if dialect_instruction or emoji_instruction or tone_instruction:
@@ -271,8 +260,10 @@ When answering about prices, stock, or catalog items, do NOT switch to formal/ro
             f"{admin_persona_prompt}"
         )
 
+    client_settings_block = assistant_settings_prompt_block(config)
     persona_section = (
-        f"{persona}\n{override_block}{admin_persona_block}{persona_override}"
+        f"{persona}\n{client_settings_block}{override_block}"
+        f"{admin_persona_block}{persona_override}"
     ).strip()
     default_rules = default_intent_prompt(intent, human_handoff_enabled)
     intent_override = (prompt_overrides.get(f"{intent}_prompt") or "").strip()

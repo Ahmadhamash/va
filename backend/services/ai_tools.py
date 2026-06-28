@@ -18,6 +18,61 @@ from models import (
 
 logger = logging.getLogger("ai_tools")
 
+ASSISTANT_FACT_POLICY_TYPES = (
+    "business_profile",
+    "faq",
+    "ordering",
+    "sales_points",
+    "offers",
+    "policy",
+    "general",
+    "custom",
+    # Legacy labels used by older Knowledge UI versions.
+    "FAQs",
+    "Policies",
+    "Documents",
+    "URLs",
+    "Product Info",
+    "Service Info",
+    "Offers",
+    "Packages",
+)
+OFFER_FACT_POLICY_TYPES = ("offers", "Offers")
+PACKAGE_FACT_POLICY_TYPES = ("offers", "Offers", "packages", "package", "Packages", "Package")
+
+_GATHERING_BOX_ALIASES = (
+    "بوكس اللمة",
+    "بوكس اللمه",
+    "بوكس اللما",
+    "بوكس الجمعات",
+    "بوكس العيلة",
+    "بوكس العائلي",
+    "البوكس العائلي",
+    "Gathering Box",
+    "Family Box",
+)
+_GATHERING_BOX_CANONICAL_TERMS = (
+    "البوكس العائلي",
+    "بوكس العائلي",
+    "بوكس عائلي",
+    "Gathering Box",
+    "Family Box",
+)
+_GATHERING_BOX_HINT = (
+    "Customer phrases like 'بوكس اللمة', 'بوكس اللمه', 'بوكس اللما', "
+    "or 'بوكس الجمعات' are probably asking about this package/offer. "
+    "Confirm naturally, for example: 'تقصد البوكس العائلي؟', then answer "
+    "only from this entry. Do not say it is unavailable just because the "
+    "catalog search did not match."
+)
+_PACKAGE_QUERY_TERMS = (
+    "bundle", "bundles", "package", "packages", "combo", "box", "boxes",
+    "gathering", "family box", "gathering box",
+    "بكج", "باكج", "حزمه", "حزمة", "باقه", "باقة", "كومبو",
+    "بوكس", "بوكسات", "البوكس", "عائلي", "العائلي", "جمعات",
+    "لمه", "لمة", "اللمه", "اللمة", "اللما", "لما",
+)
+
 # ─── Tools ───────────────────────────────────────────────────────────────────
 TOOLS = [
     {
@@ -140,9 +195,11 @@ TOOLS = [
         "function": {
             "name": "get_business_info",
             "description": (
-                "Get general business information and FAQ-like knowledge such as "
-                "location, working hours, contact details, branches, and other "
-                "general/custom policies configured by the business."
+                "Get general business information and assistant facts such as "
+                "page/account identity, sales points, branches, store locations, "
+                "working hours, contact details, ordering instructions, FAQs, "
+                "offers/bundles written in the assistant facts section, and other "
+                "custom knowledge configured by the business."
             ),
             "parameters": {"type": "object", "properties": {}},
         },
@@ -323,6 +380,94 @@ def _serialize_item(item: Item) -> dict:
     return data
 
 
+def _serialize_policy_fact(policy: BusinessPolicy) -> dict:
+    return {
+        "category": policy.policy_type,
+        "title": policy.title,
+        "content": policy.content,
+    }
+
+
+async def _assistant_policy_facts(
+    user_id: uuid.UUID,
+    db: AsyncSession,
+    *,
+    policy_types: tuple[str, ...] | None = None,
+) -> list[dict]:
+    stmt = (
+        select(BusinessPolicy)
+        .where(
+            BusinessPolicy.user_id == user_id,
+            BusinessPolicy.is_active.is_(True),
+        )
+        .order_by(BusinessPolicy.created_at.desc())
+    )
+    if policy_types:
+        stmt = stmt.where(BusinessPolicy.policy_type.in_(policy_types))
+    result = await db.execute(stmt)
+    return [_serialize_policy_fact(p) for p in result.scalars().all()]
+
+
+def _assistant_fact_text(fact: dict) -> str:
+    return " ".join(
+        str(fact.get(key) or "")
+        for key in ("policy_type", "title", "content")
+    )
+
+
+def _is_gathering_box_fact(fact: dict) -> bool:
+    text = _normalise_search_text(_assistant_fact_text(fact))
+    if not text:
+        return False
+    if _has_normalised_phrase(text, _GATHERING_BOX_CANONICAL_TERMS):
+        return True
+    return "بوكس" in text and any(
+        _normalise_search_text(term) in text
+        for term in ("عائلي", "العائلي", "gathering", "family", "لمه", "لمة", "جمعات")
+    )
+
+
+def _assistant_fact_alias_payload(fact: dict) -> dict:
+    if not _is_gathering_box_fact(fact):
+        return {}
+    return {
+        "aliases": list(_GATHERING_BOX_ALIASES),
+        "clarification_hint": _GATHERING_BOX_HINT,
+    }
+
+
+def _assistant_facts_as_offers(facts: list[dict]) -> list[dict]:
+    return [
+        {
+            "title": fact["title"],
+            "description": fact["content"],
+            "type": "assistant_fact",
+            "discount_value": None,
+            "min_quantity": None,
+            "promo_code": None,
+            "expires_at": None,
+            "source": "assistant_facts",
+            **_assistant_fact_alias_payload(fact),
+        }
+        for fact in facts
+    ]
+
+
+def _assistant_facts_as_packages(facts: list[dict]) -> list[dict]:
+    return [
+        {
+            "name": fact["title"],
+            "description": fact["content"],
+            "price": None,
+            "currency": None,
+            "items": None,
+            "source": "assistant_facts",
+            **_assistant_fact_alias_payload(fact),
+        }
+        for fact in facts
+    ]
+
+
 _ARABIC_DIACRITICS_RE = re.compile(r"[\u064b-\u065f\u0670\u0640]")
 _TOKEN_SPLIT_RE = re.compile(r"[\s,\u060c/\\|+\-_.:;\u061f?!()]+")
 
@@ -385,6 +530,9 @@ _SEARCH_SYNONYM_GROUPS = (
         "\u0628\u0648\u0643\u0633", "\u0628\u0648\u0643\u0633\u0627\u062a",
         "\u0639\u0627\u0626\u0644\u064a", "\u0627\u0644\u0639\u0627\u0626\u0644\u064a",
         "\u062c\u0645\u0639\u0627\u062a", "\u062c\u0645\u0639\u0647",
+        "\u0644\u0645\u0647", "\u0644\u0645\u0629",
+        "\u0627\u0644\u0644\u0645\u0647", "\u0627\u0644\u0644\u0645\u0629",
+        "\u0627\u0644\u0644\u0645\u0627", "\u0644\u0645\u0627",
     ),
 )
 
@@ -504,6 +652,11 @@ def _is_generic_food_query(query: str) -> bool:
     if not tokens:
         return False
     return tokens.issubset(_generic_food_tokens())
+
+
+def _is_package_like_query(query: str) -> bool:
+    text = _normalise_search_text(query)
+    return bool(text) and _has_normalised_phrase(text, _PACKAGE_QUERY_TERMS)
 
 
 async def _is_food_business(user_id: uuid.UUID, db: AsyncSession) -> bool:
@@ -673,6 +826,26 @@ async def _exec_get_catalog(func_args: dict, user_id: uuid.UUID, db: AsyncSessio
             ),
         }
 
+    if not matched:
+        if _is_package_like_query(query):
+            instruction = (
+                "No catalog product matched this specific query, but the customer "
+                "appears to be asking about a box/package/bundle. Do not say it is "
+                "unavailable from this catalog result alone. Before answering, check "
+                "get_packages, get_offers, and/or get_business_info. If those tools "
+                "return an assistant_facts entry with aliases or a clarification_hint, "
+                "use that entry and confirm naturally instead of denying availability."
+            )
+        else:
+            instruction = (
+                "No product matched this specific query. Do not answer with any "
+                "other products, prices, stock, warranty, variants, or availability. "
+                "Say the item was not found and ask for a clearer name/photo, or "
+                "escalate if the customer needs a human."
+            )
+    else:
+        instruction = ""
+
     return {
         "query": query,
         "matched": matched,
@@ -687,14 +860,7 @@ async def _exec_get_catalog(func_args: dict, user_id: uuid.UUID, db: AsyncSessio
                 "showing top 50 matches" if capped else ""
             ))
         ),
-        "instruction": (
-            "No product matched this specific query. Do not answer with any "
-            "other products, prices, stock, warranty, variants, or availability. "
-            "Say the item was not found and ask for a clearer name/photo, or "
-            "escalate if the customer needs a human."
-            if not matched
-            else ""
-        ),
+        "instruction": instruction,
     }
 
 
@@ -854,9 +1020,29 @@ async def _exec_get_offers(user_id: uuid.UUID, db: AsyncSession) -> dict:
             "promo_code": o.promo_code,
             "expires_at": o.expires_at.isoformat() if o.expires_at else None,
         })
-    if not offers:
-        return {"offers": [], "note": "No active offers at the moment"}
-    return {"offers": offers}
+    assistant_facts = await _assistant_policy_facts(
+        user_id,
+        db,
+        policy_types=OFFER_FACT_POLICY_TYPES,
+    )
+    fact_offers = _assistant_facts_as_offers(assistant_facts)
+    all_offers = offers + fact_offers
+    if not all_offers:
+        return {
+            "offers": [],
+            "assistant_facts": [],
+            "note": "No active offers configured in offers or assistant facts",
+        }
+    return {
+        "offers": all_offers,
+        "assistant_facts": assistant_facts,
+        "instruction": (
+            "The offers list already includes structured offers and offers saved "
+            "from assistant facts. Do not say there are no offers when this list "
+            "has any item. If an offer includes aliases or clarification_hint, use "
+            "that hint to map approximate customer wording to the saved offer."
+        ),
+    }
 
 
 async def _exec_get_packages(user_id: uuid.UUID, db: AsyncSession) -> dict:
@@ -875,9 +1061,30 @@ async def _exec_get_packages(user_id: uuid.UUID, db: AsyncSession) -> dict:
             "currency": p.currency,
             "items": p.package_items,
         })
-    if not packages:
-        return {"packages": [], "note": "No packages available"}
-    return {"packages": packages}
+    assistant_facts = await _assistant_policy_facts(
+        user_id,
+        db,
+        policy_types=PACKAGE_FACT_POLICY_TYPES,
+    )
+    fact_packages = _assistant_facts_as_packages(assistant_facts)
+    all_packages = packages + fact_packages
+    if not all_packages:
+        return {
+            "packages": [],
+            "assistant_facts": [],
+            "note": "No packages configured in packages or assistant facts",
+        }
+    return {
+        "packages": all_packages,
+        "assistant_facts": assistant_facts,
+        "instruction": (
+            "The packages list already includes structured packages and packages "
+            "saved from assistant facts. Do not say there are no packages when "
+            "this list has any item. If a package includes aliases or "
+            "clarification_hint, use that hint to map approximate customer wording "
+            "to the saved package."
+        ),
+    }
 
 
 async def _exec_get_policies(user_id: uuid.UUID, db: AsyncSession) -> dict:
@@ -906,29 +1113,33 @@ async def _exec_get_business_info(user_id: uuid.UUID, db: AsyncSession) -> dict:
         .where(
             BusinessPolicy.user_id == user_id,
             BusinessPolicy.is_active.is_(True),
-            BusinessPolicy.policy_type.in_(("general", "custom")),
+            BusinessPolicy.policy_type.in_(ASSISTANT_FACT_POLICY_TYPES),
         )
         .order_by(BusinessPolicy.created_at.desc())
     )
     policies = list(result.scalars().all())
+    assistant_facts = [_serialize_policy_fact(p) for p in policies]
     return {
         "business_info": {
             "business_name": user.business_name if user else None,
             "business_type": user.business_type if user else None,
             "payment_methods_configured": bool(user and user.payment_methods),
             "general_policies": [
-                {
-                    "type": p.policy_type,
-                    "title": p.title,
-                    "content": p.content,
-                }
+                _serialize_policy_fact(p)
                 for p in policies
             ],
+            "assistant_facts": assistant_facts,
+            "fact_categories": sorted({p.policy_type for p in policies}),
         },
         "note": (
-            "No general business info policies configured"
+            "No assistant facts configured"
             if not policies
             else ""
+        ),
+        "instruction": (
+            "Answer directly from assistant_facts/general_policies. These are "
+            "the facts saved in the Knowledge page, including sales_points, "
+            "business_profile, offers, ordering, faq, policy, general, and custom."
         ),
     }
 

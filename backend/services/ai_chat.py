@@ -37,6 +37,10 @@ from .retrieval_plan import supplemental_tool_plan
 from .openai_client import get_openai_client
 from .prompt_settings import get_client_prompt_overrides
 from .ai_usage import append_response_usage, append_usage_call
+from .ai_persona_settings import (
+    assistant_profile_data,
+    get_effective_persona_config,
+)
 
 logger = logging.getLogger("ai_chat")
 HISTORY_LIMIT = 20
@@ -479,6 +483,8 @@ async def _generate_reply(
     history = await get_session_history(session_id, db, limit=HISTORY_LIMIT)
     style_samples = await get_style_samples(user.id, db)
     prompt_overrides = await get_client_prompt_overrides(user.id, db)
+    persona_settings = await get_effective_persona_config(user.id, db, user.ai_persona)
+    assistant_profile = assistant_profile_data(user.ai_persona, persona_settings)
 
     # Fetch active workflows
     stmt_wf = select(BusinessWorkflow).where(
@@ -541,6 +547,7 @@ async def _generate_reply(
                 master_system_prompt=master_system_prompt,
                 human_handoff_enabled=human_handoff_enabled,
                 prompt_overrides=prompt_overrides,
+                persona_settings=persona_settings,
             ),
         },
         *history,
@@ -566,6 +573,8 @@ async def _generate_reply(
 
     # Collect all tool results for the verifier
     retrieved_data: dict = {}
+    if assistant_profile:
+        retrieved_data["assistant_settings:profile"] = assistant_profile
     rounds = 0
     while (
         response.choices[0].finish_reason == "tool_calls"
@@ -781,19 +790,10 @@ async def _verify_and_finalize(
     # 1. Fetch Style Samples and Voice Settings for the Humanizer
     style_samples = await get_style_samples(user_id, db)
     prompt_overrides = await get_client_prompt_overrides(user_id, db)
+    voice_settings = await get_effective_persona_config(user_id, db, user.ai_persona)
     conversation_context = _humanizer_context(
         await get_session_history(session_id, db, limit=8)
     )
-    
-    # Extract voice settings from the HTML comment in persona (if present)
-    voice_settings = {}
-    persona = user.ai_persona or ""
-    match = re.search(r"<!--\s*({.*?})\s*-->", persona)
-    if match:
-        try:
-            voice_settings = json.loads(match.group(1))
-        except json.JSONDecodeError:
-            pass
             
     # 2. Humanize the draft
     humanizer = HumanizerAgent(api_key=api_key)
@@ -841,7 +841,12 @@ async def _verify_and_finalize(
     verifier = AnswerVerifier(api_key=api_key)
 
     try:
-        result = await verifier.verify(customer_message, retrieved_data, humanized_draft)
+        result = await verifier.verify(
+            customer_message,
+            retrieved_data,
+            humanized_draft,
+            banned_phrases=voice_settings.get("banned_phrases", []),
+        )
         for usage_call in verifier.drain_usage_calls():
             append_usage_call(ai_trace, usage_call)
     except Exception:
@@ -956,6 +961,7 @@ async def _verify_and_finalize(
                         customer_message,
                         merged_data,
                         retry_humanized,
+                        banned_phrases=voice_settings.get("banned_phrases", []),
                     )
                     for usage_call in verifier.drain_usage_calls():
                         append_usage_call(ai_trace, usage_call)

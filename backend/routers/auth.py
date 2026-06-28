@@ -21,6 +21,7 @@ from services.auth_service import (
 from services.business_templates import get_template
 from models import BusinessPolicy
 from services.ratelimit import limiter
+from services.ai_persona_settings import sync_persona_settings_from_text
 
 logger = logging.getLogger(__name__)
 
@@ -163,6 +164,7 @@ async def update_me(payload: UserUpdate, db: AsyncSession = Depends(get_db), cur
         current_user.business_name = payload.business_name
     if payload.ai_persona is not None:
         current_user.ai_persona = payload.ai_persona
+        await sync_persona_settings_from_text(current_user, db)
     if payload.business_type is not None:
         current_user.business_type = payload.business_type
         

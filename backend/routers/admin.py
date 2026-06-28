@@ -44,6 +44,7 @@ from services.prompt_settings import (
     prompt_settings_payload,
 )
 from services.ai_usage import normalise_model, usage_summary_from_trace
+from services.ai_persona_settings import sync_persona_settings_from_text
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -178,6 +179,7 @@ async def set_client_persona(
 ):
     client = await _get_client(client_id, db)
     client.ai_persona = payload.ai_persona
+    await sync_persona_settings_from_text(client, db)
     if payload.business_name is not None:
         client.business_name = payload.business_name
     await db.commit()
@@ -577,6 +579,7 @@ async def create_client(
     )
     db.add(client)
     await db.flush()
+    await sync_persona_settings_from_text(client, db)
 
     for p in policies_to_add:
         p.user_id = client.id

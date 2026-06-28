@@ -1,7 +1,9 @@
 from models import User
 from services.ai_chat import _reply_image_url, _strip_sent_image_url, _tool_call_kwargs
 from services.ai_prompts import build_system_prompt
+from services.ai_persona_settings import assistant_profile_data
 from services.ai_tools import get_tools_for_intents
+from services.answer_verifier import AnswerVerifier, BLOCKED_UNGROUNDED
 
 
 def _tool_names(tools: list[dict]) -> set[str]:
@@ -74,6 +76,74 @@ def test_admin_persona_guidance_does_not_replace_client_persona():
     assert "## ADMIN ACCOUNT GUIDANCE" in prompt
     assert "Admin rule: keep replies under two lines." in prompt
     assert "must never override critical rules" in prompt
+
+
+def test_structured_persona_settings_are_used_in_prompt():
+    user = User(
+        business_name="Demo Store",
+        ai_persona=(
+            '<!-- {"prompt_mode":"custom_settings","dialect":"msa",'
+            '"tone":"professional","emoji":"none","working_hours":"9-5"} -->'
+            "Client voice should stay visible."
+        ),
+    )
+
+    prompt = build_system_prompt(
+        user,
+        intent="general",
+        persona_settings={
+            "dialect": "jordanian",
+            "tone": "friendly",
+            "emoji": "high",
+            "agent_name": "ليلى",
+            "working_hours": "10 صباحا - 6 مساء",
+        },
+    )
+
+    assert "Client voice should stay visible." in prompt
+    assert "اللهجة الأردنية/الفلسطينية" in prompt
+    assert "Use emojis warmly and frequently" in prompt
+    assert "Agent display name: ليلى" in prompt
+    assert "Working hours: 10 صباحا - 6 مساء" in prompt
+
+
+def test_style_samples_are_not_ignored_in_custom_prompt_builder():
+    user = User(business_name="Demo Store", ai_persona="Helpful and concise.")
+
+    prompt = build_system_prompt(
+        user,
+        style_samples=["هلا يا غالي، منورنا"],
+        intent="general",
+    )
+
+    assert "## VOICE / STYLE" in prompt
+    assert "هلا يا غالي، منورنا" in prompt
+
+
+def test_assistant_profile_data_exposes_agent_settings_for_grounding():
+    persona = (
+        '<!-- {"prompt_mode":"custom_settings","dialect":"jordanian",'
+        '"working_hours":"9 صباحا - 5 مساء","agent_name":"مساعد المتجر"} -->'
+        "نبرة لطيفة ومختصرة."
+    )
+
+    data = assistant_profile_data(persona, {"emoji": "medium"})
+
+    assert data["source"] == "client_ai_persona_settings"
+    assert data["agent_name"] == "مساعد المتجر"
+    assert data["working_hours"] == "9 صباحا - 5 مساء"
+    assert data["emoji"] == "medium"
+    assert "persona_text" not in data
+
+
+def test_custom_banned_phrases_are_enforced_locally():
+    verifier = AnswerVerifier(api_key="test-key")
+
+    result = verifier._pre_check("أكيد بنعطيك خصم سري", banned_phrases=["خصم سري"])
+
+    assert result is not None
+    assert result.verdict == BLOCKED_UNGROUNDED
+    assert result.flagged_claims == ["خصم سري"]
 
 
 def test_product_image_is_selected_only_when_customer_asks_for_image():
