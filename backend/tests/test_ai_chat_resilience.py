@@ -9,21 +9,32 @@ from models import (
     BusinessPolicy,
     ChatSession,
     DeliveryRule,
+    Escalation,
+    HandoffSession,
     Item,
     Message,
     User,
 )
-from services.answer_verifier import SAFE_TO_SEND, VerificationResult
+from services.answer_verifier import (
+    ASK_CLARIFICATION,
+    HUMAN_HANDOFF_REQUIRED,
+    SAFE_TO_SEND,
+    VerificationResult,
+)
 from services.ai_chat import (
     AI_PAUSED_REPLY,
     _get_cached_reply,
     _generate_reply,
+    _run_post_ai_automations,
     _run_pre_ai_automations,
     _response_cache,
     _store_cached_reply,
     _verify_and_finalize,
+    process_message,
     process_pending,
+    save_message,
 )
+from services.handoff_service import create_handoff
 
 
 def _user(**overrides):
@@ -78,6 +89,113 @@ def test_response_cache_is_disabled_by_default():
 
     assert _get_cached_reply(user.id, "كم رسوم التوصيل؟") is None
     assert _response_cache == {}
+
+
+@pytest.mark.asyncio
+async def test_save_message_can_stage_without_commit(db_session, monkeypatch):
+    user = _user()
+    session_id = uuid.uuid4()
+    session = ChatSession(id=session_id, user_id=user.id, channel="web")
+    db_session.add_all([user, session])
+    await db_session.commit()
+
+    async def fail_commit():
+        raise AssertionError("save_message(commit=False) must not commit")
+
+    monkeypatch.setattr(db_session, "commit", fail_commit)
+
+    msg = await save_message(
+        session_id,
+        "assistant",
+        "staged reply",
+        "text",
+        None,
+        db_session,
+        commit=False,
+    )
+
+    assert msg.id is not None
+    rows = (
+        await db_session.execute(
+            select(Message).where(Message.session_id == session_id)
+        )
+    ).scalars().all()
+    assert [row.content for row in rows] == ["staged reply"]
+    await db_session.rollback()
+
+
+@pytest.mark.asyncio
+async def test_create_handoff_can_stage_without_commit(db_session, monkeypatch):
+    user = _user()
+    user_id = user.id
+    session_id = uuid.uuid4()
+    session = ChatSession(id=session_id, user_id=user_id, channel="web")
+    db_session.add_all([user, session])
+    await db_session.commit()
+
+    async def fail_commit():
+        raise AssertionError("create_handoff(commit=False) must not commit")
+
+    monkeypatch.setattr(db_session, "commit", fail_commit)
+
+    handoff = await create_handoff(
+        session_id=session_id,
+        user_id=user_id,
+        reason="Verifier requested handoff",
+        db=db_session,
+        commit=False,
+    )
+
+    assert handoff.id is not None
+    assert session.is_escalated is True
+    handoff_rows = (
+        await db_session.execute(
+            select(HandoffSession).where(HandoffSession.session_id == session_id)
+        )
+    ).scalars().all()
+    escalation_rows = (
+        await db_session.execute(
+            select(Escalation).where(Escalation.session_id == session_id)
+        )
+    ).scalars().all()
+    assert len(handoff_rows) == 1
+    assert len(escalation_rows) == 1
+    await db_session.rollback()
+
+
+@pytest.mark.asyncio
+async def test_process_message_ai_paused_commits_turn_once(db_session, monkeypatch):
+    user = _user(ai_auto_reply_enabled=False)
+    session_id = uuid.uuid4()
+    session = ChatSession(id=session_id, user_id=user.id, channel="web")
+    db_session.add_all([user, session])
+    await db_session.commit()
+    await db_session.refresh(user)
+
+    original_commit = db_session.commit
+    commit_count = 0
+
+    async def counted_commit():
+        nonlocal commit_count
+        commit_count += 1
+        await original_commit()
+
+    monkeypatch.setattr(db_session, "commit", counted_commit)
+
+    result = await process_message("hi", user, session_id, db_session)
+
+    assert result["reply"] == AI_PAUSED_REPLY
+    assert commit_count == 1
+    rows = (
+        await db_session.execute(
+            select(Message)
+            .where(Message.session_id == session_id)
+        )
+    ).scalars().all()
+    assert {(row.role, row.content) for row in rows} == {
+        ("user", "hi"),
+        ("assistant", AI_PAUSED_REPLY),
+    }
 
 
 @pytest.mark.asyncio
@@ -383,6 +501,67 @@ async def test_pre_ai_automation_shadow_mode_does_not_hijack_price_question(
 
 
 @pytest.mark.asyncio
+async def test_post_ai_automation_stages_actions_without_commit(
+    db_session,
+    monkeypatch,
+):
+    user = _user()
+    user_id = user.id
+    session_id = uuid.uuid4()
+    session = ChatSession(id=session_id, user_id=user_id, channel="web")
+    rule = AutomationRule(
+        user_id=user_id,
+        name="Low confidence notification",
+        trigger_type="low_confidence",
+        trigger_config={},
+        conditions=[],
+        actions=[
+            {
+                "type": "send_notification",
+                "config": {"text": "Review this AI reply"},
+            }
+        ],
+        is_active=True,
+    )
+    db_session.add_all([user, session, rule])
+    await db_session.commit()
+    await db_session.refresh(user)
+    await db_session.refresh(session)
+
+    async def fail_commit():
+        raise AssertionError("chat-triggered automations must not commit")
+
+    monkeypatch.setattr(db_session, "commit", fail_commit)
+
+    results = await _run_post_ai_automations(
+        user=user,
+        session=session,
+        customer_message="Can you confirm this?",
+        final_reply="I need to verify that.",
+        action="blocked",
+        result=VerificationResult(
+            verdict=ASK_CLARIFICATION,
+            risk_score=0.7,
+            reasons=["needs verification"],
+        ),
+        retrieved_data={},
+        db=db_session,
+    )
+
+    assert any(result["status"] == "executed" for result in results)
+    rows = (
+        await db_session.execute(
+            select(Message).where(
+                Message.session_id == session_id,
+                Message.role == "system",
+            )
+        )
+    ).scalars().all()
+    assert [row.content for row in rows] == ["Review this AI reply"]
+    await db_session.rollback()
+
+
+@pytest.mark.asyncio
 async def test_verify_and_finalize_uses_draft_when_humanizer_returns_empty(
     db_session,
     monkeypatch,
@@ -467,3 +646,74 @@ async def test_verify_and_finalize_uses_draft_when_humanizer_returns_empty(
     assert reply == "Grounded answer"
     assert action == "sent"
     assert result.verdict == SAFE_TO_SEND
+
+
+@pytest.mark.asyncio
+async def test_verify_and_finalize_handoff_disabled_uses_safe_response_not_draft(
+    db_session,
+    monkeypatch,
+):
+    user = _user()
+    session_id = uuid.uuid4()
+    session = ChatSession(id=session_id, user_id=user.id, channel="web")
+    db_session.add_all([user, session])
+    await db_session.flush()
+
+    async def fake_openai_key(_db):
+        return "sk-test"
+
+    async def fake_handoff_enabled(_db):
+        return False
+
+    async def fake_prompt_overrides(*_args, **_kwargs):
+        return {}
+
+    async def fake_persona_config(*_args, **_kwargs):
+        return {}
+
+    class FailClosedVerifier:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        async def verify(self, *_args, **_kwargs):
+            return VerificationResult(
+                verdict=HUMAN_HANDOFF_REQUIRED,
+                risk_score=1.0,
+                reasons=["Verification service unavailable; fail-closed"],
+                safe_response="لحظة من فضلك، خليني أتأكد من المعلومة وأرجعلك.",
+            )
+
+        def drain_usage_calls(self):
+            return []
+
+        async def log_verification(self, **_kwargs):
+            return None
+
+    monkeypatch.setattr("services.ai_chat.effective_openai_key", fake_openai_key)
+    monkeypatch.setattr(
+        "services.ai_chat.effective_human_handoff_enabled",
+        fake_handoff_enabled,
+    )
+    monkeypatch.setattr(
+        "services.ai_chat.get_client_prompt_overrides",
+        fake_prompt_overrides,
+    )
+    monkeypatch.setattr(
+        "services.ai_chat.get_effective_persona_config",
+        fake_persona_config,
+    )
+    monkeypatch.setattr("services.ai_chat.AnswerVerifier", FailClosedVerifier)
+
+    reply, action, result = await _verify_and_finalize(
+        "Unverified draft with price 999 JOD",
+        "customer question",
+        {},
+        user,
+        session_id,
+        db_session,
+    )
+
+    assert reply == "لحظة من فضلك، خليني أتأكد من المعلومة وأرجعلك."
+    assert "999 JOD" not in reply
+    assert action == "modified"
+    assert result.verdict == ASK_CLARIFICATION

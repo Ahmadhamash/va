@@ -12,8 +12,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from models import (
-    Booking, DeliveryRule, Escalation, Item, ItemVariant,
-    Offer, Package, BusinessPolicy, TimeSlot, ChatSession, User
+    DeliveryRule, Escalation, Item, ItemVariant,
+    Offer, Package, BusinessPolicy, ChatSession, User
+)
+from services.booking_service import (
+    BookingServiceError,
+    BookingSlotFull,
+    create_booking_atomic,
+    list_available_booking_slots,
 )
 
 logger = logging.getLogger("ai_tools")
@@ -316,6 +322,17 @@ _INTENT_TOOL_NAMES = {
     "support": {"get_delivery_info", "get_policies", "get_business_info", "get_order_status", "analyze_webpage"},
     "booking": {"get_available_slots", "create_booking"},
     "general": {"get_business_info"},
+    "uncertain": {
+        "get_business_info",
+        "get_catalog",
+        "get_offers",
+        "get_packages",
+        "get_delivery_info",
+        "get_policies",
+        "get_order_status",
+        "get_available_slots",
+        "get_payment_methods",
+    },
 }
 
 
@@ -329,8 +346,12 @@ def get_tools_for_intents(
         if include_handoff and t["function"]["name"] == "escalate_to_human"
     ]
     allowed: set[str] = set()
-    for intent in intents:
-        allowed.update(_INTENT_TOOL_NAMES.get(intent, set()))
+    intent_set = set(intents)
+    if "uncertain" in intent_set:
+        allowed.update(_INTENT_TOOL_NAMES["uncertain"])
+    else:
+        for intent in intent_set:
+            allowed.update(_INTENT_TOOL_NAMES.get(intent, set()))
     return base + [t for t in TOOLS if t["function"]["name"] in allowed]
 
 
@@ -1253,7 +1274,7 @@ async def _exec_get_order_status(
 async def _exec_get_available_slots(
     func_args: dict, user_id: uuid.UUID, db: AsyncSession
 ) -> dict:
-    from datetime import date, datetime, timedelta
+    from datetime import date, timedelta
     target_str = func_args.get("target_date", "")
     try:
         target_date = date.fromisoformat(target_str) if target_str else date.today() + timedelta(days=1)
@@ -1263,15 +1284,8 @@ async def _exec_get_available_slots(
     DAY_NAMES = ["الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت", "الأحد"]
     day_of_week = target_date.weekday()
 
-    result = await db.execute(
-        select(TimeSlot).where(
-            TimeSlot.user_id == user_id,
-            TimeSlot.day_of_week == day_of_week,
-            TimeSlot.is_active.is_(True),
-        )
-    )
-    slots = list(result.scalars().all())
-    if not slots:
+    available_slots = await list_available_booking_slots(db, user_id, target_date)
+    if not available_slots:
         return {
             "date": target_date.isoformat(),
             "day": DAY_NAMES[day_of_week],
@@ -1279,37 +1293,13 @@ async def _exec_get_available_slots(
             "note": "No available slots on this day",
         }
 
-    # Count existing bookings
-    from sqlalchemy import func as sqlfunc
-    bk_result = await db.execute(
-        select(Booking.booking_time, sqlfunc.count())
-        .where(
-            Booking.user_id == user_id,
-            Booking.booking_date == target_date,
-            Booking.status.in_(["pending", "confirmed"]),
-        )
-        .group_by(Booking.booking_time)
-    )
-    booked = dict(bk_result.all())
-
-    available = []
-    for slot in slots:
-        current_time = datetime.combine(target_date, slot.start_time)
-        end = datetime.combine(target_date, slot.end_time)
-        while current_time + timedelta(minutes=slot.slot_duration_minutes) <= end:
-            slot_time = current_time.time()
-            existing = booked.get(slot_time, 0)
-            if existing < slot.max_bookings_per_slot:
-                available.append({
-                    "time": slot_time.strftime("%H:%M"),
-                    "remaining": slot.max_bookings_per_slot - existing,
-                })
-            current_time += timedelta(minutes=slot.slot_duration_minutes)
-
     return {
         "date": target_date.isoformat(),
         "day": DAY_NAMES[day_of_week],
-        "available_slots": available,
+        "available_slots": [
+            {"time": slot.time.strftime("%H:%M"), "remaining": slot.remaining}
+            for slot in available_slots
+        ],
     }
 
 
@@ -1328,46 +1318,22 @@ async def _exec_create_booking(
     if not customer_name:
         return {"error": "Customer name is required."}
 
-    # SSRF & Overbooking fix: validate slot capacity
-    day_of_week = bk_date.weekday()
-    from sqlalchemy import select, func as sqlfunc
-    
-    # 1. Verify slot exists
-    slot_stmt = select(TimeSlot).where(
-        TimeSlot.user_id == user_id,
-        TimeSlot.day_of_week == day_of_week,
-        TimeSlot.start_time <= bk_time,
-        TimeSlot.end_time >= bk_time,
-        TimeSlot.is_active.is_(True)
-    )
-    slot = (await db.execute(slot_stmt)).scalars().first()
-    if not slot:
-        return {"error": "The requested time is outside available business hours."}
-        
-    # 2. Check capacity
-    count_stmt = select(sqlfunc.count()).where(
-        Booking.user_id == user_id,
-        Booking.booking_date == bk_date,
-        Booking.booking_time == bk_time,
-        Booking.status.in_(["pending", "confirmed"])
-    )
-    existing_count = (await db.execute(count_stmt)).scalar() or 0
-    if existing_count >= slot.max_bookings_per_slot:
-        return {"error": "Sorry, this time slot is already fully booked. Please choose another time."}
-
-    booking = Booking(
-        user_id=user_id,
-        session_id=session_id,
-        customer_name=customer_name,
-        customer_phone=func_args.get("customer_phone"),
-        service_name=func_args.get("service_name"),
-        booking_date=bk_date,
-        booking_time=bk_time,
-        status="pending",
-    )
-    db.add(booking)
-    await db.commit()
-    await db.refresh(booking)
+    try:
+        booking = await create_booking_atomic(
+            db,
+            user_id=user_id,
+            session_id=session_id,
+            customer_name=customer_name,
+            customer_phone=func_args.get("customer_phone"),
+            service_name=func_args.get("service_name"),
+            booking_date=bk_date,
+            booking_time=bk_time,
+            status="pending",
+        )
+    except BookingSlotFull as exc:
+        return {"error": str(exc)}
+    except BookingServiceError as exc:
+        return {"error": str(exc)}
 
     return {
         "booked": True,

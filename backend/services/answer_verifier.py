@@ -17,7 +17,8 @@ Possible verdicts:
 - TOOL_RESULT_REQUIRED    → force a tool call before answering
 
 Anti-hallucination is more important than speed.
-If not sure, do not answer.
+If not sure, do not answer. If the verifier service is unavailable, fail closed
+with a safe fallback or handoff verdict; never send the uncertified draft.
 """
 from __future__ import annotations
 
@@ -26,6 +27,7 @@ import logging
 import re
 import uuid
 from dataclasses import dataclass, field
+from time import monotonic
 from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -34,6 +36,13 @@ from services.ai_usage import usage_call_from_response
 
 logger = logging.getLogger("answer_verifier")
 OPENAI_TIMEOUT_SECONDS = 30.0
+VERIFIER_CIRCUIT_FAILURE_THRESHOLD = 3
+VERIFIER_CIRCUIT_COOLDOWN_SECONDS = 30.0
+VERIFIER_UNAVAILABLE_REASON = "Verification service unavailable; fail-closed"
+VERIFIER_INVALID_JSON_REASON = "Verifier returned unparseable response; fail-closed"
+VERIFIER_CIRCUIT_OPEN_REASON = (
+    "Verification circuit open after repeated service failures; fail-closed"
+)
 
 # ── Verdicts ─────────────────────────────────────────────────────────────
 SAFE_TO_SEND = "SAFE_TO_SEND"
@@ -117,6 +126,7 @@ SAFE_RESPONSES = {
     "price_unknown": "مش ظاهر عندي السعر المؤكد حالياً. ابعتلي اسم المنتج بالضبط وبشيكلك عليه.",
     "uncertain": "خليني أتأكد من المعلومة قبل ما أعطيك جواب نهائي.",
     "hallucination_blocked": "لحظة من فضلك، سأتأكد من المعلومة وأعود لك.",
+    "verification_unavailable": "لحظة من فضلك، خليني أتأكد من المعلومة وأرجعلك.",
     "handoff": "لحظة من فضلك، سأحوّلك إلى أحد الزملاء ليساعدك بشكل أفضل.",
     "off_topic": "أنا هنا لمساعدتك بمنتجاتنا وخدماتنا.",
 }
@@ -132,6 +142,70 @@ class VerificationResult:
     grounding_data_used: list[str] = field(default_factory=list)
     safe_response: Optional[str] = None
     modified_answer: Optional[str] = None
+
+
+class _VerifierCircuitBreaker:
+    """Small process-local circuit breaker for verifier service outages."""
+
+    def __init__(
+        self,
+        *,
+        failure_threshold: int = VERIFIER_CIRCUIT_FAILURE_THRESHOLD,
+        cooldown_seconds: float = VERIFIER_CIRCUIT_COOLDOWN_SECONDS,
+    ) -> None:
+        self.failure_threshold = failure_threshold
+        self.cooldown_seconds = cooldown_seconds
+        self.consecutive_failures = 0
+        self.opened_at = 0.0
+
+    def is_open(self) -> bool:
+        if self.consecutive_failures < self.failure_threshold:
+            return False
+
+        elapsed = monotonic() - self.opened_at
+        if elapsed < self.cooldown_seconds:
+            return True
+
+        self.reset()
+        return False
+
+    def record_success(self) -> None:
+        self.reset()
+
+    def record_failure(self) -> None:
+        self.consecutive_failures += 1
+        if self.consecutive_failures >= self.failure_threshold:
+            self.opened_at = monotonic()
+
+    def reset(self) -> None:
+        self.consecutive_failures = 0
+        self.opened_at = 0.0
+
+    def snapshot(self) -> dict:
+        return {
+            "consecutive_failures": self.consecutive_failures,
+            "open": self.is_open(),
+            "failure_threshold": self.failure_threshold,
+            "cooldown_seconds": self.cooldown_seconds,
+        }
+
+
+_VERIFIER_CIRCUIT = _VerifierCircuitBreaker()
+
+
+def _reset_verifier_circuit() -> None:
+    """Reset process-local verifier outage state for isolated test scenarios."""
+
+    _VERIFIER_CIRCUIT.reset()
+
+
+def _fail_closed_verifier_result(reason: str) -> VerificationResult:
+    return VerificationResult(
+        verdict=HUMAN_HANDOFF_REQUIRED,
+        risk_score=1.0,
+        reasons=[reason],
+        safe_response=SAFE_RESPONSES["verification_unavailable"],
+    )
 
 
 # ── Verifier prompt ──────────────────────────────────────────────────────
@@ -235,6 +309,13 @@ class AnswerVerifier:
         # Determine model based on risk assessment
         model = HIGH_RISK_MODEL if force_high_risk else DEFAULT_VERIFIER_MODEL
 
+        if _VERIFIER_CIRCUIT.is_open():
+            logger.warning(
+                "Answer verifier circuit is open; failing closed. state=%s",
+                _VERIFIER_CIRCUIT.snapshot(),
+            )
+            return _fail_closed_verifier_result(VERIFIER_CIRCUIT_OPEN_REASON)
+
         # Build verification request
         user_content = json.dumps(
             {
@@ -286,6 +367,7 @@ class AnswerVerifier:
                     banned_phrases=banned_phrases,
                 )
 
+            _VERIFIER_CIRCUIT.record_success()
             return VerificationResult(
                 verdict=verdict,
                 risk_score=risk_score,
@@ -297,20 +379,19 @@ class AnswerVerifier:
             )
 
         except json.JSONDecodeError:
-            logger.error("Verifier returned invalid JSON")
-            return VerificationResult(
-                verdict=HUMAN_HANDOFF_REQUIRED,
-                risk_score=0.8,
-                reasons=["Verifier returned unparseable response"],
+            _VERIFIER_CIRCUIT.record_failure()
+            logger.error(
+                "Verifier returned invalid JSON; failing closed. state=%s",
+                _VERIFIER_CIRCUIT.snapshot(),
             )
+            return _fail_closed_verifier_result(VERIFIER_INVALID_JSON_REASON)
         except Exception:
-            logger.exception("Answer verification failed")
-            # On verifier failure → pass with caution
-            return VerificationResult(
-                verdict=SAFE_TO_SEND,
-                risk_score=0.5,
-                reasons=["Verification service unavailable. Proceed with caution."],
+            _VERIFIER_CIRCUIT.record_failure()
+            logger.exception(
+                "Answer verification failed; failing closed. state=%s",
+                _VERIFIER_CIRCUIT.snapshot(),
             )
+            return _fail_closed_verifier_result(VERIFIER_UNAVAILABLE_REASON)
 
     def _pre_check(
         self,

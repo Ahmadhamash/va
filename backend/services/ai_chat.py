@@ -264,7 +264,7 @@ def _max_tokens_for_intent(intent: str, *, after_tools: bool = False) -> int:
         return 280
     if intent == "booking":
         return 520 if after_tools else 420
-    if intent in {"sales", "support"}:
+    if intent in {"sales", "support", "uncertain"}:
         return 650 if after_tools else 520
     return 500
 
@@ -711,6 +711,7 @@ async def _run_pre_ai_automations(
             user.id,
             db,
             dry_run=PRE_AI_AUTOMATIONS_SHADOW_MODE,
+            commit=False,
         )
         results.extend(trigger_results)
 
@@ -806,6 +807,7 @@ async def _run_post_ai_automations(
             context,
             user.id,
             db,
+            commit=False,
         )
         results.extend(trigger_results)
 
@@ -857,7 +859,14 @@ async def save_message(
     db: AsyncSession,
     tool_calls: dict | None = None,
     processed: bool = True,
+    commit: bool = True,
 ) -> Message:
+    """Persist a chat message.
+
+    Defaults to the historical auto-commit behavior for compatibility. Critical
+    multi-write flows pass ``commit=False`` so messages, processed flags,
+    credits, and verification logs can be committed as one database unit.
+    """
     msg = Message(
         session_id=session_id,
         role=role,
@@ -868,8 +877,11 @@ async def save_message(
         processed=processed,
     )
     db.add(msg)
-    await db.commit()
-    await db.refresh(msg)
+    if commit:
+        await db.commit()
+        await db.refresh(msg)
+    else:
+        await db.flush()
     return msg
 
 
@@ -1283,7 +1295,7 @@ async def _generate_reply(
     )
     workflows = list((await db.execute(stmt_wf)).scalars().all())
 
-    from services.router import get_intent_for_message, heuristic_intents_for_message
+    from services.router import expanded_intents_for_message, get_intent_for_message
     from config import settings
 
     api_key = await effective_openai_key(db)
@@ -1293,9 +1305,7 @@ async def _generate_reply(
     client = _client_for(api_key)
     
     intent = await get_intent_for_message(text_content, db, history=history)
-    intents = heuristic_intents_for_message(text_content)
-    if intent not in intents:
-        intents.insert(0, intent)
+    intents = expanded_intents_for_message(intent, text_content)
     allowed_tools = get_tools_for_intents(
         intents,
         include_handoff=human_handoff_enabled,
@@ -1916,7 +1926,7 @@ async def _verify_and_finalize(
         action = "modified"
 
     elif result.verdict == HUMAN_HANDOFF_REQUIRED and not human_handoff_enabled:
-        final_reply = humanized_draft or _handoff_disabled_fallback(customer_message)
+        final_reply = result.safe_response or _handoff_disabled_fallback(customer_message)
         action = "modified"
         ai_trace["verification"]["handoff_disabled_override"] = True
         result = VerificationResult(
@@ -1924,7 +1934,7 @@ async def _verify_and_finalize(
             risk_score=result.risk_score,
             reasons=[
                 *result.reasons,
-                "Human handoff disabled; AI continued with best safe response",
+                "Human handoff disabled; verifier fallback used instead of unverified draft",
             ],
             flagged_claims=result.flagged_claims,
             grounding_data_used=result.grounding_data_used,
@@ -1934,24 +1944,42 @@ async def _verify_and_finalize(
 
     elif result.verdict == HUMAN_HANDOFF_REQUIRED:
         # Create a handoff session
+        handoff_created = False
         try:
             from services.handoff_service import create_handoff
-            await create_handoff(
-                session_id=session_id,
-                user_id=user_id,
-                reason="AI verifier: " + "; ".join(result.reasons[:2]),
-                db=db,
-                priority="high" if result.risk_score > 0.8 else "normal",
-                ai_summary=f"Customer: {customer_message[:200]}\nDraft: {draft_answer_for_log[:200]}",
-                ai_suggested_reply=result.safe_response,
-            )
+            async with db.begin_nested():
+                await create_handoff(
+                    session_id=session_id,
+                    user_id=user_id,
+                    reason="AI verifier: " + "; ".join(result.reasons[:2]),
+                    db=db,
+                    priority="high" if result.risk_score > 0.8 else "normal",
+                    ai_summary=f"Customer: {customer_message[:200]}\nDraft: {draft_answer_for_log[:200]}",
+                    ai_suggested_reply=result.safe_response,
+                    commit=False,
+                )
+            handoff_created = True
         except Exception:
-            await db.rollback()
             logger.exception("Failed to create handoff session")
         final_reply = result.safe_response or SAFE_RESPONSES.get(
             "handoff", "لحظة من فضلك، رح أحولك لزميلي ليقدر يساعدك بشكل أفضل."
         )
         action = "handoff"
+        if not handoff_created:
+            final_reply = SAFE_RESPONSES["verification_unavailable"]
+            action = "blocked"
+            result = VerificationResult(
+                verdict=ASK_CLARIFICATION,
+                risk_score=result.risk_score,
+                reasons=[
+                    *result.reasons,
+                    "Human handoff creation failed; safe response used instead",
+                ],
+                flagged_claims=result.flagged_claims,
+                grounding_data_used=result.grounding_data_used,
+                safe_response=final_reply,
+                modified_answer=final_reply,
+            )
 
     elif result.verdict == BLOCKED_UNGROUNDED:
         final_reply = result.safe_response or SAFE_RESPONSES.get(
@@ -2167,15 +2195,17 @@ async def process_message(
     user_id = user.id
     ai_persona = user.ai_persona
     if not getattr(user, "ai_auto_reply_enabled", True):
-        await save_message(session_id, "user", user_message, media_type, media_url, db)
-        await save_message(session_id, "assistant", AI_PAUSED_REPLY, "text", None, db)
+        await save_message(session_id, "user", user_message, media_type, media_url, db, commit=False)
+        await save_message(session_id, "assistant", AI_PAUSED_REPLY, "text", None, db, commit=False)
+        await db.commit()
         return {
             "reply": AI_PAUSED_REPLY,
             "transcription": None,
         }
     if getattr(user, 'ai_credit_balance', 0) <= 0:
-        await save_message(session_id, "user", user_message, media_type, media_url, db)
-        await save_message(session_id, "assistant", NO_CREDIT_REPLY, "text", None, db)
+        await save_message(session_id, "user", user_message, media_type, media_url, db, commit=False)
+        await save_message(session_id, "assistant", NO_CREDIT_REPLY, "text", None, db, commit=False)
+        await db.commit()
         return {
             "reply": NO_CREDIT_REPLY,
             "transcription": None
@@ -2214,8 +2244,9 @@ async def process_message(
 
     if user_message and is_prompt_injection(user_message):
         reply = PROMPT_INJECTION_REPLY
-        await save_message(session_id, "user", user_message, media_type, media_url, db)
-        await save_message(session_id, "assistant", reply, "text", None, db)
+        await save_message(session_id, "user", user_message, media_type, media_url, db, commit=False)
+        await save_message(session_id, "assistant", reply, "text", None, db, commit=False)
+        await db.commit()
         return {
             "reply": reply,
             "transcription": transcription,
@@ -2224,7 +2255,7 @@ async def process_message(
     if media_type == "text":
         cached_reply = _get_cached_reply(user_id, user_message)
         if cached_reply:
-            await save_message(session_id, "user", user_message, media_type, media_url, db)
+            await save_message(session_id, "user", user_message, media_type, media_url, db, commit=False)
             await db.execute(
                 update(User)
                 .where(User.id == user_id, User.ai_credit_balance > 0)
@@ -2259,6 +2290,7 @@ async def process_message(
                 cached_media_type,
                 cached_audio_url,
                 db,
+                commit=False,
             )
             await db.commit()
             return {
@@ -2276,6 +2308,7 @@ async def process_message(
         media_url,
         db,
         processed=False,
+        commit=False,
     )
 
     session = await db.get(ChatSession, session_id)
@@ -2310,7 +2343,8 @@ async def process_message(
     except APIError:
         logger.exception("OpenAI API error")
         inbound_msg.processed = True
-        await save_message(session_id, "assistant", SERVICE_UNAVAILABLE_REPLY, "text", None, db)
+        await save_message(session_id, "assistant", SERVICE_UNAVAILABLE_REPLY, "text", None, db, commit=False)
+        await db.commit()
         return {
             "reply": SERVICE_UNAVAILABLE_REPLY,
             "transcription": transcription,
@@ -2318,7 +2352,8 @@ async def process_message(
     except Exception:  # noqa: BLE001
         logger.exception("Unexpected error in process_message")
         inbound_msg.processed = True
-        await save_message(session_id, "assistant", RETRIEVAL_ERROR_REPLY, "text", None, db)
+        await save_message(session_id, "assistant", RETRIEVAL_ERROR_REPLY, "text", None, db, commit=False)
+        await db.commit()
         return {
             "reply": RETRIEVAL_ERROR_REPLY,
             "transcription": transcription,
@@ -2386,7 +2421,7 @@ async def process_message(
                 reply_media_type = "audio"
 
     inbound_msg.processed = True
-    await save_message(session_id, "assistant", reply, reply_media_type, reply_media_url, db)
+    await save_message(session_id, "assistant", reply, reply_media_type, reply_media_url, db, commit=False)
     await db.commit()
 
     return {
@@ -2433,7 +2468,8 @@ async def process_pending(session_id: uuid.UUID, db: AsyncSession) -> dict | Non
         pending_to_mark = list((await db.execute(stmt)).scalars().all())
         for m in pending_to_mark:
             m.processed = True
-        await save_message(session_id, "assistant", AI_PAUSED_REPLY, "text", None, db)
+        await save_message(session_id, "assistant", AI_PAUSED_REPLY, "text", None, db, commit=False)
+        await db.commit()
         return {
             "reply": AI_PAUSED_REPLY,
             "channel": session_channel,
@@ -2461,7 +2497,8 @@ async def process_pending(session_id: uuid.UUID, db: AsyncSession) -> dict | Non
         for m in pending:
             m.processed = True
         reply = NO_CREDIT_REPLY
-        await save_message(session_id, "assistant", reply, "text", None, db)
+        await save_message(session_id, "assistant", reply, "text", None, db, commit=False)
+        await db.commit()
         return {
             "reply": reply,
             "channel": session_channel,
@@ -2654,7 +2691,7 @@ async def process_pending(session_id: uuid.UUID, db: AsyncSession) -> dict | Non
             if reply_media_url:
                 reply_media_type = "audio"
 
-    await save_message(session_id, "assistant", reply, reply_media_type, reply_media_url, db)
+    await save_message(session_id, "assistant", reply, reply_media_type, reply_media_url, db, commit=False)
     await db.commit()
 
     return {

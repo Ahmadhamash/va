@@ -15,6 +15,7 @@ def test_openwa_signature_validation():
 
     assert _verify_openwa_signature(secret, raw, f"sha256={digest}")
     assert not _verify_openwa_signature(secret, raw, "sha256=bad")
+    assert not _verify_openwa_signature(None, raw, f"sha256={digest}")
 
 
 def test_openwa_message_extracts_nested_data():

@@ -73,10 +73,14 @@ async def create_handoff(
     ai_summary: str | None = None,
     ai_suggested_reply: str | None = None,
     verification_log_id: uuid.UUID | None = None,
+    commit: bool = True,
 ) -> HandoffSession:
     """Create a new handoff session and mark the chat as escalated.
 
-    Also creates a backward-compatible Escalation record.
+    Also creates a backward-compatible Escalation record. By default this keeps
+    the historical auto-commit behavior; AI turn handlers pass ``commit=False``
+    so handoff state is committed atomically with the customer/assistant
+    messages and verifier log.
     """
     reason, full_reason = _fit_reason(reason)
     reason_details = _append_full_reason(reason_details, full_reason)
@@ -117,10 +121,14 @@ async def create_handoff(
     db.add(escalation)
 
     try:
-        await db.commit()
-        await db.refresh(handoff)
+        if commit:
+            await db.commit()
+            await db.refresh(handoff)
+        else:
+            await db.flush()
     except Exception:
-        await db.rollback()
+        if commit:
+            await db.rollback()
         raise
 
     logger.info(

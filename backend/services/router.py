@@ -6,6 +6,9 @@ from services.openai_client import get_openai_client
 
 logger = logging.getLogger("router")
 ROUTER_TIMEOUT_SECONDS = 15.0
+BUSINESS_INTENTS = ("sales", "support", "booking")
+VALID_ROUTER_INTENTS = {"sales", "support", "booking", "general"}
+UNCERTAIN_INTENT = "uncertain"
 
 ROUTER_PROMPT = """
 You are a highly efficient message router for an e-commerce / service business chatbot.
@@ -153,6 +156,23 @@ def heuristic_intents_for_message(customer_message: str) -> list[str]:
     return intents or ["general"]
 
 
+def expanded_intents_for_message(
+    primary_intent: str, customer_message: str
+) -> list[str]:
+    """Return downstream candidate intents for tools and retrieval.
+
+    `uncertain` is intentionally not treated as `general`: when the router cannot
+    make a safe classification, downstream agents get a conservative read-only
+    business surface instead of casual-chat behavior.
+    """
+    heuristic_intents = heuristic_intents_for_message(customer_message)
+    if primary_intent == UNCERTAIN_INTENT:
+        return [UNCERTAIN_INTENT, *BUSINESS_INTENTS, "general"]
+    if primary_intent not in heuristic_intents:
+        return [primary_intent, *heuristic_intents]
+    return heuristic_intents
+
+
 def _intent_from_history(history: list[dict] | None) -> str | None:
     if not history:
         return None
@@ -173,6 +193,20 @@ def _is_followup(customer_message: str) -> bool:
     if len(text.split()) <= 4:
         return True
     return _contains_any(text, _FOLLOWUP_TERMS)
+
+
+def _parse_router_intent(raw_intent: str | None) -> str | None:
+    text = _normalise_message(raw_intent or "")
+    if not text:
+        return None
+    matches = [
+        intent
+        for intent in VALID_ROUTER_INTENTS
+        if re.search(rf"\b{re.escape(intent)}\b", text)
+    ]
+    if len(matches) == 1:
+        return matches[0]
+    return None
 
 
 async def get_intent_for_message(
@@ -211,15 +245,14 @@ async def get_intent_for_message(
             max_tokens=5,
         )
 
-        intent = response.choices[0].message.content.strip().lower()
-        
-        # Sanitize output
-        valid_intents = {"sales", "support", "booking", "general"}
-        for valid in valid_intents:
-            if valid in intent:
-                return valid
-                
-        return "general"  # Fallback
+        intent = _parse_router_intent(response.choices[0].message.content)
+        if intent is not None:
+            return intent
+
+        logger.warning(
+            "Router returned unparseable intent; using uncertain fallback."
+        )
+        return UNCERTAIN_INTENT
     except Exception:
-        logger.exception("Router classification failed, falling back to general.")
-        return "general"
+        logger.exception("Router classification failed; using uncertain fallback.")
+        return UNCERTAIN_INTENT

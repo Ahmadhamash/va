@@ -927,7 +927,8 @@ async def generate_openwa_webhook(
     integration = result.scalar_one_or_none()
 
     credentials = dict((integration.credentials or {}) if integration else {})
-    credentials.setdefault("webhook_secret", secrets.token_urlsafe(24))
+    if not str(credentials.get("webhook_secret") or "").strip():
+        credentials["webhook_secret"] = secrets.token_urlsafe(24)
     credentials["openwa_webhook_secret"] = credentials.get(
         "openwa_webhook_secret"
     ) or secrets.token_urlsafe(24)

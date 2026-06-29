@@ -1,8 +1,8 @@
 import uuid
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
@@ -13,8 +13,27 @@ from schemas.booking import (
     PaymentMethodsUpdate,
     TimeSlotCreate, TimeSlotOut, TimeSlotUpdate,
 )
+from services.booking_service import (
+    BookingNotFound,
+    BookingServiceError,
+    BookingSlotFull,
+    BookingSlotUnavailable,
+    create_booking_atomic,
+    list_available_booking_slots,
+    update_booking_atomic,
+)
 
 router = APIRouter(tags=["bookings"])
+
+
+def _raise_booking_http_error(exc: BookingServiceError) -> None:
+    if isinstance(exc, BookingNotFound):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    if isinstance(exc, BookingSlotFull):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    if isinstance(exc, BookingSlotUnavailable):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 DAY_NAMES_AR = ["الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت", "الأحد"]
 
@@ -116,11 +135,14 @@ async def create_booking(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    bk = Booking(user_id=current_user.id, **payload.model_dump())
-    db.add(bk)
-    await db.commit()
-    await db.refresh(bk)
-    return bk
+    try:
+        return await create_booking_atomic(
+            db,
+            user_id=current_user.id,
+            **payload.model_dump(),
+        )
+    except BookingServiceError as exc:
+        _raise_booking_http_error(exc)
 
 
 @router.patch("/bookings/{booking_id}", response_model=BookingOut)
@@ -130,17 +152,15 @@ async def update_booking(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(
-        select(Booking).where(Booking.id == booking_id, Booking.user_id == current_user.id)
-    )
-    bk = result.scalar_one_or_none()
-    if bk is None:
-        raise HTTPException(status_code=404, detail="Booking not found")
-    for field, value in payload.model_dump(exclude_unset=True).items():
-        setattr(bk, field, value)
-    await db.commit()
-    await db.refresh(bk)
-    return bk
+    try:
+        return await update_booking_atomic(
+            db,
+            user_id=current_user.id,
+            booking_id=booking_id,
+            updates=payload.model_dump(exclude_unset=True),
+        )
+    except BookingServiceError as exc:
+        _raise_booking_http_error(exc)
 
 
 @router.delete("/bookings/{booking_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -171,48 +191,15 @@ async def get_available_slots(
         target_date = date.today() + timedelta(days=1)
 
     day_of_week = target_date.weekday()
-    result = await db.execute(
-        select(TimeSlot).where(
-            TimeSlot.user_id == current_user.id,
-            TimeSlot.day_of_week == day_of_week,
-            TimeSlot.is_active.is_(True),
-        )
-    )
-    slots = list(result.scalars().all())
-    if not slots:
-        return {"date": target_date.isoformat(), "day": DAY_NAMES_AR[day_of_week], "available_slots": []}
-
-    # Count existing bookings for this date
-    bk_result = await db.execute(
-        select(Booking.booking_time, func.count())
-        .where(
-            Booking.user_id == current_user.id,
-            Booking.booking_date == target_date,
-            Booking.status.in_(["pending", "confirmed"]),
-        )
-        .group_by(Booking.booking_time)
-    )
-    booked = dict(bk_result.all())
-
-    available = []
-    for slot in slots:
-        # Generate individual time slots
-        current_time = datetime.combine(target_date, slot.start_time)
-        end = datetime.combine(target_date, slot.end_time)
-        while current_time + timedelta(minutes=slot.slot_duration_minutes) <= end:
-            t = current_time.time()
-            existing = booked.get(t, 0)
-            if existing < slot.max_bookings_per_slot:
-                available.append({
-                    "time": t.strftime("%H:%M"),
-                    "remaining": slot.max_bookings_per_slot - existing,
-                })
-            current_time += timedelta(minutes=slot.slot_duration_minutes)
+    available = await list_available_booking_slots(db, current_user.id, target_date)
 
     return {
         "date": target_date.isoformat(),
         "day": DAY_NAMES_AR[day_of_week],
-        "available_slots": available,
+        "available_slots": [
+            {"time": slot.time.strftime("%H:%M"), "remaining": slot.remaining}
+            for slot in available
+        ],
     }
 
 

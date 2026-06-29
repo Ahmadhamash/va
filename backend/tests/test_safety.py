@@ -27,6 +27,9 @@ from services.answer_verifier import (
     AnswerVerifier, VerificationResult,
     SAFE_TO_SEND, BLOCKED_UNGROUNDED, HUMAN_HANDOFF_REQUIRED,
     ASK_CLARIFICATION, SAFE_RESPONSES, BANNED_PHRASES_AR, BANNED_PHRASES_EN,
+    VERIFIER_CIRCUIT_OPEN_REASON,
+    VERIFIER_UNAVAILABLE_REASON,
+    _reset_verifier_circuit,
 )
 from services.channels.base import DeliveryResult, NormalizedIncomingMessage
 from services.channels.factory import get_adapter
@@ -42,9 +45,14 @@ from services.ai_tools import (
     _rank_catalog_rows,
     _tokens,
     get_tools_for_intent,
+    get_tools_for_intents,
 )
 from services.ai_chat import _try_static_catalog_reply
-from services.router import heuristic_intent_for_message
+from services.router import (
+    expanded_intents_for_message,
+    get_intent_for_message,
+    heuristic_intent_for_message,
+)
 from services.fact_guard import check_humanizer_preserved_facts
 from services.retrieval_plan import supplemental_tool_plan
 from models import (
@@ -154,6 +162,16 @@ class TestSmalltalkVerifier:
 # 3. UNKNOWN PRODUCT DOES NOT HALLUCINATE
 # ═══════════════════════════════════════════════════════════════════════
 class TestRouterGuardrails:
+    @staticmethod
+    def _router_response(content: str):
+        return SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(content=content)
+                )
+            ]
+        )
+
     def test_price_question_routes_to_sales_without_llm(self):
         assert heuristic_intent_for_message("\u0645\u0631\u062d\u0628\u0627 \u0643\u0645 \u0633\u0639\u0631 \u0627\u0644\u0633\u0645\u0627\u0639\u0629\u061f") == "sales"
 
@@ -186,6 +204,78 @@ class TestRouterGuardrails:
         assert heuristic_intent_for_message("\u0641\u064a\u0646\u0643\u0645\u061f") == "support"
         assert heuristic_intent_for_message("\u0628\u062f\u064a \u0627\u0639\u0631\u0641 \u0627\u0645\u0627\u0643\u0646\u0643\u0645") == "support"
         assert heuristic_intent_for_message("\u0646\u0642\u0627\u0637 \u0628\u064a\u0639") == "support"
+
+    @pytest.mark.asyncio
+    async def test_router_invalid_model_output_falls_back_to_uncertain(self, monkeypatch):
+        create = AsyncMock(return_value=self._router_response("probably business"))
+        client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+        monkeypatch.setattr("services.router.effective_openai_key", AsyncMock(return_value="sk-test"))
+        monkeypatch.setattr("services.router._client_for", lambda _api_key: client)
+
+        intent = await get_intent_for_message("that one from yesterday", MagicMock())
+
+        assert intent == "uncertain"
+
+    @pytest.mark.asyncio
+    async def test_router_multiple_model_intents_fall_back_to_uncertain(self, monkeypatch):
+        create = AsyncMock(return_value=self._router_response("sales or support"))
+        client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+        monkeypatch.setattr("services.router.effective_openai_key", AsyncMock(return_value="sk-test"))
+        monkeypatch.setattr("services.router._client_for", lambda _api_key: client)
+
+        intent = await get_intent_for_message("that thing we discussed", MagicMock())
+
+        assert intent == "uncertain"
+
+    @pytest.mark.asyncio
+    async def test_router_exception_falls_back_to_uncertain(self, monkeypatch):
+        create = AsyncMock(side_effect=RuntimeError("router unavailable"))
+        client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+        monkeypatch.setattr("services.router.effective_openai_key", AsyncMock(return_value="sk-test"))
+        monkeypatch.setattr("services.router._client_for", lambda _api_key: client)
+
+        intent = await get_intent_for_message("that thing we discussed", MagicMock())
+
+        assert intent == "uncertain"
+
+    @pytest.mark.asyncio
+    async def test_router_exact_general_still_routes_to_general(self, monkeypatch):
+        create = AsyncMock(return_value=self._router_response("general"))
+        client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+        monkeypatch.setattr("services.router.effective_openai_key", AsyncMock(return_value="sk-test"))
+        monkeypatch.setattr("services.router._client_for", lambda _api_key: client)
+
+        intent = await get_intent_for_message("nice weather today", MagicMock())
+
+        assert intent == "general"
+
+    def test_uncertain_intent_expands_to_business_candidates(self):
+        assert expanded_intents_for_message("uncertain", "that one") == [
+            "uncertain",
+            "sales",
+            "support",
+            "booking",
+            "general",
+        ]
+
+    def test_uncertain_intent_exposes_read_only_business_tools(self):
+        intents = expanded_intents_for_message("uncertain", "that one")
+        tool_names = {
+            t["function"]["name"]
+            for t in get_tools_for_intents(intents, include_handoff=False)
+        }
+
+        assert "get_catalog" in tool_names
+        assert "get_available_slots" in tool_names
+        assert "get_business_info" in tool_names
+        assert "create_booking" not in tool_names
+        assert "analyze_webpage" not in tool_names
+
+    def test_uncertain_pre_llm_retrieval_uses_business_info_only(self):
+        calls = supplemental_tool_plan("that one", "uncertain")
+        assert len(calls) == 1
+        assert calls[0].name == "get_business_info"
+        assert calls[0].args == {}
 
     def test_catalog_no_match_does_not_fall_back_to_full_catalog(self):
         path = os.path.join(os.path.dirname(__file__), "..", "services", "ai_tools.py")
@@ -474,7 +564,11 @@ class TestUnknownProductNoHallucination:
 # ═══════════════════════════════════════════════════════════════════════
 class TestVerifierJsonFailureSafe:
     def setup_method(self):
+        _reset_verifier_circuit()
         self.verifier = AnswerVerifier(api_key="sk-test")
+
+    def teardown_method(self):
+        _reset_verifier_circuit()
 
     @pytest.mark.asyncio
     async def test_invalid_json_returns_handoff(self):
@@ -489,14 +583,33 @@ class TestVerifierJsonFailureSafe:
             assert r.risk_score >= 0.7
 
     @pytest.mark.asyncio
-    async def test_api_error_passes_with_caution(self):
+    async def test_api_error_fails_closed(self):
         with patch.object(
             self.verifier._client.chat.completions, "create", new_callable=AsyncMock
         ) as mock:
             mock.side_effect = Exception("API down")
             r = await self.verifier.verify("test", {}, "test answer")
-            assert r.verdict == SAFE_TO_SEND
-            assert "caution" in r.reasons[0].lower()
+            assert r.verdict == HUMAN_HANDOFF_REQUIRED
+            assert r.risk_score == 1.0
+            assert r.reasons == [VERIFIER_UNAVAILABLE_REASON]
+            assert r.safe_response == SAFE_RESPONSES["verification_unavailable"]
+
+    @pytest.mark.asyncio
+    async def test_repeated_api_errors_open_circuit(self):
+        with patch.object(
+            self.verifier._client.chat.completions, "create", new_callable=AsyncMock
+        ) as mock:
+            mock.side_effect = Exception("API down")
+            for _ in range(3):
+                r = await self.verifier.verify("كم السعر؟", {}, "السعر 50 دينار")
+                assert r.verdict == HUMAN_HANDOFF_REQUIRED
+
+            mock.reset_mock()
+            r = await self.verifier.verify("كم السعر؟", {}, "السعر 50 دينار")
+
+            assert r.verdict == HUMAN_HANDOFF_REQUIRED
+            assert r.reasons == [VERIFIER_CIRCUIT_OPEN_REASON]
+            assert mock.await_count == 0
 
 
 # ═══════════════════════════════════════════════════════════════════════

@@ -1,7 +1,18 @@
 import uuid
 from datetime import date, datetime, time
 
-from sqlalchemy import Boolean, Date, ForeignKey, Integer, String, Text, Time, func
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    Date,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    Time,
+    func,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -16,6 +27,25 @@ class TimeSlot(Base):
     """
 
     __tablename__ = "time_slots"
+    __table_args__ = (
+        CheckConstraint(
+            "day_of_week >= 0 AND day_of_week <= 6",
+            name="check_time_slots_day_of_week",
+        ),
+        CheckConstraint(
+            "end_time > start_time",
+            name="check_time_slots_time_range",
+        ),
+        CheckConstraint(
+            "slot_duration_minutes > 0",
+            name="check_time_slots_duration_positive",
+        ),
+        CheckConstraint(
+            "max_bookings_per_slot > 0",
+            name="check_time_slots_capacity_positive",
+        ),
+        Index("idx_time_slots_user_day_active", "user_id", "day_of_week", "is_active"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -50,6 +80,19 @@ class Booking(Base):
     """A customer booking/appointment."""
 
     __tablename__ = "bookings"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending', 'confirmed', 'cancelled', 'rescheduled', 'completed')",
+            name="check_bookings_status",
+        ),
+        Index(
+            "idx_bookings_user_date_time_status",
+            "user_id",
+            "booking_date",
+            "booking_time",
+            "status",
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),

@@ -1,6 +1,4 @@
 import asyncio
-import hashlib
-import hmac
 import json
 import logging
 import time
@@ -24,6 +22,11 @@ from services.messaging_service import (
 from services.file_service import signed_upload_url
 from services.queue_service import schedule_session
 from services.ratelimit import limiter
+from services.webhook_security import (
+    configured_secret,
+    verify_hmac_sha256_signature,
+    verify_shared_secret,
+)
 
 logger = logging.getLogger("webhooks")
 
@@ -32,7 +35,9 @@ router = APIRouter(tags=["webhooks"])
 _CORS = {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, X-Webhook-Secret",
+    "Access-Control-Allow-Headers": (
+        "Content-Type, X-Webhook-Secret, X-Webhook-Signature, X-OpenWA-Signature"
+    ),
 }
 
 MANYCHAT_REPLY_TIMEOUT_SECONDS = 12.0
@@ -46,6 +51,75 @@ MANYCHAT_EMPTY_INPUT_REPLY = (
     "\u0627\u0628\u0639\u062a\u0644\u064a \u0633\u0624\u0627\u0644\u0643 \u0643\u062a\u0627\u0628\u0629 "
     "\u0648\u0628\u0633\u0627\u0639\u062f\u0643."
 )
+
+
+def _require_configured_secret(
+    credentials: dict,
+    key: str,
+    *,
+    route: str,
+    public_id: str,
+) -> str:
+    secret = configured_secret(credentials, key)
+    if secret is None:
+        logger.error(
+            "webhook_auth_missing_secret route=%s public_id_suffix=%s key=%s",
+            route,
+            public_id[-8:],
+            key,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="Webhook authentication is not configured",
+        )
+    return secret
+
+
+def _require_shared_secret(
+    credentials: dict,
+    supplied_secret: str | None,
+    *,
+    key: str,
+    route: str,
+    public_id: str,
+) -> None:
+    expected = _require_configured_secret(
+        credentials,
+        key,
+        route=route,
+        public_id=public_id,
+    )
+    if not verify_shared_secret(expected, supplied_secret):
+        logger.warning(
+            "webhook_auth_rejected route=%s public_id_suffix=%s reason=invalid_secret",
+            route,
+            public_id[-8:],
+        )
+        raise HTTPException(status_code=403, detail="Invalid secret")
+
+
+def _require_hmac_signature(
+    credentials: dict,
+    raw_body: bytes,
+    signature: str | None,
+    *,
+    key: str,
+    route: str,
+    public_id: str,
+) -> None:
+    expected = _require_configured_secret(
+        credentials,
+        key,
+        route=route,
+        public_id=public_id,
+    )
+    if not verify_hmac_sha256_signature(expected, raw_body, signature):
+        logger.warning(
+            "webhook_auth_rejected route=%s public_id_suffix=%s reason=bad_signature",
+            route,
+            public_id[-8:],
+        )
+        raise HTTPException(status_code=403, detail="Bad signature")
 
 
 # ─── Meta (Messenger + Instagram) ────────────────────────────────────────────
@@ -225,11 +299,14 @@ async def generic_inbound(
     if integration is None or integration.platform != "webhook":
         raise HTTPException(status_code=404, detail="Unknown webhook")
 
-    secret = (integration.credentials or {}).get("webhook_secret")
-    if secret:
-        import hmac
-        if not x_webhook_secret or not hmac.compare_digest(x_webhook_secret.encode(), secret.encode()):
-            raise HTTPException(status_code=403, detail="Invalid secret")
+    credentials = integration.credentials or {}
+    _require_shared_secret(
+        credentials,
+        x_webhook_secret,
+        key="webhook_secret",
+        route="generic",
+        public_id=public_id,
+    )
 
     try:
         body = await request.json()
@@ -437,20 +514,18 @@ async def manychat_inbound(
         raise HTTPException(status_code=404, detail="Unknown webhook")
     integration_user_id = integration.user_id
 
+    _require_shared_secret(
+        integration.credentials or {},
+        x_webhook_secret,
+        key="webhook_secret",
+        route="manychat",
+        public_id=public_id,
+    )
+
     try:
         body = await request.json()
     except Exception:  # noqa: BLE001
         raise HTTPException(status_code=400, detail="Invalid JSON body")
-
-    secret = (integration.credentials or {}).get("webhook_secret")
-    if secret:
-        import hmac
-
-        supplied_secret = x_webhook_secret or str(body.get("webhook_secret") or "")
-        if not supplied_secret or not hmac.compare_digest(
-            supplied_secret.encode(), secret.encode()
-        ):
-            raise HTTPException(status_code=403, detail="Invalid secret")
 
     channel = _manychat_channel(request, body)
     text = _manychat_text(body)
@@ -554,12 +629,10 @@ async def manychat_inbound(
 
 # ─── OpenWA / WhatsApp Web bridge ────────────────────────────────────────────
 def _verify_openwa_signature(secret: str | None, raw_body: bytes, signature: str | None) -> bool:
-    if not secret:
-        return True
-    if not signature or not signature.startswith("sha256="):
+    configured = str(secret or "").strip()
+    if not configured:
         return False
-    expected = hmac.new(secret.encode(), raw_body, hashlib.sha256).hexdigest()
-    return hmac.compare_digest(expected, signature.split("=", 1)[1])
+    return verify_hmac_sha256_signature(configured, raw_body, signature)
 
 
 def _openwa_message(payload: dict) -> dict:
@@ -629,6 +702,7 @@ async def openwa_inbound(
     request: Request,
     db: AsyncSession = Depends(get_db),
     x_openwa_signature: str | None = Header(default=None),
+    x_webhook_signature: str | None = Header(default=None),
 ):
     integration = await get_integration(public_id, db)
     if integration is None or integration.platform != "webhook":
@@ -636,9 +710,14 @@ async def openwa_inbound(
 
     raw = await request.body()
     credentials = integration.credentials or {}
-    secret = credentials.get("openwa_webhook_secret") or settings.OPENWA_WEBHOOK_SECRET
-    if not _verify_openwa_signature(secret, raw, x_openwa_signature):
-        raise HTTPException(status_code=403, detail="Bad signature")
+    _require_hmac_signature(
+        credentials,
+        raw,
+        x_openwa_signature or x_webhook_signature,
+        key="openwa_webhook_secret",
+        route="openwa",
+        public_id=public_id,
+    )
 
     try:
         payload = json.loads(raw.decode("utf-8") or "{}")

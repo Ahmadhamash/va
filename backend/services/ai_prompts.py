@@ -107,6 +107,14 @@ If the customer asks a broad catalog question such as "شو بتبيعوا؟",
 - The user is just chatting, greeting, or asking general non-product questions.
 - Respond nicely and naturally based on your persona.
 {general_handoff_rules}
+""",
+    "uncertain": """
+## UNCERTAIN INTENT RULES:
+- The router could not safely classify the customer's latest message. Do NOT treat it as casual general chat.
+- Use only read-only tools. Never create a booking, order, payment action, or escalation unless the customer's request is explicit.
+- If the message might be about products, policies, delivery, booking availability, payment, or business info, call the relevant read-only tool before answering.
+- If the request is still unclear after tool context, ask one concise clarifying question instead of guessing.
+- Do not mention product names, prices, availability, delivery terms, policies, booking slots, or business facts unless they came from tool data in this turn or previous verified data.
 """
 }
 

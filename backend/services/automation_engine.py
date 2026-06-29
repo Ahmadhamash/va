@@ -135,6 +135,7 @@ class AutomationEngine:
         db: AsyncSession,
         *,
         dry_run: bool = False,
+        commit: bool = True,
     ) -> list[dict]:
         """Evaluate all active rules for a trigger.
 
@@ -144,6 +145,9 @@ class AutomationEngine:
             user_id: The business owner's user ID
             db: Database session
             dry_run: If True, don't execute actions (just evaluate)
+            commit: If True, persist automation side effects immediately. Chat
+                turn handlers pass False so rule logs and actions are committed
+                with the surrounding message transaction.
 
         Returns:
             List of execution results
@@ -172,7 +176,7 @@ class AutomationEngine:
             start_ms = time.monotonic_ns()
             try:
                 result = await self._evaluate_single_rule(
-                    rule, context, db, dry_run=dry_run
+                    rule, context, db, dry_run=dry_run, commit=commit
                 )
                 elapsed_ms = int((time.monotonic_ns() - start_ms) / 1_000_000)
                 result["execution_time_ms"] = elapsed_ms
@@ -213,6 +217,7 @@ class AutomationEngine:
         db: AsyncSession,
         *,
         dry_run: bool = False,
+        commit: bool = True,
     ) -> dict:
         """Evaluate a single rule against the context."""
         result = {
@@ -231,7 +236,7 @@ class AutomationEngine:
             result["trigger_matched"] = False
             result["status"] = "trigger_not_matched"
             if not dry_run:
-                await self._log_run(rule, context, result, db)
+                await self._log_run(rule, context, result, db, commit=commit)
             return result
 
         # Check loop prevention
@@ -245,7 +250,7 @@ class AutomationEngine:
                     f"Max executions ({rule.max_executions_per_conversation}) "
                     f"reached for this conversation"
                 )
-                await self._log_run(rule, context, result, db)
+                await self._log_run(rule, context, result, db, commit=commit)
                 return result
 
         # Evaluate conditions
@@ -269,7 +274,7 @@ class AutomationEngine:
         if not all_matched:
             result["status"] = "conditions_not_matched"
             if not dry_run:
-                await self._log_run(rule, context, result, db)
+                await self._log_run(rule, context, result, db, commit=commit)
             return result
 
         # Execute actions
@@ -283,12 +288,12 @@ class AutomationEngine:
             executed = []
             for action in rule.actions or []:
                 action_result = await self._execute_action(
-                    action, context, rule.user_id, db
+                    action, context, rule.user_id, db, commit=commit
                 )
                 executed.append(action_result)
             result["actions_executed"] = executed
             result["status"] = "executed"
-            await self._log_run(rule, context, result, db)
+            await self._log_run(rule, context, result, db, commit=commit)
 
         return result
 
@@ -410,6 +415,8 @@ class AutomationEngine:
         context: AutomationContext,
         user_id: uuid.UUID,
         db: AsyncSession,
+        *,
+        commit: bool = True,
     ) -> dict:
         """Execute a single action."""
         action_type = action.get("type", "")
@@ -428,7 +435,7 @@ class AutomationEngine:
                     from services.ai_chat import save_message
                     await save_message(
                         context.session_id, "assistant", text,
-                        "text", None, db,
+                        "text", None, db, commit=commit,
                     )
 
             elif action_type == "handoff":
@@ -442,6 +449,7 @@ class AutomationEngine:
                         reason=reason,
                         db=db,
                         priority=priority,
+                        commit=commit,
                     )
                     result["handoff_created"] = True
 
@@ -482,6 +490,7 @@ class AutomationEngine:
                         "text",
                         None,
                         db,
+                        commit=commit,
                     )
                 result["notification_logged"] = True
 
@@ -532,6 +541,8 @@ class AutomationEngine:
         context: AutomationContext,
         result: dict,
         db: AsyncSession,
+        *,
+        commit: bool = True,
     ) -> None:
         """Log an automation run to the database."""
         try:
@@ -560,9 +571,16 @@ class AutomationEngine:
                 )
                 db.add(log)
 
-            await db.commit()
+            if commit:
+                await db.commit()
+            else:
+                await db.flush()
         except Exception:
+            if commit:
+                await db.rollback()
             logger.exception("Failed to log automation run")
+            if not commit:
+                raise
 
 
 # ── Templates ────────────────────────────────────────────────────────────

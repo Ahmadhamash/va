@@ -91,7 +91,7 @@ def _endpoints(platform: str, public_id: str) -> dict:
         return {
             "inbound_url": f"/api/webhooks/generic/{public_id}",
             "note": "POST {\"sender_id\": \"...\", \"message\": \"...\"} -> "
-            "{\"reply\": \"...\"}. Send X-Webhook-Secret if you set one.",
+            "{\"reply\": \"...\"}. Send the configured X-Webhook-Secret header.",
         }
     if platform == "widget":
         return {
@@ -170,9 +170,11 @@ async def create_channel(
 
     credentials = payload.credentials or {}
     if payload.platform in ("messenger", "instagram", "whatsapp"):
-        credentials.setdefault("verify_token", secrets.token_urlsafe(24))
+        if not str(credentials.get("verify_token") or "").strip():
+            credentials["verify_token"] = secrets.token_urlsafe(24)
     if payload.platform == "webhook":
-        credentials.setdefault("webhook_secret", secrets.token_urlsafe(24))
+        if not str(credentials.get("webhook_secret") or "").strip():
+            credentials["webhook_secret"] = secrets.token_urlsafe(24)
 
     integration = ChannelIntegration(
         user_id=current_user.id,

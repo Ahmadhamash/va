@@ -10,7 +10,7 @@ class ChannelCreate(BaseModel):
     platform: str = Field(description="messenger | instagram | whatsapp | webhook | widget")
     # Secrets vary per platform:
     #  messenger/instagram/whatsapp: page_access_token, app_secret, verify_token
-    #  webhook: webhook_secret (optional)
+    #  webhook: webhook_secret (generated when omitted or blank)
     credentials: dict = Field(default_factory=dict)
 
 

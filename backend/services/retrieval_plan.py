@@ -221,6 +221,9 @@ def supplemental_tool_plan(customer_message: str, intent: str) -> list[ToolCallP
             calls.append(ToolCallPlan("get_payment_methods", {}))
         return _dedupe(calls)
 
+    if intent == "uncertain":
+        return [ToolCallPlan("get_business_info", {})]
+
     if _has_any(text, _BUSINESS_INFO_TERMS):
         return [ToolCallPlan("get_business_info", {})]
     if _has_any(text, _DELIVERY_TERMS + _POLICY_TERMS):

@@ -183,7 +183,8 @@ async def _persist_openwa_credentials(
     session_id: str,
     session_name: str,
 ) -> None:
-    credentials.setdefault("webhook_secret", secrets.token_urlsafe(24))
+    if not str(credentials.get("webhook_secret") or "").strip():
+        credentials["webhook_secret"] = secrets.token_urlsafe(24)
     credentials["openwa_webhook_secret"] = webhook_secret
     credentials["openwa_api_url"] = _openwa_api_url()
     credentials["openwa_api_key"] = settings.OPENWA_API_KEY
@@ -284,7 +285,6 @@ async def openwa_link_state(
 
     webhook_secret = str(
         credentials.get("openwa_webhook_secret")
-        or settings.OPENWA_WEBHOOK_SECRET
         or secrets.token_urlsafe(32)
     )
     session_name = _session_name(user, credentials)

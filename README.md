@@ -137,7 +137,8 @@ See [`.env.example`](.env.example). Key ones:
     Send `X-Webhook-Secret`, `subscriber_id`, and `text`/`last_input_text`.
   - `POST /api/webhooks/openwa/{public_id}` — OpenWA / WhatsApp Web inbound
     bridge. Configure OpenWA session webhooks for `message.received`; the backend
-    answers with AI and sends the reply back through OpenWA.
+    requires the per-integration HMAC secret and sends the reply back through
+    OpenWA.
   - `POST /api/webhooks/widget/{public_id}/message` + `GET /api/widget/{public_id}.js`
     (embeddable chat bubble)
 
@@ -164,6 +165,43 @@ python -m scripts.create_admin --username admin --email a@x.com --password secre
    "fill in the blanks".
 5. Uploaded voice samples are injected as **style-only** references — the
    prompt explicitly forbids reusing any product/price/fact from them.
+6. A secondary Answer Verifier checks drafted replies before delivery. If the
+   verifier is unavailable or returns invalid output, the system fails closed
+   with a safe fallback or human handoff instead of sending the unverified
+   draft.
+
+## Booking safety
+
+- Booking creation and rescheduling must go through `services.booking_service`.
+  The service serializes each tenant/date/time mutation with a PostgreSQL
+  transaction advisory lock, locks matching schedule rows, then recalculates
+  active capacity before writing. This prevents concurrent AI/API requests from
+  overbooking the same slot.
+- Availability, API bookings, and AI-created bookings share the same slot
+  generation and capacity rules.
+
+## Webhook authentication
+
+- Generic and ManyChat webhooks require the configured `X-Webhook-Secret`.
+- OpenWA webhooks require an HMAC-SHA256 signature using the integration's
+  `openwa_webhook_secret`. Unsigned or unconfigured OpenWA callbacks are
+  rejected fail-closed.
+
+## Router safety
+
+- Router failures, malformed router model output, or ambiguous multi-intent
+  output resolve to `uncertain`, not `general`.
+- `uncertain` uses a conservative read-only business tool surface and asks for
+  clarification when verified data is insufficient.
+
+## Transaction boundaries
+
+- `save_message()` can stage messages with `commit=False`; AI turn handlers use
+  this mode so user messages, assistant replies, processed flags, credit updates,
+  and verification logs are committed as one logical unit.
+- Chat-triggered automations and verifier handoffs also use staged writes in
+  that turn transaction. Standalone handoff/automation callers keep their
+  historical immediate-commit behavior unless they opt into staging.
 
 ## Project layout
 
