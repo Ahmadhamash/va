@@ -412,7 +412,12 @@ def _manychat_public_media_url(url_or_path: str | None) -> str | None:
         return None
     if not domain.startswith(("http://", "https://")):
         domain = f"https://{domain}"
-    clean = signed_upload_url(raw.lstrip("/"), expires_minutes=120)
+    clean = raw.lstrip("/")
+    if clean.startswith("uploads/"):
+        clean = f"api/{clean}"
+    elif not clean.startswith("api/uploads/"):
+        clean = f"api/uploads/{clean}"
+    clean = signed_upload_url(clean, expires_minutes=120)
     return f"{domain}/{clean}"
 
 

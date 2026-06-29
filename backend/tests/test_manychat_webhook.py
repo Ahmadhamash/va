@@ -88,6 +88,13 @@ def test_manychat_public_media_url_is_https_and_signed(monkeypatch):
     assert "media_token=" in url
 
 
+def test_manychat_public_media_url_normalizes_uploads_prefix(monkeypatch):
+    monkeypatch.setattr("routers.webhooks.settings.DOMAIN", "assistant.example.com")
+    url = _manychat_public_media_url("/uploads/customer/product.jpg")
+    assert url.startswith("https://assistant.example.com/api/uploads/customer/product.jpg?")
+    assert "media_token=" in url
+
+
 def _request(query_string: str = "") -> Request:
     return Request(
         {
