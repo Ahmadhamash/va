@@ -109,6 +109,11 @@ _FOLLOWUP_TERMS = (
     "\u0628\u0631\u0636\u0648", "\u0648\u0627\u064a\u0634", "\u0648\u0634\u0648",
     "and", "what about", "also", "how about",
 )
+_PLACE_SALES_RE = re.compile(
+    r"(?:بتبيعوا|بتبيعو|بتبيع|تبيعوا|تبيعو|sell|selling).{0,20}"
+    r"(?:\sفي\s|\sب\s|\sداخل\s|\sin\s)",
+    re.IGNORECASE,
+)
 
 
 def _normalise_message(text: str) -> str:
@@ -133,6 +138,8 @@ def heuristic_intent_for_message(customer_message: str) -> str | None:
 
     if _contains_any(text, _BOOKING_TERMS):
         return "booking"
+    if _PLACE_SALES_RE.search(text):
+        return "support"
     if _contains_any(text, _SUPPORT_TERMS):
         return "support"
     if _contains_any(text, _SALES_TERMS):

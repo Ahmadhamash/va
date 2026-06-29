@@ -114,6 +114,14 @@ def test_sales_points_question_routes_to_support_tools():
     assert heuristic_intent_for_message("وين نقاط البيع؟") == "support"
 
 
+def test_sell_in_city_question_routes_to_business_info():
+    assert heuristic_intent_for_message("بتبيعوا في اربد؟") == "support"
+
+    calls = supplemental_tool_plan("بتبيعوا في اربد؟", "support")
+
+    assert [call.name for call in calls] == ["get_business_info"]
+
+
 def test_repair_plan_fetches_business_info_for_sales_points():
     calls = supplemental_tool_plan("وين نقاط البيع؟", "support")
 
@@ -183,4 +191,3 @@ async def test_structured_json_assistant_fact_is_decoded(db_session):
     branches_fact = next(f for f in facts if f["category"] == "sales_points")
     assert "Branch Name: فرع مكة, City: مكة المكرمة, Maps Link: https://maps/makkah" in branches_fact["content"]
     assert "Branch Name: فرع المدينة, City: المدينة المنورة" in branches_fact["content"]
-

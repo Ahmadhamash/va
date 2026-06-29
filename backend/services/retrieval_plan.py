@@ -100,6 +100,11 @@ _BUSINESS_INFO_TERMS = (
     "distributor", "distributors", "page identity",
     "account identity", "brand info",
 )
+_PLACE_SALES_RE = re.compile(
+    r"(?:بتبيعوا|بتبيعو|بتبيع|تبيعوا|تبيعو|sell|selling).{0,20}"
+    r"(?:\sفي\s|\sب\s|\sداخل\s|\sin\s)",
+    re.IGNORECASE,
+)
 _CATALOG_QUERY_STOPWORDS = {
     "\u0639\u0646\u062f\u0643\u0645", "\u0639\u0646\u062f\u0643\u0648",
     "\u0639\u0646\u062f\u0643\u0648\u0627", "\u0639\u0646\u062f\u0643",
@@ -189,6 +194,9 @@ def _dedupe(calls: list[ToolCallPlan]) -> list[ToolCallPlan]:
 def supplemental_tool_plan(customer_message: str, intent: str) -> list[ToolCallPlan]:
     text = _normalise(customer_message)
     calls: list[ToolCallPlan] = []
+
+    if _PLACE_SALES_RE.search(text):
+        return [ToolCallPlan("get_business_info", {})]
 
     if intent == "booking":
         calls.append(ToolCallPlan("get_available_slots", _booking_args(customer_message)))

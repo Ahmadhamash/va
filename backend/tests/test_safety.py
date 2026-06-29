@@ -466,6 +466,20 @@ class TestStaticCatalogReply:
         assert reply is not None
         assert "5 \u062f\u064a\u0646\u0627\u0631" in reply
 
+    def test_details_and_price_question_includes_description(self):
+        reply = _try_static_catalog_reply(
+            "\u0627\u0639\u0637\u064a\u0646\u064a \u062a\u0641\u0627\u0635\u064a\u0644 \u0639\u0646\u0647\u0627 \u0643\u0645 \u0633\u0639\u0631\u0647\u0627",
+            self.retrieved,
+            [
+                {"role": "assistant", "content": "\u0639\u0646\u062f\u0646\u0627 \u062e\u0648\u062e \u2014 Peach"},
+            ],
+            current_turn_keys=["get_catalog:{\"query\": \"\u062e\u0648\u062e\"}"],
+        )
+
+        assert reply is not None
+        assert "\u0642\u0637\u0639 \u0622\u064a\u0633 \u0643\u0631\u064a\u0645" in reply
+        assert "5 \u062f\u064a\u0646\u0627\u0631" in reply
+
     def test_overview_only_catalog_does_not_answer_prices(self):
         reply = _try_static_catalog_reply(
             "\u0643\u0645 \u0633\u0639\u0631 \u0627\u0644\u062e\u0648\u062e\u061f",

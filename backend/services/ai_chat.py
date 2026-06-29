@@ -124,6 +124,7 @@ _CURRENCY_LABELS = {
 
 
 _STATIC_TEXT_DIACRITICS_RE = re.compile(r"[\u064b-\u065f\u0670\u0640]")
+_STATIC_PLACE_TOKEN_RE = re.compile(r"[\s,\u060c/\\|+\-_.:;\u061f?!()]+")
 _STATIC_ORDER_STATUS_TERMS = (
     "\u0637\u0644\u0628\u064a", "\u0637\u0644\u0628\u0643",
     "\u0627\u0644\u0637\u0644\u0628", "\u0627\u0648\u0631\u062f\u0631",
@@ -238,6 +239,34 @@ _STATIC_FAST_PATH_BLOCKING_TERMS = (
     "catalog", "box", "boxes", "flavor", "flavors", "offer",
     "discount", "booking", "appointment",
 )
+_STATIC_LOCATION_SELL_TERMS = (
+    "بتبيعوا", "بتبيعو", "بتبيع", "تبيعوا", "تبيعو", "تبيع",
+    "بنلاقي", "بنلاقيكم", "بلاقي", "اشتري", "اشترى", "شراء",
+    "sell", "selling", "buy", "available in",
+)
+_STATIC_PLACE_PREPOSITIONS = (
+    "في", "ب", "داخل", "ل", "الى", "إلى", "in",
+)
+_STATIC_PLACE_QUERY_STOPWORDS = {
+    "وين", "وينكم", "فين", "فينكم", "اين", "اي", "شو", "اش", "ايش", "هل", "طيب",
+    "عندكم", "عندكو", "عندكوا", "عندنا", "في", "ب", "داخل", "من",
+    "الى", "الي", "ل", "نقاط", "نقطه", "نقطة", "البيع", "بيع",
+    "فروع", "فرع", "اماكن", "اماكنكم", "مكان", "مكانكم", "مكانكو",
+    "محلكم", "مواقع", "موقع", "عنوان", "عناوين", "عناوينكم",
+    "موزعين", "الموزعين",
+    "بتبيعوا", "بتبيعو", "بتبيع", "تبيعوا", "تبيعو", "تبيع",
+    "بنلاقي", "بنلاقيكم", "بلاقي", "اشتري", "اشترى", "شراء",
+    "اريد", "بدي", "بدنا", "عايز", "ابغى",
+    "توصيل", "دليفري", "شحن", "متاح", "موجود", "موجوده", "موجودة",
+    "available", "sell", "selling", "buy", "where", "to", "in",
+    "branch", "branches", "location", "locations", "sales", "point",
+    "points", "distributor", "distributors",
+}
+_DETAIL_REQUEST_RE = re.compile(
+    r"(?:تفاصيل|التفاصيل|وصف|اشرح|شرح|معلومات|عنها|عنه|عليها|عليه|"
+    r"شو\s+فيه|ايش\s+فيه|اش\s+فيه|مكونات|details|describe|description|info)",
+    re.IGNORECASE,
+)
 
 
 def _client_for(api_key: str):
@@ -321,11 +350,74 @@ def _store_cached_reply(
 def _normalise_static_text(text: str | None) -> str:
     clean = re.sub(r"\s+", " ", (text or "").strip().casefold())
     clean = _STATIC_TEXT_DIACRITICS_RE.sub("", clean)
-    return clean.replace("\u0623", "\u0627").replace("\u0625", "\u0627").replace("\u0622", "\u0627")
+    for src, dst in {
+        "\u0623": "\u0627",
+        "\u0625": "\u0627",
+        "\u0622": "\u0627",
+        "\u0649": "\u064a",
+        "\u0629": "\u0647",
+    }.items():
+        clean = clean.replace(src, dst)
+    return clean
 
 
 def _contains_static_term(text: str, terms: tuple[str, ...]) -> bool:
-    return any(term.casefold() in text for term in terms)
+    return any(_normalise_static_text(term) in text for term in terms)
+
+
+def _static_tokens(text: str | None) -> list[str]:
+    return [
+        token
+        for token in (
+            _normalise_static_text(raw)
+            for raw in _STATIC_PLACE_TOKEN_RE.split(text or "")
+        )
+        if token
+    ]
+
+
+def _strip_static_place_prefix(token: str) -> str:
+    for prefix in ("بال", "لل", "ب", "ل"):
+        if token.startswith(prefix) and len(token) - len(prefix) >= 3:
+            return token[len(prefix):]
+    return token
+
+
+def _edit_distance_at_most_one(left: str, right: str) -> bool:
+    if left == right:
+        return True
+    if abs(len(left) - len(right)) > 1:
+        return False
+    if min(len(left), len(right)) < 4:
+        return False
+
+    i = j = edits = 0
+    while i < len(left) and j < len(right):
+        if left[i] == right[j]:
+            i += 1
+            j += 1
+            continue
+        edits += 1
+        if edits > 1:
+            return False
+        if len(left) == len(right):
+            i += 1
+            j += 1
+        elif len(left) > len(right):
+            i += 1
+        else:
+            j += 1
+    if i < len(left) or j < len(right):
+        edits += 1
+    return edits <= 1
+
+
+def _static_token_matches_place(token: str, place_key: str) -> bool:
+    token = _strip_static_place_prefix(_normalise_static_text(token))
+    place_key = _normalise_static_text(place_key)
+    if not token or not place_key:
+        return False
+    return token == place_key or _edit_distance_at_most_one(token, place_key)
 
 
 def _static_requested_place(customer_message: str | None) -> tuple[str, str] | None:
@@ -336,7 +428,38 @@ def _static_requested_place(customer_message: str | None) -> tuple[str, str] | N
         normalised_alias = _normalise_static_text(alias)
         if normalised_alias and normalised_alias in text:
             return normalised_alias, label
+
+    tokens = _static_tokens(customer_message)
+    for index, token in enumerate(tokens):
+        previous = tokens[index - 1] if index else ""
+        has_place_context = previous in {
+            _normalise_static_text(term) for term in _STATIC_PLACE_PREPOSITIONS
+        }
+        if not has_place_context:
+            continue
+        for alias, label in _STATIC_PLACE_ALIASES:
+            normalised_alias = _normalise_static_text(alias)
+            if _static_token_matches_place(token, normalised_alias):
+                return normalised_alias, label
     return None
+
+
+def _static_has_place_sales_question(customer_message: str | None) -> bool:
+    text = _normalise_static_text(customer_message)
+    if not text or not _contains_static_term(text, _STATIC_LOCATION_SELL_TERMS):
+        return False
+    if _static_requested_place(customer_message):
+        return True
+
+    tokens = _static_tokens(customer_message)
+    if any(token in {_normalise_static_text(term) for term in _STATIC_PLACE_PREPOSITIONS} for token in tokens):
+        return True
+
+    for token in tokens:
+        stripped = _strip_static_place_prefix(token)
+        if stripped != token and stripped not in _STATIC_PLACE_QUERY_STOPWORDS:
+            return True
+    return False
 
 
 def _static_business_topics(customer_message: str | None) -> list[str]:
@@ -350,7 +473,53 @@ def _static_business_topics(customer_message: str | None) -> list[str]:
     for topic, terms in _STATIC_TOPIC_TERMS.items():
         if _contains_static_term(text, terms):
             topics.append(topic)
+    if "location" not in topics and _static_has_place_sales_question(customer_message):
+        topics.append("location")
     return topics
+
+
+def _static_place_filter_terms(
+    customer_message: str | None,
+    requested_place: tuple[str, str] | None,
+) -> tuple[str, ...]:
+    terms: list[str] = []
+    if requested_place:
+        place_key, place_label = requested_place
+        terms.extend([place_key, _normalise_static_text(place_label)])
+
+    for token in _static_tokens(customer_message):
+        token = _strip_static_place_prefix(token)
+        if len(token) < 3 or token in _STATIC_PLACE_QUERY_STOPWORDS:
+            continue
+        if token.startswith("ال") and len(token) > 4:
+            token = token[2:]
+        if len(token) >= 3 and token not in _STATIC_PLACE_QUERY_STOPWORDS:
+            terms.append(token)
+
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for term in terms:
+        key = _normalise_static_text(term)
+        if key and key not in seen:
+            deduped.append(key)
+            seen.add(key)
+    return tuple(deduped)
+
+
+def _static_line_matches_place_terms(line: str, place_terms: tuple[str, ...]) -> bool:
+    if not place_terms:
+        return False
+    normalised_line = _normalise_static_text(line)
+    line_tokens = _static_tokens(line)
+    for term in place_terms:
+        normalised_term = _normalise_static_text(term)
+        if not normalised_term:
+            continue
+        if normalised_term in normalised_line:
+            return True
+        if any(_static_token_matches_place(token, normalised_term) for token in line_tokens):
+            return True
+    return False
 
 
 def _static_fast_path_is_safe(customer_message: str | None) -> bool:
@@ -427,16 +596,15 @@ def _static_lines_from_block(block: str) -> list[str]:
 
 def _static_lines_for_place(
     block: str,
-    place: tuple[str, str],
+    place_terms: tuple[str, ...],
     *,
     include_generic: bool = False,
 ) -> list[str]:
-    place_key, _ = place
     raw_lines = [line for line in block.splitlines() if line.strip()]
     selected: list[str] = []
     for index, line in enumerate(raw_lines):
         normalised_line = _normalise_static_text(line)
-        matches_place = place_key in normalised_line
+        matches_place = _static_line_matches_place_terms(line, place_terms)
         matches_generic = include_generic and _contains_static_term(
             normalised_line,
             _STATIC_GENERIC_AREA_TERMS,
@@ -534,6 +702,7 @@ async def _try_static_business_reply(
     if not _static_fast_path_is_safe(customer_message):
         return None
     requested_place = _static_requested_place(customer_message)
+    place_terms = _static_place_filter_terms(customer_message, requested_place)
 
     result = await execute_db_function(
         "get_business_info",
@@ -557,10 +726,10 @@ async def _try_static_business_reply(
             block = _clean_static_fact_block(fact)
             if not block:
                 continue
-            if requested_place and topic in {"location", "delivery"}:
+            if place_terms and topic in {"location", "delivery"}:
                 lines = _static_lines_for_place(
                     block,
-                    requested_place,
+                    place_terms,
                     include_generic=topic == "delivery",
                 )
             else:
@@ -572,8 +741,8 @@ async def _try_static_business_reply(
                     seen.add(key)
 
     if not any(topic_lines.values()):
-        if requested_place and any(topic in {"location", "delivery"} for topic in topics):
-            _, place_label = requested_place
+        if (requested_place or place_terms) and any(topic in {"location", "delivery"} for topic in topics):
+            place_label = requested_place[1] if requested_place else place_terms[0]
             missing_bits = []
             if "location" in topics:
                 missing_bits.append(
@@ -595,7 +764,10 @@ async def _try_static_business_reply(
             retrieved_data,
         )
 
-    reply = _format_static_topic_reply(topic_lines, requested_place)
+    reply_place = requested_place
+    if reply_place is None and place_terms and any(topic in {"location", "delivery"} for topic in topics):
+        reply_place = (place_terms[0], place_terms[0])
+    reply = _format_static_topic_reply(topic_lines, reply_place)
     return _trim_static_reply(reply), retrieved_data
 
 
@@ -1091,7 +1263,8 @@ def _try_static_catalog_reply(
     asks_price = bool(_PRICE_REQUEST_RE.search(customer_message or ""))
     asks_image = _customer_asked_for_image(customer_message)
     asks_availability = bool(_AVAILABILITY_REQUEST_RE.search(customer_message or ""))
-    if not (asks_price or asks_image or asks_availability):
+    asks_details = bool(_DETAIL_REQUEST_RE.search(customer_message or ""))
+    if not (asks_price or asks_image or asks_availability or asks_details):
         return None
     if _MIXED_NON_CATALOG_REQUEST_RE.search(customer_message or ""):
         return None
@@ -1106,9 +1279,19 @@ def _try_static_catalog_reply(
         return None
 
     name = str(item.get("name") or "").strip()
+    description = str(item.get("description") or "").strip()
+    category = str(item.get("category") or "").strip()
     price = _format_catalog_price(item.get("price"), item.get("currency"))
     available = item.get("available")
     parts: list[str] = []
+
+    if asks_details:
+        if description:
+            parts.append(f"{name}: {description}")
+        elif category:
+            parts.append(f"{name} من قسم {category}.")
+        else:
+            parts.append(name)
 
     if asks_availability:
         if available is False:
