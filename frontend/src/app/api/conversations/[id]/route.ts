@@ -3,6 +3,29 @@ import { backendFetch, getTokenFromRequest } from "@/lib/backend-api";
 
 export const dynamic = "force-dynamic";
 
+function messageOrder(message: any) {
+  const time = new Date(message.created_at || message.createdAt || 0).getTime();
+  const senderRank =
+    message.role === "user" || message.sender === "CUSTOMER"
+      ? 0
+      : message.role === "agent" || message.sender === "HUMAN"
+        ? 1
+        : message.role === "assistant" || message.sender === "AI"
+          ? 2
+          : 3;
+  return { time: Number.isFinite(time) ? time : 0, senderRank, id: String(message.id || "") };
+}
+
+function sortMessages(messages: any[]) {
+  return [...messages].sort((a, b) => {
+    const left = messageOrder(a);
+    const right = messageOrder(b);
+    if (left.time !== right.time) return left.time - right.time;
+    if (left.senderRank !== right.senderRank) return left.senderRank - right.senderRank;
+    return left.id.localeCompare(right.id);
+  });
+}
+
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const token = getTokenFromRequest(request);
   const { id } = await params;
@@ -16,7 +39,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     if (!res.ok) {
         return NextResponse.json({ ok: false, error: "Failed to fetch conversation" }, { status: res.status });
     }
-    const messages = await res.json();
+    const messages = sortMessages(await res.json());
     
     // Fetch verification logs to get risk scores
     let logs: any[] = [];

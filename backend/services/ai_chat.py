@@ -89,6 +89,38 @@ _IMAGE_REQUEST_TERMS = (
     "صورة", "صوره", "صور", "شكل", "شكلها", "شكله", "شكلو", "شكلهم",
     "بتطلع", "تطلع",
 )
+_PRICE_REQUEST_RE = re.compile(
+    r"(?:سعر|السعر|سعره|سعرها|بكم|قديش|كم\s+سعر|حقه|حقها|price|cost)",
+    re.IGNORECASE,
+)
+_AVAILABILITY_REQUEST_RE = re.compile(
+    r"(?:متوفر|متوفرة|موجود|موجودة|عندكم|عندكو|available|in\s+stock)",
+    re.IGNORECASE,
+)
+_MIXED_NON_CATALOG_REQUEST_RE = re.compile(
+    r"(?:توصيل|دليفري|شحن|استلام|دفع|كاش|فيزا|ارجاع|إرجاع|استرجاع|استبدال|ضمان|"
+    r"delivery|shipping|pickup|payment|cash|visa|return|refund|exchange|warranty)",
+    re.IGNORECASE,
+)
+_CATALOG_TOKEN_SPLIT_RE = re.compile(r"[\s,\u060c/\\|+\-_.:;\u061f?!()]+")
+_CATALOG_REPLY_STOPWORDS = {
+    "طيب", "طب", "تمام", "اوكي", "اوكى", "ok", "okay",
+    "كم", "سعر", "السعر", "سعره", "سعرها", "بكم", "قديش", "حقه", "حقها",
+    "بتقدر", "تقدر", "ممكن", "اعطيني", "تعطيني", "ابعث", "ابعت", "ارسل",
+    "وبتقدر", "وتقدر", "وتعطيني", "واعطيني",
+    "صورة", "صوره", "صورته", "صورتها", "اله", "إله", "له", "لها",
+    "عندكم", "عندكو", "عندكوا", "متوفر", "متوفرة", "موجود", "موجودة",
+    "شو", "اش", "ايش", "هذا", "هاذا", "هاد", "هاي", "هي", "هو",
+    "the", "is", "it", "this", "that", "price", "cost", "photo", "image",
+}
+_CURRENCY_LABELS = {
+    "JOD": "دينار",
+    "USD": "دولار",
+    "EUR": "يورو",
+    "SAR": "ريال",
+    "AED": "درهم",
+    "ILS": "شيكل",
+}
 
 
 _STATIC_TEXT_DIACRITICS_RE = re.compile(r"[\u064b-\u065f\u0670\u0640]")
@@ -877,6 +909,218 @@ def _summarize_tool_result(result: dict) -> dict:
     return summary
 
 
+def _catalog_reply_normalise(text: str | None) -> str:
+    value = (text or "").strip().lower()
+    value = _STATIC_TEXT_DIACRITICS_RE.sub("", value)
+    for src, dst in {
+        "أ": "ا",
+        "إ": "ا",
+        "آ": "ا",
+        "ى": "ي",
+        "ة": "ه",
+    }.items():
+        value = value.replace(src, dst)
+    return value
+
+
+def _catalog_reply_tokens(text: str | None) -> set[str]:
+    tokens: set[str] = set()
+    for raw in _CATALOG_TOKEN_SPLIT_RE.split(text or ""):
+        token = _catalog_reply_normalise(raw)
+        if token.startswith("ال") and len(token) > 4:
+            token = token[2:]
+        if len(token) < 2 or token in _CATALOG_REPLY_STOPWORDS:
+            continue
+        tokens.add(token)
+    return tokens
+
+
+def _catalog_item_tokens(item: dict) -> set[str]:
+    return _catalog_reply_tokens(
+        " ".join(
+            str(item.get(key) or "")
+            for key in ("name", "category", "description")
+        )
+    )
+
+
+def _format_catalog_price(value: object, currency: object = None) -> str | None:
+    if value in (None, ""):
+        return None
+    try:
+        from decimal import Decimal
+
+        amount = Decimal(str(value))
+        amount_text = format(amount.normalize(), "f")
+        if "." in amount_text:
+            amount_text = amount_text.rstrip("0").rstrip(".")
+    except Exception:
+        amount_text = str(value).strip()
+    if not amount_text:
+        return None
+
+    currency_text = str(currency or "").strip().upper()
+    label = _CURRENCY_LABELS.get(currency_text, currency_text)
+    return f"{amount_text} {label}".strip()
+
+
+def _iter_catalog_items(
+    retrieved_data: dict,
+    *,
+    current_turn_keys: list[str] | None = None,
+) -> list[dict]:
+    current = set(current_turn_keys or [])
+    items: list[dict] = []
+    seen: set[str] = set()
+
+    def add_from_key(key: str, value: object) -> None:
+        if not key.startswith("get_catalog:") or not isinstance(value, dict):
+            return
+        if value.get("overview_only"):
+            return
+        raw_items = value.get("items")
+        if not isinstance(raw_items, list):
+            return
+        for raw_item in raw_items:
+            if not isinstance(raw_item, dict) or not raw_item.get("name"):
+                continue
+            identity = str(raw_item.get("id") or raw_item.get("name"))
+            dedupe_key = f"{identity}:{key}"
+            if dedupe_key in seen:
+                continue
+            seen.add(dedupe_key)
+            items.append(
+                {
+                    "item": raw_item,
+                    "source_key": key,
+                    "current_turn": key in current,
+                }
+            )
+
+    for key, value in retrieved_data.items():
+        add_from_key(key, value)
+    return items
+
+
+def _history_texts_recent_first(history: list[dict]) -> list[str]:
+    texts: list[str] = []
+    for entry in reversed(history or []):
+        if entry.get("role") == "system":
+            continue
+        content = str(entry.get("content") or "").strip()
+        if content:
+            texts.append(content)
+    return texts
+
+
+def _best_catalog_item_for_turn(
+    customer_message: str,
+    retrieved_data: dict,
+    history: list[dict],
+    *,
+    current_turn_keys: list[str] | None = None,
+) -> dict | None:
+    candidates = _iter_catalog_items(
+        retrieved_data,
+        current_turn_keys=current_turn_keys,
+    )
+    if not candidates:
+        return None
+
+    message_tokens = _catalog_reply_tokens(customer_message)
+    recent_texts = _history_texts_recent_first(history)
+    best_item: dict | None = None
+    best_score = 0.0
+
+    for candidate in candidates:
+        item = candidate["item"]
+        item_tokens = _catalog_item_tokens(item)
+        if not item_tokens:
+            continue
+
+        score = 0.0
+        overlap = message_tokens & item_tokens
+        if overlap:
+            score += 8.0 + len(overlap)
+        if candidate.get("current_turn"):
+            score += 2.0
+
+        item_name = _catalog_reply_normalise(str(item.get("name") or ""))
+        message_text = _catalog_reply_normalise(customer_message)
+        if item_name and item_name in message_text:
+            score += 10.0
+
+        for index, text in enumerate(recent_texts[:8]):
+            text_tokens = _catalog_reply_tokens(text)
+            if text_tokens & item_tokens:
+                score += max(0.5, 4.0 - index * 0.4)
+                break
+            normalised_text = _catalog_reply_normalise(text)
+            if item_name and item_name in normalised_text:
+                score += max(0.5, 5.0 - index * 0.4)
+                break
+
+        if score > best_score:
+            best_score = score
+            best_item = item
+
+    # Explicit product mentions should score highly. For pronoun follow-ups like
+    # "كم سعره؟", a recent history match is enough.
+    return best_item if best_score >= 3.0 else None
+
+
+def _try_static_catalog_reply(
+    customer_message: str,
+    retrieved_data: dict,
+    history: list[dict],
+    *,
+    current_turn_keys: list[str] | None = None,
+) -> str | None:
+    asks_price = bool(_PRICE_REQUEST_RE.search(customer_message or ""))
+    asks_image = _customer_asked_for_image(customer_message)
+    asks_availability = bool(_AVAILABILITY_REQUEST_RE.search(customer_message or ""))
+    if not (asks_price or asks_image or asks_availability):
+        return None
+    if _MIXED_NON_CATALOG_REQUEST_RE.search(customer_message or ""):
+        return None
+
+    item = _best_catalog_item_for_turn(
+        customer_message,
+        retrieved_data,
+        history,
+        current_turn_keys=current_turn_keys,
+    )
+    if not item:
+        return None
+
+    name = str(item.get("name") or "").strip()
+    price = _format_catalog_price(item.get("price"), item.get("currency"))
+    available = item.get("available")
+    parts: list[str] = []
+
+    if asks_availability:
+        if available is False:
+            parts.append(f"{name} مش متوفر حاليًا.")
+        elif available is True:
+            parts.append(f"{name} متوفر.")
+
+    if asks_price:
+        if not price:
+            return None
+        if parts:
+            parts[-1] = parts[-1].rstrip(".") + f" وسعره {price}."
+        else:
+            parts.append(f"{name} سعره {price}.")
+
+    if asks_image:
+        if item.get("image_url"):
+            parts.append("وبقدر أبعثلك صورته كمان.")
+        else:
+            parts.append("ما عندي صورة محفوظة له حاليًا.")
+
+    return " ".join(part for part in parts if part).strip() or None
+
+
 def _tool_result_key(name: str, args: dict | None, *, prefix: str = "") -> str:
     return f"{prefix}{name}:{json.dumps(args or {}, ensure_ascii=False, sort_keys=True)}"
 
@@ -1130,6 +1374,19 @@ async def _generate_reply(
         pre_llm_keys,
     )
 
+    static_catalog_reply = _try_static_catalog_reply(
+        text_content,
+        retrieved_data,
+        history,
+        current_turn_keys=pre_llm_keys,
+    )
+    if static_catalog_reply:
+        trace["static_fast_path"] = True
+        trace["static_catalog_fast_path"] = True
+        trace["finish_reason"] = "static_catalog_fast_path"
+        trace["retrieved_keys"] = list(retrieved_data.keys())
+        return static_catalog_reply, retrieved_data, trace
+
     messages: list[dict] = [
         {
             "role": "system",
@@ -1380,10 +1637,15 @@ async def _verify_and_finalize(
     ai_trace.setdefault("repair", {"attempted": False})
 
     if ai_trace.get("static_fast_path"):
+        static_reason = (
+            "Static catalog fast path; answered from matched catalog data."
+            if ai_trace.get("static_catalog_fast_path")
+            else "Static business-info fast path; answered from saved facts."
+        )
         result = VerificationResult(
             verdict=SAFE_TO_SEND,
             risk_score=0.0,
-            reasons=["Static business-info fast path; answered from saved facts."],
+            reasons=[static_reason],
             grounding_data_used=list(retrieved_data.keys()),
         )
         ai_trace["verification"]["initial"] = {

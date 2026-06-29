@@ -13,7 +13,7 @@ from fastapi import (
 )
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import delete, func, select
+from sqlalchemy import case, delete, func, select
 from sse_starlette.sse import EventSourceResponse
 import json
 
@@ -556,7 +556,16 @@ async def session_messages(
     result = await db.execute(
         select(Message)
         .where(Message.session_id == session_id)
-        .order_by(Message.created_at.asc())
+        .order_by(
+            Message.created_at.asc(),
+            case(
+                (Message.role == "user", 0),
+                (Message.role == "agent", 1),
+                (Message.role == "assistant", 2),
+                else_=3,
+            ),
+            Message.id.asc(),
+        )
         .offset(skip).limit(limit)
     )
     rows = list(result.scalars().all())

@@ -43,6 +43,7 @@ from services.ai_tools import (
     _tokens,
     get_tools_for_intent,
 )
+from services.ai_chat import _try_static_catalog_reply
 from services.router import heuristic_intent_for_message
 from services.fact_guard import check_humanizer_preserved_facts
 from services.retrieval_plan import supplemental_tool_plan
@@ -280,6 +281,14 @@ class TestSupplementalRetrievalPlan:
         assert calls[0].name == "get_catalog"
         assert calls[0].args["query"] == "\u0627\u064a\u0633 \u0643\u0631\u064a\u0645"
 
+    def test_price_and_image_question_extracts_product_only(self):
+        calls = supplemental_tool_plan(
+            "\u0637\u064a\u0628 \u0627\u0644\u062e\u0648\u062e \u0643\u0645 \u0633\u0639\u0631\u0647 \u0648\u0628\u062a\u0642\u062f\u0631 \u062a\u0639\u0637\u064a\u0646\u064a \u0635\u0648\u0631\u0629 \u0627\u0644\u0647",
+            "sales",
+        )
+        assert calls[0].name == "get_catalog"
+        assert calls[0].args["query"] == "\u062e\u0648\u062e"
+
     def test_family_box_detail_question_fetches_catalog_and_business_info(self):
         calls = supplemental_tool_plan(
             "\u0627\u0644\u0628\u0648\u0643\u0633 \u0627\u0644\u0639\u0627\u0626\u0644\u064a \u0628\u062a\u0642\u062f\u0631 \u062a\u0648\u0631\u062c\u064a\u0646\u064a \u0643\u064a\u0641 \u0647\u0648",
@@ -316,6 +325,65 @@ class TestSupplementalRetrievalPlan:
         )
         assert calls[0].name == "get_available_slots"
         assert calls[0].args["target_date"] == "2026-06-12"
+
+
+class TestStaticCatalogReply:
+    def setup_method(self):
+        self.peach = {
+            "id": "peach-1",
+            "name": "\u062e\u0648\u062e \u2014 Peach",
+            "category": "\u0622\u064a\u0633 \u0643\u0631\u064a\u0645",
+            "description": "\u0642\u0637\u0639 \u0622\u064a\u0633 \u0643\u0631\u064a\u0645 \u0628\u0646\u0643\u0647\u0629 \u0627\u0644\u062e\u0648\u062e",
+            "price": 5.0,
+            "currency": "JOD",
+            "available": True,
+            "image_url": "/uploads/user/peach.jpg",
+        }
+        self.retrieved = {
+            "get_catalog:{}": {
+                "overview_only": True,
+                "items": [{"name": "\u062e\u0648\u062e \u2014 Peach", "category": "\u0622\u064a\u0633 \u0643\u0631\u064a\u0645"}],
+            },
+            "get_catalog:{\"query\": \"\u062e\u0648\u062e\"}": {
+                "overview_only": False,
+                "matched": True,
+                "items": [self.peach],
+            },
+        }
+
+    def test_direct_price_and_image_question_uses_exact_catalog_price(self):
+        reply = _try_static_catalog_reply(
+            "\u0637\u064a\u0628 \u0627\u0644\u062e\u0648\u062e \u0643\u0645 \u0633\u0639\u0631\u0647 \u0648\u0628\u062a\u0642\u062f\u0631 \u062a\u0639\u0637\u064a\u0646\u064a \u0635\u0648\u0631\u0629 \u0627\u0644\u0647",
+            self.retrieved,
+            [],
+            current_turn_keys=["get_catalog:{\"query\": \"\u062e\u0648\u062e\"}"],
+        )
+        assert reply is not None
+        assert "\u062e\u0648\u062e" in reply
+        assert "5 \u062f\u064a\u0646\u0627\u0631" in reply
+        assert "\u0635\u0648\u0631" in reply
+
+    def test_followup_price_question_uses_recent_product_context(self):
+        reply = _try_static_catalog_reply(
+            "\u0643\u0645 \u0633\u0639\u0631\u0647\u061f",
+            self.retrieved,
+            [
+                {"role": "user", "content": "\u0637\u064a\u0628 \u0627\u0644\u062e\u0648\u062e \u0643\u0645 \u0633\u0639\u0631\u0647\u061f"},
+                {"role": "assistant", "content": "\u062e\u0648\u062e \u2014 Peach \u0633\u0639\u0631\u0647 5 \u062f\u064a\u0646\u0627\u0631."},
+            ],
+            current_turn_keys=[],
+        )
+        assert reply is not None
+        assert "5 \u062f\u064a\u0646\u0627\u0631" in reply
+
+    def test_overview_only_catalog_does_not_answer_prices(self):
+        reply = _try_static_catalog_reply(
+            "\u0643\u0645 \u0633\u0639\u0631 \u0627\u0644\u062e\u0648\u062e\u061f",
+            {"get_catalog:{}": self.retrieved["get_catalog:{}"]},
+            [],
+            current_turn_keys=["get_catalog:{}"],
+        )
+        assert reply is None
 
 
 class TestAITraceLogging:

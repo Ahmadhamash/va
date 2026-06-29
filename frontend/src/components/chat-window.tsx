@@ -11,6 +11,29 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "react-hot-toast";
 import { useLanguageStore } from "@/store/use-language-store";
 
+function messageOrder(message: Message) {
+  const time = new Date(message.createdAt || 0).getTime();
+  const senderRank =
+    message.sender === "CUSTOMER"
+      ? 0
+      : message.sender === "HUMAN"
+        ? 1
+        : message.sender === "AI"
+          ? 2
+          : 3;
+  return { time: Number.isFinite(time) ? time : 0, senderRank, id: message.id || "" };
+}
+
+function sortMessages(messages: Message[]) {
+  return [...messages].sort((a, b) => {
+    const left = messageOrder(a);
+    const right = messageOrder(b);
+    if (left.time !== right.time) return left.time - right.time;
+    if (left.senderRank !== right.senderRank) return left.senderRank - right.senderRank;
+    return left.id.localeCompare(right.id);
+  });
+}
+
 function ChannelIcon({ channel }: { channel: ChannelProvider }) {
   const Icon =
     channel === "WHATSAPP"
@@ -131,7 +154,7 @@ export function ChatWindow({
 
   const [draft, setDraft] = useState("");
   const [status, setStatus] = useState<ConversationStatus>(conversation.status);
-  const [messages, setMessages] = useState<Message[]>(conversation.messages);
+  const [messages, setMessages] = useState<Message[]>(() => sortMessages(conversation.messages));
   const [version, setVersion] = useState(0);
   const [note, setNote] = useState("");
   const [isEditingNote, setIsEditingNote] = useState(false);
@@ -158,7 +181,7 @@ export function ChatWindow({
 
   // Sync props to state
   useEffect(() => {
-    setMessages(conversation.messages);
+    setMessages(sortMessages(conversation.messages));
   }, [conversation.messages]);
 
   useEffect(() => {
@@ -258,7 +281,7 @@ export function ChatWindow({
           mediaUrl: saved.media_url || null,
           deliveryStatus: "sent"
         };
-        setMessages((items) => [...items, newMessage]);
+        setMessages((items) => sortMessages([...items, newMessage]));
         onNewMessage?.(conversation.id, newMessage);
         return true;
       } catch (e) {
@@ -277,7 +300,7 @@ export function ChatWindow({
       body: clean,
       createdAt: new Date().toISOString()
     };
-    setMessages((items) => [...items, newMessage]);
+    setMessages((items) => sortMessages([...items, newMessage]));
     onNewMessage?.(conversation.id, newMessage);
     return true;
   }
