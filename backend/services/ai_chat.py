@@ -834,6 +834,78 @@ def _strip_sent_image_url(reply: str, image_url: str | None) -> str:
     return cleaned or reply.replace(image_url, "").strip() or reply
 
 
+def _catalog_item_for_image_url(retrieved_data: dict, image_url: str | None) -> dict | None:
+    target = (image_url or "").strip()
+    if not target:
+        return None
+    for result in retrieved_data.values():
+        if not isinstance(result, dict):
+            continue
+        items = result.get("items")
+        if not isinstance(items, list):
+            continue
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            if str(item.get("image_url") or "").strip() == target:
+                return item
+    return None
+
+
+def _image_attachment_caption(retrieved_data: dict, image_url: str) -> str:
+    item = _catalog_item_for_image_url(retrieved_data, image_url)
+    name = str((item or {}).get("name") or "").strip()
+    if name:
+        return f"أكيد، هاي صورة {name}."
+    return "أكيد، هاي الصورة."
+
+
+def _reply_claims_image_unavailable(reply: str | None) -> bool:
+    text = _normalise_static_text(reply)
+    if not text:
+        return False
+    unavailable_terms = (
+        "ما عندي صوره", "مش عندي صوره", "مش مبين عندي صوره",
+        "مش ظاهر عندي صوره", "لا توجد صوره", "ما في صوره",
+        "no image", "no photo", "image unavailable", "photo unavailable",
+    )
+    return any(term in text for term in unavailable_terms)
+
+
+def _reply_only_promises_image(reply: str | None) -> bool:
+    text = _normalise_static_text(reply)
+    if not text or len(text) > 140:
+        return False
+    promise_terms = (
+        "بقدر ابعثلك صورته", "بقدر ابعثلك صورتها",
+        "بقدر ارسلك صورته", "بقدر ارسلك صورتها",
+        "رح ابعثلك صورته", "رح ابعثلك صورتها",
+        "هاي صورته", "هاي صورتها",
+        "send the image", "send the photo",
+    )
+    return any(term in text for term in promise_terms)
+
+
+def _prepare_image_attachment_reply(
+    customer_message: str | None,
+    retrieved_data: dict,
+    reply: str,
+    image_url: str | None,
+) -> str:
+    if not image_url:
+        return reply
+    cleaned = _strip_sent_image_url(reply, image_url)
+    if (
+        _customer_asked_for_image(customer_message)
+        and (
+            _reply_claims_image_unavailable(cleaned)
+            or _reply_only_promises_image(cleaned)
+        )
+    ):
+        return _image_attachment_caption(retrieved_data, image_url)
+    return cleaned
+
+
 async def _run_pre_ai_automations(
     *,
     user: User,
@@ -2551,7 +2623,12 @@ async def process_message(
     )
     reply_image_url = _reply_image_url(customer_text, retrieved_data, reply)
     if reply_image_url:
-        reply = _strip_sent_image_url(reply, reply_image_url)
+        reply = _prepare_image_attachment_reply(
+            customer_text,
+            retrieved_data,
+            reply,
+            reply_image_url,
+        )
     _store_cached_reply(user_id, customer_text, reply, retrieved_data, action)
 
     # ── Run post-AI automations ──
@@ -2812,7 +2889,12 @@ async def process_pending(session_id: uuid.UUID, db: AsyncSession) -> dict | Non
             )
             reply_image_url = _reply_image_url(customer_text, retrieved_data, reply)
             if reply_image_url:
-                reply = _strip_sent_image_url(reply, reply_image_url)
+                reply = _prepare_image_attachment_reply(
+                    customer_text,
+                    retrieved_data,
+                    reply,
+                    reply_image_url,
+                )
             _store_cached_reply(user_id, customer_text, reply, retrieved_data, action)
 
             # ── Run post-AI automations ──

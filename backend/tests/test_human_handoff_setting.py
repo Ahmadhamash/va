@@ -1,5 +1,10 @@
 from models import User
-from services.ai_chat import _reply_image_url, _strip_sent_image_url, _tool_call_kwargs
+from services.ai_chat import (
+    _prepare_image_attachment_reply,
+    _reply_image_url,
+    _strip_sent_image_url,
+    _tool_call_kwargs,
+)
 from services.ai_prompts import build_system_prompt
 from services.ai_persona_settings import assistant_profile_data
 from services.ai_tools import get_tools_for_intents
@@ -164,3 +169,41 @@ def test_sent_product_image_url_is_removed_from_text_reply():
     reply = "هاي تفاصيل المنتج\nوعم نشارك صورة المنتج: https://example.com/mix.jpg\nحابي تطلبها؟"
 
     assert _strip_sent_image_url(reply, "https://example.com/mix.jpg") == "هاي تفاصيل المنتج\nحابي تطلبها؟"
+
+
+def test_image_attachment_reply_removes_false_unavailable_text():
+    retrieved_data = {
+        "get_catalog:{}": {
+            "matched": True,
+            "overview_only": False,
+            "items": [{"name": "توت — Blackberry", "image_url": "https://example.com/berry.jpg"}],
+        }
+    }
+
+    reply = _prepare_image_attachment_reply(
+        "بدي الصورة اشوف",
+        retrieved_data,
+        "عذرًا، مش مبين عندي صورة للتوت حاليًا.",
+        "https://example.com/berry.jpg",
+    )
+
+    assert reply == "أكيد، هاي صورة توت — Blackberry."
+
+
+def test_image_attachment_reply_turns_short_promise_into_caption():
+    retrieved_data = {
+        "get_catalog:{}": {
+            "matched": True,
+            "overview_only": False,
+            "items": [{"name": "توت — Blackberry", "image_url": "https://example.com/berry.jpg"}],
+        }
+    }
+
+    reply = _prepare_image_attachment_reply(
+        "بدي الصورة اشوف",
+        retrieved_data,
+        "وبقدر أبعثلك صورته كمان.",
+        "https://example.com/berry.jpg",
+    )
+
+    assert reply == "أكيد، هاي صورة توت — Blackberry."
