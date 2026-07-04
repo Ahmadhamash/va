@@ -47,7 +47,11 @@ from services.ai_tools import (
     get_tools_for_intent,
     get_tools_for_intents,
 )
-from services.ai_chat import _smalltalk_reply, _try_static_catalog_reply
+from services.ai_chat import (
+    _smalltalk_reply,
+    _try_static_catalog_reply,
+    _try_static_discovery_reply,
+)
 from services.router import (
     detect_message_intents,
     expanded_intents_for_message,
@@ -177,6 +181,11 @@ class TestRouterGuardrails:
 
     def test_price_question_routes_to_sales_without_llm(self):
         assert heuristic_intent_for_message("\u0645\u0631\u062d\u0628\u0627 \u0643\u0645 \u0633\u0639\u0631 \u0627\u0644\u0633\u0645\u0627\u0639\u0629\u061f") == "sales"
+
+    def test_plural_prices_route_to_sales_without_llm(self):
+        assert heuristic_intent_for_message("بدي اسأل عن الأسعار") == "sales"
+        assert heuristic_intent_for_message("اه بدي اسأل عن اسعار المنتجات") == "sales"
+        assert "ASK_PRICE" in detect_message_intents("اه بدي اسأل عن اسعار المنتجات")
 
     def test_food_catalog_question_routes_to_sales_without_llm(self):
         assert heuristic_intent_for_message("\u0627\u0634 \u0639\u0646\u062f\u0643\u0645 \u0627\u0643\u0644\u061f") == "sales"
@@ -415,6 +424,20 @@ class TestSupplementalRetrievalPlan:
         assert calls[0].name == "get_catalog"
         assert calls[0].args["query"] == ""
 
+    def test_broad_price_question_fetches_detailed_catalog_and_packages(self):
+        calls = supplemental_tool_plan("اه بدي اسأل عن اسعار المنتجات", "sales")
+
+        assert calls[0].name == "get_catalog"
+        assert calls[0].args == {"query": "", "include_details": True}
+        assert any(call.name == "get_packages" for call in calls)
+
+    def test_specific_price_question_still_extracts_product_query(self):
+        calls = supplemental_tool_plan("كم سعر Mix Fruit؟", "sales")
+
+        assert calls[0].name == "get_catalog"
+        assert calls[0].args["query"] == "mix fruit"
+        assert "include_details" not in calls[0].args
+
     def test_food_catalog_question_uses_overview_query(self):
         calls = supplemental_tool_plan("\u0627\u0634 \u0639\u0646\u062f\u0643\u0645 \u0627\u0643\u0644\u061f", "sales")
         assert calls[0].name == "get_catalog"
@@ -502,6 +525,72 @@ class TestStaticCatalogReply:
                 "items": [self.peach],
             },
         }
+        self.package_data = {
+            "get_packages:{}": {
+                "packages": [
+                    {
+                        "name": "البوكس العائلي / Gathering Box",
+                        "description": "بوكس مناسب للجمعات",
+                        "price": 10,
+                        "currency": "JOD",
+                        "items": None,
+                        "aliases": ["بوكس اللمة", "بوكس العائلي"],
+                    }
+                ],
+            }
+        }
+
+    def test_general_price_overview_lists_confirmed_package_price(self):
+        reply = _try_static_discovery_reply(
+            "اه بدي اسأل عن اسعار المنتجات",
+            self.package_data,
+            [],
+            current_turn_keys=["get_packages:{}"],
+            conversation_language="ar",
+        )
+
+        assert reply is not None
+        assert "الأسعار الواضحة عندي" in reply
+        assert "البوكس العائلي / Gathering Box" in reply
+        assert "10 دينار" in reply
+        assert "ما في معلومات واضحة" not in reply
+
+    def test_more_packages_reply_uses_available_data_language(self):
+        reply = _try_static_discovery_reply(
+            "طيب شو في كمان بوكسات",
+            self.package_data,
+            [],
+            current_turn_keys=["get_packages:{}"],
+            conversation_language="ar",
+        )
+
+        assert reply is not None
+        assert "حسب المعلومات المتوفرة عندي حالياً" in reply
+        assert "ما عندي معلومات مؤكدة عن بوكسات ثانية حالياً" in reply
+        assert "ما في غير" not in reply
+
+    def test_unknown_social_package_asks_for_post_without_denial(self):
+        data = {
+            **self.package_data,
+            "get_catalog:{\"query\": \"بوكس التوت\"}": {
+                "matched": False,
+                "overview_only": False,
+                "items": [],
+            },
+        }
+        reply = _try_static_discovery_reply(
+            "في شفت بوست منزلينو اسمو بوكس التوت",
+            data,
+            [],
+            current_turn_keys=["get_catalog:{\"query\": \"بوكس التوت\"}", "get_packages:{}"],
+            conversation_language="ar",
+        )
+
+        assert reply is not None
+        assert "ممكن تقصد بوكس التوت" in reply
+        assert "تفاصيل مؤكدة" in reply
+        assert "صورة البوست" in reply
+        assert "غير متوفر" not in reply
 
     def test_direct_price_and_image_question_uses_exact_catalog_price(self):
         reply = _try_static_catalog_reply(

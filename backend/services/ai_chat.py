@@ -114,7 +114,7 @@ _LANGUAGE_SWITCH_AR_RE = re.compile(
     re.IGNORECASE,
 )
 _PRICE_REQUEST_RE = re.compile(
-    r"(?:سعر|السعر|سعره|سعرها|بكم|قديش|كم\s+سعر|حقه|حقها|price|cost)",
+    r"(?:سعر|السعر|أسعار|اسعار|الأسعار|الاسعار|سعره|سعرها|بكم|قديش|كم\s+سعر|حقه|حقها|price|prices|cost|costs)",
     re.IGNORECASE,
 )
 _AVAILABILITY_REQUEST_RE = re.compile(
@@ -136,6 +136,11 @@ _CATALOG_REPLY_STOPWORDS = {
     "عندكم", "عندكو", "عندكوا", "متوفر", "متوفرة", "موجود", "موجودة",
     "شو", "اش", "ايش", "هذا", "هاذا", "هاد", "هاي", "هي", "هو",
     "the", "is", "it", "this", "that", "price", "cost", "photo", "image",
+}
+_PACKAGE_GENERIC_TOKENS = {
+    "بوكس", "بوكسات", "بكج", "بكجات", "باكج", "باكجات",
+    "حزمه", "حزمة", "باقه", "باقة", "كومبو",
+    "box", "boxes", "bundle", "bundles", "package", "packages", "combo",
 }
 _CURRENCY_LABELS = {
     "JOD": "دينار",
@@ -289,6 +294,29 @@ _STATIC_PLACE_QUERY_STOPWORDS = {
 _DETAIL_REQUEST_RE = re.compile(
     r"(?:تفاصيل|التفاصيل|وصف|اشرح|شرح|معلومات|عنها|عنه|عليها|عليه|"
     r"شو\s+فيه|ايش\s+فيه|اش\s+فيه|مكونات|details|describe|description|info)",
+    re.IGNORECASE,
+)
+_PACKAGE_REQUEST_RE = re.compile(
+    r"(?:بوكس|بوكسات|البوكس|بكج|باكج|بكجات|باكجات|حزمة|باقة|كومبو|"
+    r"box|boxes|bundle|bundles|package|packages|combo)",
+    re.IGNORECASE,
+)
+_BROAD_DISCOVERY_RE = re.compile(
+    r"(?:شو\s+في|شو\s+عندكم|اش\s+عندكم|ايش\s+عندكم|منتجات|المنتجات|كتالوج|"
+    r"قائمة|منيو|menu|catalog|products|what\s+do\s+you\s+have|what\s+do\s+you\s+sell)",
+    re.IGNORECASE,
+)
+_MORE_OPTIONS_RE = re.compile(
+    r"(?:كمان|غير|ثاني|ثانية|اخرى|أخرى|more|else|other)",
+    re.IGNORECASE,
+)
+_SOCIAL_REFERENCE_RE = re.compile(
+    r"(?:بوست|منشور|ستوري|انستغرام|انستا|منزلين|منزلينو|نازل|post|story|instagram|insta)",
+    re.IGNORECASE,
+)
+_PACKAGE_REFERENCE_RE = re.compile(
+    r"(?:اسمه|اسمو|اسما|اسمها|اسموه|called|named)?\s*"
+    r"((?:بوكس|بكج|باكج|box|bundle|package)\s+[^\s،,?.؟!]+(?:\s+[^\s،,?.؟!]+){0,2})",
     re.IGNORECASE,
 )
 
@@ -1591,6 +1619,108 @@ def _iter_catalog_items(
     return items
 
 
+def _iter_package_entries(retrieved_data: dict) -> list[dict]:
+    packages: list[dict] = []
+    seen: set[str] = set()
+    for key, value in retrieved_data.items():
+        if not key.startswith("get_packages:") or not isinstance(value, dict):
+            continue
+        raw_packages = value.get("packages")
+        if not isinstance(raw_packages, list):
+            continue
+        for package in raw_packages:
+            if not isinstance(package, dict) or not package.get("name"):
+                continue
+            identity = str(package.get("name") or "").strip().casefold()
+            if identity in seen:
+                continue
+            seen.add(identity)
+            packages.append(package)
+    return packages
+
+
+def _package_tokens(package: dict) -> set[str]:
+    pieces: list[str] = [
+        str(package.get("name") or ""),
+        str(package.get("description") or ""),
+        str(package.get("clarification_hint") or ""),
+    ]
+    aliases = package.get("aliases")
+    if isinstance(aliases, list):
+        pieces.extend(str(alias or "") for alias in aliases)
+    return _catalog_reply_tokens(" ".join(pieces))
+
+
+def _package_matches_reference(package: dict, reference: str | None) -> bool:
+    if not reference:
+        return False
+    reference_tokens = _catalog_reply_tokens(reference) - _PACKAGE_GENERIC_TOKENS
+    if not reference_tokens:
+        return False
+    package_tokens = _package_tokens(package) - _PACKAGE_GENERIC_TOKENS
+    return bool(reference_tokens & package_tokens)
+
+
+def _extract_package_reference(customer_message: str | None) -> str | None:
+    text = (customer_message or "").strip()
+    match = _PACKAGE_REFERENCE_RE.search(text)
+    if not match:
+        return None
+    reference = re.sub(r"\s+", " ", match.group(1)).strip(" .،,؟?!")
+    return reference or None
+
+
+def _format_named_price(name: str, price: str | None, *, english: bool) -> str:
+    if price:
+        return f"{name} — {price}" if english else f"{name} — سعره {price}"
+    return (
+        f"{name} — price not clear right now"
+        if english else f"{name} — السعر مش واضح عندي هسه"
+    )
+
+
+def _catalog_price_lines(items: list[dict], *, english: bool, limit: int = 8) -> list[str]:
+    lines: list[str] = []
+    for item in items:
+        name = str(item.get("name") or "").strip()
+        if not name:
+            continue
+        price = _format_catalog_price(item.get("price"), item.get("currency"))
+        if price:
+            lines.append(_format_named_price(name, price, english=english))
+        if len(lines) >= limit:
+            break
+    return lines
+
+
+def _package_price_lines(packages: list[dict], *, english: bool, limit: int = 8) -> list[str]:
+    lines: list[str] = []
+    for package in packages:
+        name = str(package.get("name") or "").strip()
+        if not name:
+            continue
+        price = _format_catalog_price(package.get("price"), package.get("currency"))
+        lines.append(_format_named_price(name, price, english=english))
+        if len(lines) >= limit:
+            break
+    return lines
+
+
+def _has_current_catalog_miss(
+    retrieved_data: dict,
+    current_turn_keys: list[str] | None,
+) -> bool:
+    current = set(current_turn_keys or [])
+    for key, value in retrieved_data.items():
+        if not key.startswith("get_catalog:") or not isinstance(value, dict):
+            continue
+        if current and key not in current:
+            continue
+        if value.get("matched") is False and not value.get("overview_only"):
+            return True
+    return False
+
+
 def _history_texts_recent_first(history: list[dict]) -> list[str]:
     texts: list[str] = []
     for entry in reversed(history or []):
@@ -1656,6 +1786,122 @@ def _best_catalog_item_for_turn(
     # Explicit product mentions should score highly. For pronoun follow-ups like
     # "كم سعره؟", a recent history match is enough.
     return best_item if best_score >= 3.0 else None
+
+
+def _try_static_discovery_reply(
+    customer_message: str,
+    retrieved_data: dict,
+    history: list[dict],
+    *,
+    current_turn_keys: list[str] | None = None,
+    conversation_language: str | None = None,
+) -> str | None:
+    text = customer_message or ""
+    asks_price = bool(_PRICE_REQUEST_RE.search(text))
+    asks_packages = bool(_PACKAGE_REQUEST_RE.search(text))
+    asks_broad = bool(_BROAD_DISCOVERY_RE.search(text))
+    asks_more = bool(_MORE_OPTIONS_RE.search(text))
+    social_reference = bool(_SOCIAL_REFERENCE_RE.search(text))
+
+    if not (asks_price or asks_packages or asks_broad):
+        return None
+
+    language = conversation_language or _detect_text_language(text)
+    english = _is_english_context(language, text)
+    catalog_items = [
+        candidate["item"]
+        for candidate in _iter_catalog_items(
+            retrieved_data,
+            current_turn_keys=current_turn_keys,
+        )
+        if candidate["item"].get("available") is not False
+    ]
+    packages = _iter_package_entries(retrieved_data)
+    package_reference = _extract_package_reference(text)
+    matched_reference = any(
+        _package_matches_reference(package, package_reference)
+        for package in packages
+    )
+    current_catalog_miss = _has_current_catalog_miss(
+        retrieved_data,
+        current_turn_keys,
+    )
+
+    if (
+        asks_packages
+        and package_reference
+        and not matched_reference
+        and (current_catalog_miss or social_reference)
+        and not asks_more
+    ):
+        if english:
+            return (
+                f"You might mean {package_reference}. I don’t have confirmed "
+                "details for it in the system right now. Send me the post image "
+                "or the exact name, and I’ll have the team confirm it for you 🙏"
+            )
+        social_hint = " الموجود بالبوست" if social_reference else ""
+        return (
+            f"ممكن تقصد {package_reference}{social_hint}؟ حالياً ما عندي تفاصيل مؤكدة عنه بالسستم. "
+            "ابعتلي صورة البوست أو اسمه كامل، وبخلي الفريق يتأكدلك 🙏"
+        )
+
+    if asks_packages:
+        package_lines = _package_price_lines(packages, english=english)
+        if package_lines:
+            joined = "\n".join(package_lines)
+            if english:
+                reply = f"Based on the information I have right now, these are the packages I can see:\n{joined}"
+                if asks_more or len(packages) <= 1:
+                    reply += (
+                        "\nI don’t have confirmed details for other packages right now. "
+                        "If you saw another box on Instagram, send me its name or post image and I’ll have the team check it."
+                    )
+                return reply
+            reply = f"حسب المعلومات المتوفرة عندي حالياً، المتوفر عندي من البوكسات:\n{joined}"
+            if asks_more or len(packages) <= 1:
+                reply += (
+                    "\nما عندي معلومات مؤكدة عن بوكسات ثانية حالياً. إذا شفت بوكس ثاني على إنستغرام "
+                    "ابعتلي اسمه أو صورة المنشور وبخلي الفريق يتأكدلك."
+                )
+            return reply
+
+        if english:
+            return (
+                "I don’t have confirmed package details in the system right now. "
+                "Send me the box name or post image, and I’ll have the team check it 🙏"
+            )
+        return (
+            "مش ظاهر عندي تفاصيل مؤكدة عن البوكسات هسه. ابعتلي اسم البوكس أو صورة المنشور "
+            "وبخلي الفريق يتأكدلك 🙏"
+        )
+
+    if asks_price:
+        package_lines = _package_price_lines(packages, english=english)
+        catalog_lines = _catalog_price_lines(catalog_items, english=english)
+        lines = [*package_lines, *catalog_lines]
+        if lines:
+            joined = "\n".join(lines[:8])
+            if english:
+                return (
+                    "Of course. These are the prices I can confirm right now:\n"
+                    f"{joined}\nIf you want a specific product price, send me its name and I’ll check it for you."
+                )
+            return (
+                "أكيد، الأسعار الواضحة عندي حالياً:\n"
+                f"{joined}\nإذا بدك سعر منتج معيّن احكيلي اسمه، وبشيكلك عليه."
+            )
+
+        if english:
+            return (
+                "Let me check the most accurate prices for you. Send me the product name, "
+                "or I can connect you with the team to confirm it 🙏"
+            )
+        return (
+            "خليني أتأكدلك من الأسعار الأدق. ابعتلي اسم المنتج، أو بخلي الفريق يأكدلك السعر 🙏"
+        )
+
+    return None
 
 
 def _try_static_catalog_reply(
@@ -2180,6 +2426,20 @@ async def _generate_reply(
         pre_llm_keys,
     )
 
+    static_discovery_reply = _try_static_discovery_reply(
+        text_content,
+        retrieved_data,
+        history,
+        current_turn_keys=pre_llm_keys,
+        conversation_language=current_language,
+    )
+    if static_discovery_reply:
+        trace["static_fast_path"] = True
+        trace["static_discovery_fast_path"] = True
+        trace["finish_reason"] = "static_discovery_fast_path"
+        trace["retrieved_keys"] = list(retrieved_data.keys())
+        return static_discovery_reply, retrieved_data, trace
+
     static_catalog_reply = _try_static_catalog_reply(
         text_content,
         retrieved_data,
@@ -2533,11 +2793,12 @@ async def _verify_and_finalize(
         )
 
     if ai_trace.get("static_fast_path"):
-        static_reason = (
-            "Static catalog fast path; answered from matched catalog data."
-            if ai_trace.get("static_catalog_fast_path")
-            else "Static business-info fast path; answered from saved facts."
-        )
+        if ai_trace.get("static_catalog_fast_path"):
+            static_reason = "Static catalog fast path; answered from matched catalog data."
+        elif ai_trace.get("static_discovery_fast_path"):
+            static_reason = "Static discovery fast path; answered from retrieved catalog/package data."
+        else:
+            static_reason = "Static business-info fast path; answered from saved facts."
         result = VerificationResult(
             verdict=SAFE_TO_SEND,
             risk_score=0.0,

@@ -29,6 +29,15 @@ _BROAD_CATALOG_TERMS = (
     "\u0639\u0646\u062f\u0643\u0645 \u0627\u0643\u0644", "\u0639\u0646\u062f\u0643\u0645 \u0623\u0643\u0644",
     "\u0639\u0646\u062f\u0643\u0645 \u0637\u0639\u0627\u0645", "what do you have",
     "what food", "which flavors", "catalog", "products",
+    "\u0627\u0633\u0639\u0627\u0631 \u0627\u0644\u0645\u0646\u062a\u062c\u0627\u062a",
+    "\u0627\u0644\u0627\u0633\u0639\u0627\u0631", "\u0642\u0627\u0626\u0645\u0629 \u0627\u0644\u0627\u0633\u0639\u0627\u0631",
+    "price list", "product prices",
+)
+_PRICE_TERMS = (
+    "\u0633\u0639\u0631", "\u0627\u0644\u0633\u0639\u0631",
+    "\u0627\u0633\u0639\u0627\u0631", "\u0627\u0644\u0627\u0633\u0639\u0627\u0631",
+    "\u0628\u0643\u0645", "\u0642\u062f\u064a\u0634",
+    "price", "prices", "cost", "costs",
 )
 _OFFER_TERMS = (
     "\u0639\u0631\u0636", "\u0639\u0631\u0648\u0636", "\u062e\u0635\u0645",
@@ -121,7 +130,8 @@ _CATALOG_QUERY_STOPWORDS = {
     "\u0645\u0648\u062c\u0648\u062f", "\u0645\u0648\u062c\u0648\u062f\u0647",
     "\u0645\u0648\u062c\u0648\u062f\u0629", "\u0645\u062a\u0648\u0641\u0631",
     "\u0645\u062a\u0648\u0641\u0631\u0647", "\u0645\u062a\u0648\u0641\u0631\u0629",
-    "\u0633\u0639\u0631", "\u0627\u0644\u0633\u0639\u0631", "\u0643\u0645",
+    "\u0633\u0639\u0631", "\u0627\u0644\u0633\u0639\u0631", "\u0627\u0633\u0639\u0627\u0631",
+    "\u0627\u0644\u0627\u0633\u0639\u0627\u0631", "\u0643\u0645",
     "\u0633\u0639\u0631\u0647", "\u0633\u0639\u0631\u0647\u0627",
     "\u0628\u0643\u0645", "\u0642\u062f\u064a\u0634", "\u062d\u0642\u0647",
     "\u062d\u0642\u0647\u0627", "\u0637\u064a\u0628", "\u0635\u0648\u0631\u0629",
@@ -132,7 +142,11 @@ _CATALOG_QUERY_STOPWORDS = {
     "\u0648\u0628\u062a\u0642\u062f\u0631", "\u0648\u062a\u0642\u062f\u0631",
     "\u062a\u0639\u0637\u064a\u0646\u064a", "\u0627\u0639\u0637\u064a\u0646\u064a",
     "\u0648\u062a\u0639\u0637\u064a\u0646\u064a", "\u0648\u0627\u0639\u0637\u064a\u0646\u064a",
-    "\u0628\u062f\u064a", "\u0628\u062f\u0646\u0627",
+    "\u0627\u0647", "\u0627\u0647\u0627", "\u0634\u0648", "\u0627\u0634",
+    "\u0627\u064a\u0634", "\u0643\u0645\u0627\u0646", "\u0628\u062f\u064a", "\u0628\u062f\u0646\u0627",
+    "\u0627\u0633\u0627\u0644", "\u0627\u0633\u0623\u0644", "\u0639\u0646",
+    "\u0645\u0646\u062a\u062c", "\u0645\u0646\u062a\u062c\u0627\u062a",
+    "\u0627\u0644\u0645\u0646\u062a\u062c", "\u0627\u0644\u0645\u0646\u062a\u062c\u0627\u062a",
     "\u0627\u0631\u064a\u062f", "\u0627\u0628\u063a\u0649", "\u0639\u0627\u064a\u0632",
     "\u0639\u0627\u0648\u0632", "do", "you", "have", "is", "there",
     "available", "availability", "price", "cost", "please",
@@ -175,6 +189,10 @@ def _catalog_query(customer_message: str) -> str:
             continue
         tokens.append(token)
     return " ".join(tokens).strip() or customer_message.strip()
+
+
+def _is_broad_price_request(text: str, catalog_query: str) -> bool:
+    return _has_any(text, _PRICE_TERMS) and not catalog_query.strip()
 
 
 def _booking_args(customer_message: str) -> dict:
@@ -226,10 +244,14 @@ def supplemental_tool_plan(customer_message: str, intent: str) -> list[ToolCallP
         return _dedupe(calls)
 
     if intent == "sales":
-        catalog_args = {"query": _catalog_query(customer_message)}
-        if _has_any(text, _RECOMMENDATION_TERMS):
+        catalog_query = _catalog_query(customer_message)
+        catalog_args = {"query": catalog_query}
+        broad_price_request = _is_broad_price_request(text, catalog_query)
+        if _has_any(text, _RECOMMENDATION_TERMS) or broad_price_request:
             catalog_args = {"query": "", "include_details": True}
         calls.append(ToolCallPlan("get_catalog", catalog_args))
+        if broad_price_request:
+            calls.append(ToolCallPlan("get_packages", {}))
         if _has_any(text, _OFFER_TERMS):
             calls.append(ToolCallPlan("get_offers", {}))
         if _has_any(text, _PACKAGE_TERMS):
