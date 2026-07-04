@@ -470,6 +470,37 @@ def _handoff_reply(language: str | None) -> str:
     return "أكيد، ولا يهمك 🙏 رح أحوّلك لموظف من الفريق يساعدك بشكل أدق."
 
 
+def _smalltalk_reply(customer_message: str | None, language: str | None) -> str:
+    text = (customer_message or "").strip().lower()
+    normalized = _STATIC_TEXT_DIACRITICS_RE.sub("", text)
+    for src, dst in {
+        "أ": "ا",
+        "إ": "ا",
+        "آ": "ا",
+        "ى": "ي",
+        "ة": "ه",
+    }.items():
+        normalized = normalized.replace(src, dst)
+
+    english = _is_english_context(language, customer_message)
+    if english:
+        if "thank" in normalized or "thanks" in normalized:
+            return "You’re welcome 😊"
+        if "how are" in normalized or "how r" in normalized:
+            return "I’m good, thank you 😊 What would you like to know?"
+        return "Hi 😊 I’m here with you. What would you like to know?"
+
+    if "شكرا" in normalized or "يسلمو" in normalized:
+        return "العفو، ولا يهمك 😊"
+    if "الو" in normalized:
+        return "معك، تفضل 😊"
+    if "كيفك" in normalized or "كيف الحال" in normalized or "اخبارك" in normalized:
+        return "تمام الحمدلله 😊 تفضل، شو حاب تعرف؟"
+    if "السلام عليكم" in normalized:
+        return "وعليكم السلام، أهلاً فيك 😊 شو حاب تعرف؟"
+    return "هلا فيك 😊 شو حاب تعرف؟"
+
+
 def _handoff_disabled_fallback(customer_message: str) -> str:
     latin_chars = sum(1 for ch in customer_message if ("a" <= ch.lower() <= "z"))
     arabic_chars = sum(1 for ch in customer_message if "\u0600" <= ch <= "\u06ff")
@@ -1950,7 +1981,7 @@ async def _generate_reply(
     else:
         text_content = str(content)
 
-    from services.router import detect_message_intents
+    from services.router import detect_message_intents, is_smalltalk_message
 
     conversation_context = await _prepare_turn_context(session_id, db, text_content)
     current_language = conversation_context.get("current_language")
@@ -2005,6 +2036,13 @@ async def _generate_reply(
             _handoff_disabled_fallback(text_content),
             {"conversation_context:handoff": {"requested": True, "enabled": False}},
             direct_trace("handoff_disabled", intent="support"),
+        )
+
+    if is_smalltalk_message(text_content):
+        return (
+            _smalltalk_reply(text_content, current_language),
+            {"conversation_context:smalltalk": {"handled": True}},
+            direct_trace("smalltalk"),
         )
 
     static_reply = await _try_static_business_reply(user, session_id, text_content, db)

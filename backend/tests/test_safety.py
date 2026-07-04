@@ -47,12 +47,14 @@ from services.ai_tools import (
     get_tools_for_intent,
     get_tools_for_intents,
 )
-from services.ai_chat import _try_static_catalog_reply
+from services.ai_chat import _smalltalk_reply, _try_static_catalog_reply
 from services.router import (
     detect_message_intents,
     expanded_intents_for_message,
     get_intent_for_message,
     heuristic_intent_for_message,
+    heuristic_intents_for_message,
+    is_smalltalk_message,
 )
 from services.fact_guard import check_humanizer_preserved_facts
 from services.retrieval_plan import supplemental_tool_plan
@@ -191,8 +193,45 @@ class TestRouterGuardrails:
     def test_booking_question_routes_to_booking_without_llm(self):
         assert heuristic_intent_for_message("\u0628\u062f\u064a \u0627\u062d\u062c\u0632 \u0645\u0648\u0639\u062f \u0628\u0643\u0631\u0627") == "booking"
 
-    def test_plain_greeting_can_still_use_llm_or_general(self):
-        assert heuristic_intent_for_message("\u0645\u0631\u062d\u0628\u0627") is None
+    def test_plain_greeting_routes_to_general_without_llm(self):
+        assert heuristic_intent_for_message("\u0645\u0631\u062d\u0628\u0627") == "general"
+
+    def test_pure_smalltalk_routes_to_general_without_product_context(self):
+        assert is_smalltalk_message("السلام عليكم كيفك")
+        assert is_smalltalk_message("طيب كيفك")
+        assert is_smalltalk_message("الو")
+        assert heuristic_intent_for_message("السلام عليكم كيفك") == "general"
+        assert heuristic_intents_for_message("الو") == ["general"]
+        assert detect_message_intents("طيب كيفك") == []
+
+    def test_business_question_with_greeting_is_not_smalltalk(self):
+        assert not is_smalltalk_message("مرحبا عندكم Mix Fruit؟")
+        assert not is_smalltalk_message("طيب كم سعره؟")
+        assert heuristic_intent_for_message("طيب كم سعره؟") == "sales"
+
+    def test_smalltalk_reply_does_not_use_product_fallback_language(self):
+        reply = _smalltalk_reply("الو", "ar")
+
+        assert "منتج" not in reply
+        assert "صورة" not in reply
+        assert "مش واضحة" not in reply
+        assert reply == "معك، تفضل 😊"
+
+    @pytest.mark.asyncio
+    async def test_smalltalk_does_not_inherit_previous_sales_intent(self, monkeypatch):
+        create = AsyncMock(side_effect=AssertionError("router LLM should not run"))
+        client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+        monkeypatch.setattr("services.router.effective_openai_key", AsyncMock(return_value="sk-test"))
+        monkeypatch.setattr("services.router._client_for", lambda _api_key: client)
+        history = [
+            {"role": "user", "content": "عندكم Mix Fruit؟"},
+            {"role": "assistant", "content": "أكيد، Mix Fruit متوفر."},
+        ]
+
+        intent = await get_intent_for_message("الو", MagicMock(), history=history)
+
+        assert intent == "general"
+        create.assert_not_called()
 
     def test_sales_intent_exposes_catalog_tool(self):
         tool_names = {t["function"]["name"] for t in get_tools_for_intent("sales")}

@@ -177,6 +177,61 @@ _FOLLOWUP_TERMS = (
     "\u0628\u0631\u0636\u0648", "\u0648\u0627\u064a\u0634", "\u0648\u0634\u0648",
     "and", "what about", "also", "how about",
 )
+_SMALLTALK_TERMS = (
+    "\u0627\u0644\u0633\u0644\u0627\u0645 \u0639\u0644\u064a\u0643\u0645",
+    "\u0648\u0639\u0644\u064a\u0643\u0645 \u0627\u0644\u0633\u0644\u0627\u0645",
+    "\u0633\u0644\u0627\u0645 \u0639\u0644\u064a\u0643\u0645",
+    "\u0633\u0644\u0627\u0645", "\u0645\u0631\u062d\u0628\u0627",
+    "\u0645\u0631\u0627\u062d\u0628", "\u0647\u0644\u0627",
+    "\u0627\u0647\u0644\u0627", "\u0627\u0647\u0644\u064a\u0646",
+    "\u0627\u0644\u0648", "\u0627\u0644\u0648\u0648",
+    "\u0635\u0628\u0627\u062d \u0627\u0644\u062e\u064a\u0631",
+    "\u0645\u0633\u0627\u0621 \u0627\u0644\u062e\u064a\u0631",
+    "\u064a\u0639\u0637\u064a\u0643 \u0627\u0644\u0639\u0627\u0641\u064a\u0647",
+    "\u0643\u064a\u0641\u0643", "\u0643\u064a\u0641\u0643\u0645",
+    "\u0643\u064a\u0641 \u062d\u0627\u0644\u0643",
+    "\u0643\u064a\u0641 \u0627\u0644\u062d\u0627\u0644",
+    "\u0643\u064a\u0641 \u0627\u0644\u0627\u0645\u0648\u0631",
+    "\u0643\u064a\u0641 \u0627\u0645\u0648\u0631\u0643",
+    "\u0634\u0648 \u0627\u062e\u0628\u0627\u0631\u0643",
+    "\u0627\u062e\u0628\u0627\u0631\u0643",
+    "\u0627\u0644\u062d\u0645\u062f\u0644\u0644\u0647",
+    "\u062a\u0645\u0627\u0645", "\u0634\u0643\u0631\u0627",
+    "\u064a\u0633\u0644\u0645\u0648",
+    "hi", "hello", "hey", "thanks", "thank you",
+    "how are you", "how r you",
+)
+_SMALLTALK_ONLY_TOKENS = {
+    "\u0627\u0644\u0633\u0644\u0627\u0645", "\u0639\u0644\u064a\u0643\u0645",
+    "\u0648\u0639\u0644\u064a\u0643\u0645", "\u0633\u0644\u0627\u0645",
+    "\u0645\u0631\u062d\u0628\u0627", "\u0645\u0631\u0627\u062d\u0628",
+    "\u0647\u0644\u0627", "\u0627\u0647\u0644\u0627",
+    "\u0627\u0647\u0644\u064a\u0646", "\u0627\u0644\u0648",
+    "\u0627\u0644\u0648\u0648", "\u0643\u064a\u0641\u0643",
+    "\u0643\u064a\u0641\u0643\u0645", "\u0643\u064a\u0641",
+    "\u062d\u0627\u0644\u0643", "\u0627\u0644\u062d\u0627\u0644",
+    "\u0627\u0644\u0627\u0645\u0648\u0631", "\u0627\u0645\u0648\u0631\u0643",
+    "\u0634\u0648", "\u0627\u062e\u0628\u0627\u0631\u0643",
+    "\u0627\u062e\u0628\u0627\u0631\u0643", "\u0637\u064a\u0628",
+    "\u062a\u0645\u0627\u0645", "\u0627\u0648\u0643\u064a",
+    "\u0627\u0648\u0643\u0649", "\u0634\u0643\u0631\u0627",
+    "\u064a\u0633\u0644\u0645\u0648", "\u0627\u0644\u062d\u0645\u062f\u0644\u0644\u0647",
+    "hi", "hello", "hey", "ok", "okay", "thanks",
+    "thank", "you", "how", "are", "r",
+}
+_SMALLTALK_TOKEN_SPLIT_RE = re.compile(r"[\s,\u060c/\\|+\-_.:;\u061f?!()]+")
+_BUSINESS_SIGNAL_TERMS = (
+    _BOOKING_TERMS
+    + _SUPPORT_TERMS
+    + _SALES_TERMS
+    + _RECOMMENDATION_TERMS
+    + _DELIVERY_TERMS
+    + _IMAGE_TERMS
+    + _LOOK_TERMS
+    + _HUMAN_HANDOFF_TERMS
+    + _LANGUAGE_SWITCH_TERMS
+    + _OUT_OF_SCOPE_TERMS
+)
 _PLACE_SALES_RE = re.compile(
     r"(?:بتبيعوا|بتبيعو|بتبيع|تبيعوا|تبيعو|sell|selling).{0,20}"
     r"(?:\sفي\s|\sب\s|\sداخل\s|\sin\s)",
@@ -194,6 +249,32 @@ def _contains_any(text: str, terms: tuple[str, ...]) -> bool:
     return any(term in text for term in terms)
 
 
+def is_smalltalk_message(customer_message: str) -> bool:
+    """True only for greetings/thanks/chit-chat with no business request."""
+    text = _normalise_message(customer_message)
+    if not text:
+        return True
+
+    if _contains_any(text, _BUSINESS_SIGNAL_TERMS) or _PLACE_SALES_RE.search(text):
+        return False
+
+    tokens = [
+        token
+        for token in _SMALLTALK_TOKEN_SPLIT_RE.split(text)
+        if token
+    ]
+    for term in _SMALLTALK_TERMS:
+        if " " in term:
+            if term in text:
+                return True
+        elif term in tokens:
+            return True
+
+    return bool(tokens) and len(tokens) <= 4 and all(
+        token in _SMALLTALK_ONLY_TOKENS for token in tokens
+    )
+
+
 def heuristic_intent_for_message(customer_message: str) -> str | None:
     """Deterministic guardrail before the LLM router.
 
@@ -202,6 +283,9 @@ def heuristic_intent_for_message(customer_message: str) -> str | None:
     """
     text = _normalise_message(customer_message)
     if not text:
+        return "general"
+
+    if is_smalltalk_message(customer_message):
         return "general"
 
     if _contains_any(text, _BOOKING_TERMS):
@@ -219,6 +303,9 @@ def heuristic_intents_for_message(customer_message: str) -> list[str]:
     """Return all obvious deterministic intents in a message."""
     text = _normalise_message(customer_message)
     if not text:
+        return ["general"]
+
+    if is_smalltalk_message(customer_message):
         return ["general"]
 
     intents: list[str] = []
@@ -292,6 +379,8 @@ def _intent_from_history(history: list[dict] | None) -> str | None:
 def _is_followup(customer_message: str) -> bool:
     text = _normalise_message(customer_message)
     if not text:
+        return False
+    if is_smalltalk_message(customer_message):
         return False
     if len(text.split()) <= 4:
         return True
