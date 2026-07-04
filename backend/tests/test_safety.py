@@ -49,6 +49,7 @@ from services.ai_tools import (
 )
 from services.ai_chat import _try_static_catalog_reply
 from services.router import (
+    detect_message_intents,
     expanded_intents_for_message,
     get_intent_for_message,
     heuristic_intent_for_message,
@@ -184,6 +185,9 @@ class TestRouterGuardrails:
     def test_delivery_question_routes_to_support_without_llm(self):
         assert heuristic_intent_for_message("\u0643\u0645 \u0631\u0633\u0648\u0645 \u0627\u0644\u062a\u0648\u0635\u064a\u0644\u061f") == "support"
 
+    def test_recommendation_question_routes_to_sales_without_llm(self):
+        assert heuristic_intent_for_message("\u0634\u0648 \u0628\u062a\u0646\u0635\u062d\u0646\u064a\u061f \u0623\u0648\u0644 \u0645\u0631\u0629 \u0628\u062c\u0631\u0628\u0643\u0645") == "sales"
+
     def test_booking_question_routes_to_booking_without_llm(self):
         assert heuristic_intent_for_message("\u0628\u062f\u064a \u0627\u062d\u062c\u0632 \u0645\u0648\u0639\u062f \u0628\u0643\u0631\u0627") == "booking"
 
@@ -204,6 +208,17 @@ class TestRouterGuardrails:
         assert heuristic_intent_for_message("\u0641\u064a\u0646\u0643\u0645\u061f") == "support"
         assert heuristic_intent_for_message("\u0628\u062f\u064a \u0627\u0639\u0631\u0641 \u0627\u0645\u0627\u0643\u0646\u0643\u0645") == "support"
         assert heuristic_intent_for_message("\u0646\u0642\u0627\u0637 \u0628\u064a\u0639") == "support"
+
+    def test_fine_grained_intents_cover_report_cases(self):
+        assert detect_message_intents("Can you speak English?") == ["LANGUAGE_SWITCH"]
+        assert "ASK_PRICE" in detect_message_intents("\u0643\u0645 \u0633\u0639\u0631\u0647\u061f")
+        assert "ASK_AVAILABILITY" in detect_message_intents("\u0639\u0646\u062f\u0643\u0645 Mix Fruit\u061f")
+        assert "ASK_RECOMMENDATION" in detect_message_intents("\u0634\u0648 \u0628\u062a\u0646\u0635\u062d\u0646\u064a\u061f")
+        assert "ASK_IMAGES" in detect_message_intents("\u0627\u0628\u0639\u062a\u0644\u064a \u0635\u0648\u0631\u062a\u0647")
+        assert {"ASK_PRODUCT_LOOK", "ASK_IMAGES"} <= set(detect_message_intents("\u0634\u0643\u0644\u0647 \u0643\u064a\u0641\u061f"))
+        assert "ASK_DELIVERY" in detect_message_intents("\u0641\u064a \u062a\u0648\u0635\u064a\u0644\u061f")
+        assert "HUMAN_HANDOFF" in detect_message_intents("\u0628\u062f\u064a \u0623\u062d\u0643\u064a \u0645\u0639 \u0645\u0648\u0638\u0641")
+        assert "OUT_OF_SCOPE" in detect_message_intents("\u0634\u0648 \u0631\u0623\u064a\u0643 \u0628\u0627\u0644\u0633\u064a\u0627\u0633\u0629\u061f")
 
     @pytest.mark.asyncio
     async def test_router_invalid_model_output_falls_back_to_uncertain(self, monkeypatch):
@@ -379,6 +394,14 @@ class TestSupplementalRetrievalPlan:
         assert calls[0].name == "get_catalog"
         assert calls[0].args["query"] == "\u062e\u0648\u062e"
 
+    def test_recommendation_question_fetches_detailed_catalog_context(self):
+        calls = supplemental_tool_plan(
+            "\u0634\u0648 \u0628\u062a\u0646\u0635\u062d\u0646\u064a\u061f \u0623\u0648\u0644 \u0645\u0631\u0629 \u0628\u062c\u0631\u0628\u0643\u0645",
+            "sales",
+        )
+        assert calls[0].name == "get_catalog"
+        assert calls[0].args == {"query": "", "include_details": True}
+
     def test_family_box_detail_question_fetches_catalog_and_business_info(self):
         calls = supplemental_tool_plan(
             "\u0627\u0644\u0628\u0648\u0643\u0633 \u0627\u0644\u0639\u0627\u0626\u0644\u064a \u0628\u062a\u0642\u062f\u0631 \u062a\u0648\u0631\u062c\u064a\u0646\u064a \u0643\u064a\u0641 \u0647\u0648",
@@ -488,6 +511,76 @@ class TestStaticCatalogReply:
             current_turn_keys=["get_catalog:{}"],
         )
         assert reply is None
+
+    def test_missing_price_uses_warm_fallback_without_inventing(self):
+        item = {**self.peach, "price": None}
+        reply = _try_static_catalog_reply(
+            "\u0643\u0645 \u0633\u0639\u0631\u0647\u061f",
+            {"get_catalog:{\"query\": \"\u062e\u0648\u062e\"}": {"matched": True, "items": [item]}},
+            [{"role": "assistant", "content": "\u0639\u0646\u062f\u0646\u0627 \u062e\u0648\u062e \u2014 Peach"}],
+            current_turn_keys=["get_catalog:{\"query\": \"\u062e\u0648\u062e\"}"],
+        )
+
+        assert reply is not None
+        assert "\u062e\u0644\u064a\u0646\u064a \u0623\u062a\u0623\u0643\u062f\u0644\u0643" in reply
+        assert "5 \u062f\u064a\u0646\u0627\u0631" not in reply
+        assert "\u0627\u0644\u0631\u062f \u0627\u0644\u0622\u0644\u064a \u0645\u062a\u0648\u0642\u0641" not in reply
+
+    def test_icy_bites_product_look_uses_tenant_metadata_only(self):
+        mix_fruit = {
+            "id": "mix-fruit",
+            "name": "Mix Fruit",
+            "category": "Frozen dessert",
+            "description": "Packaged branded cup-style fruit-based frozen treat.",
+            "price": 5,
+            "currency": "JOD",
+            "available": True,
+            "image_url": "/uploads/icy/mix-fruit.jpg",
+            "metadata": {
+                "brand": "Icy Bites",
+                "visual_description_en": "an Icy Bites branded cup-style frozen dessert with a fruity, refreshing profile",
+                "visual_description_ar": "\u0643\u0645\u0646\u062a\u062c \u062c\u0627\u0647\u0632 \u0628\u0643\u0628 Icy Bites \u0627\u0644\u0628\u0631\u0627\u0646\u062f\u062f\u060c \u0628\u0637\u0627\u0628\u0639 \u0641\u0648\u0627\u0643\u0647 \u0645\u0646\u0639\u0634",
+                "recommendation_reason_ar": "\u0645\u0646 \u0627\u0644\u062e\u064a\u0627\u0631\u0627\u062a \u0627\u0644\u0644\u0637\u064a\u0641\u0629 \u0648\u0627\u0644\u0645\u0646\u0639\u0634\u0629",
+            },
+        }
+        data = {"get_catalog:{\"query\": \"mix fruit\"}": {"matched": True, "items": [mix_fruit]}}
+
+        english_reply = _try_static_catalog_reply(
+            "What does Mix Fruit look like?",
+            data,
+            [],
+            current_turn_keys=["get_catalog:{\"query\": \"mix fruit\"}"],
+            conversation_language="en",
+        )
+        arabic_reply = _try_static_catalog_reply(
+            "\u0634\u0643\u0644\u0647 \u0643\u064a\u0641\u061f",
+            data,
+            [{"role": "assistant", "content": "Mix Fruit \u0645\u062a\u0648\u0641\u0631."}],
+            current_turn_keys=[],
+            conversation_language="ar",
+        )
+
+        assert english_reply is not None
+        assert "branded cup-style frozen dessert" in english_reply
+        assert "product image" in english_reply
+        assert "scoop" not in english_reply.lower()
+        assert "cone" not in english_reply.lower()
+        assert arabic_reply is not None
+        assert "Icy Bites" in arabic_reply
+        assert "\u0643\u0628" in arabic_reply
+
+    def test_generic_product_does_not_get_icy_bites_packaging_language(self):
+        reply = _try_static_catalog_reply(
+            "\u0634\u0643\u0644\u0647 \u0643\u064a\u0641\u061f",
+            self.retrieved,
+            [{"role": "assistant", "content": "\u0639\u0646\u062f\u0646\u0627 \u062e\u0648\u062e \u2014 Peach"}],
+            current_turn_keys=["get_catalog:{\"query\": \"\u062e\u0648\u062e\"}"],
+            conversation_language="ar",
+        )
+
+        assert reply is not None
+        assert "Icy Bites" not in reply
+        assert "branded cup" not in reply
 
 
 class TestAITraceLogging:

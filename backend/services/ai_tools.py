@@ -107,6 +107,14 @@ TOOLS = [
                         "type": "boolean",
                         "description": "If true, only currently available items",
                     },
+                    "include_details": {
+                        "type": "boolean",
+                        "description": (
+                            "For recommendation/comparison flows only. If true with "
+                            "an empty query, return full item details instead of a "
+                            "names-only overview."
+                        ),
+                    },
                 },
             },
         },
@@ -871,7 +879,9 @@ async def _exec_get_catalog(func_args: dict, user_id: uuid.UUID, db: AsyncSessio
     else:
         capped = False
 
-    if not query:
+    include_details = bool(func_args.get("include_details"))
+
+    if not query and not include_details:
         overview_items = [
             {
                 "name": item.name,
@@ -894,6 +904,25 @@ async def _exec_get_catalog(func_args: dict, user_id: uuid.UUID, db: AsyncSessio
             ),
             "note": "no items in catalog" if not rows else (
                 "showing top 50 names/categories" if capped else ""
+            ),
+        }
+
+    if not query and include_details:
+        return {
+            "query": query,
+            "matched": matched,
+            "overview_only": False,
+            "recommendation_context": True,
+            "count": len(rows),
+            "items": [_serialize_item(i) for i in rows] if rows else [],
+            "categories": cats,
+            "note": "no items in catalog" if not rows else (
+                "showing top 50 recommendation candidates" if capped else ""
+            ),
+            "instruction": (
+                "Recommendation context: suggest only products present in these "
+                "items. Do not invent prices, availability, formats, packaging, "
+                "or flavors. Ask one useful preference question after the suggestion."
             ),
         }
 

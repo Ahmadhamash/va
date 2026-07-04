@@ -5,7 +5,7 @@ import re
 import uuid
 from time import monotonic
 from openai import APIError
-from sqlalchemy import func, select, update
+from sqlalchemy import func, inspect, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models import ChatSession, Message, User, BusinessWorkflow, VoiceSettings
@@ -48,9 +48,9 @@ MAX_TOOL_ROUNDS = 5
 OPENAI_TIMEOUT_SECONDS = 30.0
 NO_CREDIT_REPLY = "الخدمة متوقفة مؤقتا لأن رصيد رسائل الذكاء الاصطناعي انتهى."
 SERVICE_UNAVAILABLE_REPLY = "الخدمة مش متاحة حاليا، حاول بعد شوي."
-RETRIEVAL_ERROR_REPLY = "ما قدرت أجيب المعلومة حاليا، خليني أراجعها وأرجعلك."
+RETRIEVAL_ERROR_REPLY = "خليني أتأكدلك من المعلومة الأدق، وبحوّلك للفريق يساعدك أكثر 🙏"
 PROMPT_INJECTION_REPLY = "ما فهمت عليك، ممكن توضحلي شو بالضبط تحتاج؟"
-AI_PAUSED_REPLY = "الرد الآلي متوقف حاليا، رح يرجعلك أحد من الفريق بأقرب وقت."
+AI_PAUSED_REPLY = "وصلت رسالتك، وبحوّلك للفريق يساعدك بشكل أدق 🙏"
 RESPONSE_CACHE_TTL_SECONDS = 300
 RESPONSE_CACHE_ENABLED = os.getenv("AI_RESPONSE_CACHE_ENABLED", "false").strip().lower() in {
     "1",
@@ -88,6 +88,30 @@ _IMAGE_REQUEST_TERMS = (
     "image", "photo", "picture", "pic", "look", "looks", "show me",
     "صورة", "صوره", "صور", "شكل", "شكلها", "شكله", "شكلو", "شكلهم",
     "بتطلع", "تطلع",
+)
+_SEND_IMAGE_REQUEST_TERMS = (
+    "image", "photo", "picture", "pic", "show me", "send",
+    "صورة", "صوره", "صور", "صورتها", "صورته", "ابعت", "ابعث",
+    "ارسل", "ورجيني", "تورجيني",
+)
+_PRODUCT_LOOK_REQUEST_RE = re.compile(
+    r"(?:شكل|شكله|شكلها|شكلو|كيف\s+شكله|كيف\s+شكلها|بيجي|بتيجي|بتطلع|تطلع|"
+    r"look\s+like|looks\s+like|what\s+does\s+.+\s+look|appearance)",
+    re.IGNORECASE,
+)
+_RECOMMENDATION_REQUEST_RE = re.compile(
+    r"(?:بتنصحني|تنصحني|شو\s+بتنصح|شو\s+تنصح|اول\s+مرة|أول\s+مرة|"
+    r"رشح|اقترح|نصيحة|recommend|suggest|first\s+time|what\s+should\s+i\s+try)",
+    re.IGNORECASE,
+)
+_LANGUAGE_SWITCH_EN_RE = re.compile(
+    r"\b(can you speak english|do you speak english|english please|answer in english|"
+    r"reply in english|speak english|in english)\b",
+    re.IGNORECASE,
+)
+_LANGUAGE_SWITCH_AR_RE = re.compile(
+    r"(?:بالعربي|احكي عربي|جاوب عربي|رد عربي|\barabic please\b|\banswer in arabic\b)",
+    re.IGNORECASE,
 )
 _PRICE_REQUEST_RE = re.compile(
     r"(?:سعر|السعر|سعره|سعرها|بكم|قديش|كم\s+سعر|حقه|حقها|price|cost)",
@@ -271,6 +295,179 @@ _DETAIL_REQUEST_RE = re.compile(
 
 def _client_for(api_key: str):
     return get_openai_client(api_key, timeout=OPENAI_TIMEOUT_SECONDS)
+
+
+def _model_id(model) -> uuid.UUID:
+    loaded = getattr(model, "__dict__", {}).get("id")
+    if loaded is not None:
+        return loaded
+    state = inspect(model)
+    if state.identity:
+        return state.identity[0]
+    return model.id
+
+
+def _detect_language_switch(text: str | None) -> str | None:
+    clean = (text or "").strip().casefold()
+    if not clean:
+        return None
+    if _LANGUAGE_SWITCH_EN_RE.search(clean):
+        return "en"
+    if _LANGUAGE_SWITCH_AR_RE.search(clean):
+        return "ar"
+    return None
+
+
+def _detect_text_language(text: str | None) -> str | None:
+    value = text or ""
+    arabic_chars = sum(1 for ch in value if "\u0600" <= ch <= "\u06ff")
+    latin_chars = sum(1 for ch in value if "a" <= ch.lower() <= "z")
+    if latin_chars >= 4 and latin_chars >= arabic_chars * 2:
+        return "en"
+    if arabic_chars >= 2 and arabic_chars >= latin_chars:
+        return "ar"
+    return None
+
+
+def _is_english_context(language: str | None, customer_message: str | None = None) -> bool:
+    return language == "en" or (
+        language is None and _detect_text_language(customer_message) == "en"
+    )
+
+
+def _language_name(language: str | None) -> str:
+    return "English" if language == "en" else "Arabic/Jordanian"
+
+
+def _extract_customer_preference(text: str | None) -> str | None:
+    clean = _catalog_reply_normalise(text)
+    if not clean:
+        return None
+    if any(term in clean for term in ("فواكه", "فواكه", "fruit", "fruity", "منعش", "refresh")):
+        return "fruity/refreshing"
+    if any(term in clean for term in ("شوكولاته", "شوكولاتة", "غني", "chocolate", "rich", "creamy")):
+        return "rich/creamy"
+    return None
+
+
+async def _prepare_turn_context(
+    session_id: uuid.UUID,
+    db: AsyncSession,
+    customer_message: str | None,
+) -> dict:
+    session = await db.get(ChatSession, session_id)
+    if session is None:
+        return {}
+
+    metadata = dict(session.metadata_ or {})
+    context = dict(metadata.get("conversation_context") or {})
+    explicit_language = _detect_language_switch(customer_message)
+    message_language = _detect_text_language(customer_message)
+    current_language = context.get("current_language")
+
+    if explicit_language:
+        current_language = explicit_language
+    elif message_language == "ar":
+        current_language = "ar"
+    elif not current_language and message_language:
+        current_language = message_language
+
+    if current_language in {"ar", "en"}:
+        context["current_language"] = current_language
+
+    preference = _extract_customer_preference(customer_message)
+    if preference:
+        context["customer_preference"] = preference
+
+    metadata["conversation_context"] = context
+    session.metadata_ = metadata
+    db.add(session)
+    await db.flush()
+    return context
+
+
+def _conversation_context_message(context: dict) -> dict | None:
+    if not context:
+        return None
+
+    lines = [
+        "CONVERSATION MEMORY FOR THIS SESSION:",
+        "Use this as per-session context only. Factual product details still must come from current or previous verified tool/catalog data.",
+    ]
+    language = context.get("current_language")
+    if language:
+        lines.append(f"- current_language: {_language_name(language)}")
+    current_product = context.get("current_product")
+    if isinstance(current_product, dict) and current_product.get("name"):
+        lines.append(f"- current_product: {current_product['name']}")
+    last_product = context.get("last_mentioned_product")
+    if isinstance(last_product, dict) and last_product.get("name"):
+        lines.append(f"- last_mentioned_product: {last_product['name']}")
+    if context.get("customer_preference"):
+        lines.append(f"- customer_preference: {context['customer_preference']}")
+
+    return {"role": "system", "content": "\n".join(lines)}
+
+
+async def _remember_catalog_context(
+    session_id: uuid.UUID,
+    db: AsyncSession,
+    item: dict | None,
+    *,
+    customer_message: str | None = None,
+) -> None:
+    session = await db.get(ChatSession, session_id)
+    if session is None:
+        return
+
+    metadata = dict(session.metadata_ or {})
+    context = dict(metadata.get("conversation_context") or {})
+    preference = _extract_customer_preference(customer_message)
+    if preference:
+        context["customer_preference"] = preference
+
+    if item and item.get("name"):
+        product_context = {
+            "id": str(item.get("id") or ""),
+            "name": str(item.get("name") or ""),
+            "category": str(item.get("category") or ""),
+            "has_image": bool(item.get("image_url")),
+        }
+        context["current_product"] = product_context
+        context["last_mentioned_product"] = product_context
+
+    metadata["conversation_context"] = context
+    session.metadata_ = metadata
+    db.add(session)
+    await db.flush()
+
+
+def _language_switch_reply(language: str, business_name: str | None = None) -> str:
+    if language == "en":
+        return (
+            "Yes, of course 😊 I can help you in English. Would you like to know "
+            "about available products, prices, or recommendations?"
+        )
+    return "أكيد، بحكي عربي. شو بتحب تعرف عن المنتجات أو الأسعار؟"
+
+
+def _out_of_scope_reply(language: str | None, business_name: str | None = None) -> str:
+    name = (business_name or "منتجاتنا").strip()
+    if language == "en":
+        return (
+            f"Let’s keep it around {name} 😊 I can help you choose a product, "
+            "check prices, or send available product images."
+        )
+    return (
+        f"خلينا بالـ {name} أحلى 😄 إذا بتحب، بقدر أساعدك تختار منتج "
+        "أو أبعثلك صور الخيارات المتوفرة."
+    )
+
+
+def _handoff_reply(language: str | None) -> str:
+    if language == "en":
+        return "Of course, no problem 🙏 I’ll connect you with the team so they can help more precisely."
+    return "أكيد، ولا يهمك 🙏 رح أحوّلك لموظف من الفريق يساعدك بشكل أدق."
 
 
 def _handoff_disabled_fallback(customer_message: str) -> str:
@@ -707,7 +904,7 @@ async def _try_static_business_reply(
     result = await execute_db_function(
         "get_business_info",
         {},
-        user.id,
+        _model_id(user),
         db,
         session_id=session_id,
     )
@@ -771,9 +968,94 @@ async def _try_static_business_reply(
     return _trim_static_reply(reply), retrieved_data
 
 
+def _customer_asked_to_send_image(text: str | None) -> bool:
+    clean = (text or "").casefold()
+    return any(term.casefold() in clean for term in _SEND_IMAGE_REQUEST_TERMS)
+
+
+def _customer_asked_product_look(text: str | None) -> bool:
+    return bool(_PRODUCT_LOOK_REQUEST_RE.search(text or ""))
+
+
 def _customer_asked_for_image(text: str | None) -> bool:
     clean = (text or "").casefold()
-    return any(term.casefold() in clean for term in _IMAGE_REQUEST_TERMS)
+    return (
+        any(term.casefold() in clean for term in _IMAGE_REQUEST_TERMS)
+        or _customer_asked_product_look(text)
+    )
+
+
+def _item_metadata(item: dict | None) -> dict:
+    metadata = (item or {}).get("metadata")
+    return metadata if isinstance(metadata, dict) else {}
+
+
+def _metadata_text(item: dict | None, *keys: str) -> str:
+    metadata = _item_metadata(item)
+    for key in keys:
+        value = metadata.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
+
+
+def _catalog_item_brand(item: dict | None) -> str:
+    return _metadata_text(item, "brand", "product_brand", "visual_brand")
+
+
+def _catalog_item_format_text(item: dict, language: str | None) -> str:
+    if language == "en":
+        return _metadata_text(
+            item,
+            "visual_description_en",
+            "product_format_en",
+            "packaging_en",
+            "visual_identity_en",
+            "flavor_profile_en",
+            "product_format",
+            "packaging",
+            "visual_identity",
+            "flavor_profile",
+        )
+    return _metadata_text(
+        item,
+        "visual_description_ar",
+        "product_format_ar",
+        "packaging_ar",
+        "visual_identity_ar",
+        "flavor_profile_ar",
+        "product_format",
+        "packaging",
+        "visual_identity",
+        "flavor_profile",
+    )
+
+
+def _catalog_item_recommendation_reason(item: dict, language: str | None) -> str:
+    if language == "en":
+        return _metadata_text(
+            item,
+            "recommendation_reason_en",
+            "flavor_profile_en",
+            "product_format_en",
+            "recommendation_reason",
+            "flavor_profile",
+        )
+    return _metadata_text(
+        item,
+        "recommendation_reason_ar",
+        "flavor_profile_ar",
+        "product_format_ar",
+        "recommendation_reason",
+        "flavor_profile",
+    )
+
+
+def _catalog_item_description_text(item: dict, language: str | None) -> str:
+    metadata_description = _catalog_item_format_text(item, language)
+    if metadata_description:
+        return metadata_description
+    return str(item.get("description") or "").strip()
 
 
 def _catalog_image_url_from_data(retrieved_data: dict) -> str | None:
@@ -852,10 +1134,24 @@ def _catalog_item_for_image_url(retrieved_data: dict, image_url: str | None) -> 
     return None
 
 
-def _image_attachment_caption(retrieved_data: dict, image_url: str) -> str:
+def _image_attachment_caption(
+    retrieved_data: dict,
+    image_url: str,
+    *,
+    language: str | None = None,
+) -> str:
     item = _catalog_item_for_image_url(retrieved_data, image_url)
     name = str((item or {}).get("name") or "").strip()
+    brand = _catalog_item_brand(item)
+    if language == "en":
+        if name and brand:
+            return f"Of course 😊 here is the {name} image from {brand}."
+        if name:
+            return f"Of course 😊 here is the {name} image."
+        return "Of course 😊 here is the image."
     if name:
+        if brand:
+            return f"أكيد 😍 هاي صورة {name} من {brand}."
         return f"أكيد، هاي صورة {name}."
     return "أكيد، هاي الصورة."
 
@@ -902,7 +1198,11 @@ def _prepare_image_attachment_reply(
             or _reply_only_promises_image(cleaned)
         )
     ):
-        return _image_attachment_caption(retrieved_data, image_url)
+        return _image_attachment_caption(
+            retrieved_data,
+            image_url,
+            language=_detect_text_language(customer_message),
+        )
     return cleaned
 
 
@@ -928,10 +1228,11 @@ async def _run_pre_ai_automations(
         .where(Message.session_id == session.id, Message.role == "user")
     )
     metadata = session.metadata_ or {}
+    user_id = _model_id(user)
     context = AutomationContext(
         trigger="new_message",
         session_id=session.id,
-        user_id=user.id,
+        user_id=user_id,
         channel=session.channel,
         customer_name=session.title or "",
         message_text=customer_message or "",
@@ -952,7 +1253,7 @@ async def _run_pre_ai_automations(
         trigger_results = await engine.evaluate_rules(
             trigger,
             context,
-            user.id,
+            user_id,
             db,
             dry_run=PRE_AI_AUTOMATIONS_SHADOW_MODE,
             commit=False,
@@ -992,6 +1293,7 @@ async def _run_post_ai_automations(
         .where(Message.session_id == session.id, Message.role == "user")
     )
     metadata = session.metadata_ or {}
+    user_id = _model_id(user)
 
     triggered_types = []
 
@@ -1028,7 +1330,7 @@ async def _run_post_ai_automations(
     context = AutomationContext(
         trigger="new_message",  # will be overridden per trigger loop
         session_id=session.id,
-        user_id=user.id,
+        user_id=user_id,
         channel=session.channel,
         customer_name=session.title or "",
         message_text=customer_message or "",
@@ -1049,7 +1351,7 @@ async def _run_post_ai_automations(
         trigger_results = await engine.evaluate_rules(
             t,
             context,
-            user.id,
+            user_id,
             db,
             commit=False,
         )
@@ -1331,11 +1633,15 @@ def _try_static_catalog_reply(
     history: list[dict],
     *,
     current_turn_keys: list[str] | None = None,
+    conversation_language: str | None = None,
+    business_name: str | None = None,
 ) -> str | None:
     asks_price = bool(_PRICE_REQUEST_RE.search(customer_message or ""))
     asks_image = _customer_asked_for_image(customer_message)
+    asks_send_image = _customer_asked_to_send_image(customer_message)
+    asks_product_look = _customer_asked_product_look(customer_message)
     asks_availability = bool(_AVAILABILITY_REQUEST_RE.search(customer_message or ""))
-    asks_details = bool(_DETAIL_REQUEST_RE.search(customer_message or ""))
+    asks_details = bool(_DETAIL_REQUEST_RE.search(customer_message or "")) or asks_product_look
     if not (asks_price or asks_image or asks_availability or asks_details):
         return None
     if _MIXED_NON_CATALOG_REQUEST_RE.search(customer_message or ""):
@@ -1350,42 +1656,178 @@ def _try_static_catalog_reply(
     if not item:
         return None
 
+    language = conversation_language or _detect_text_language(customer_message)
+    english = _is_english_context(language, customer_message)
     name = str(item.get("name") or "").strip()
-    description = str(item.get("description") or "").strip()
     category = str(item.get("category") or "").strip()
     price = _format_catalog_price(item.get("price"), item.get("currency"))
     available = item.get("available")
+    description = _catalog_item_description_text(item, "en" if english else "ar")
     parts: list[str] = []
 
     if asks_details:
         if description:
-            parts.append(f"{name}: {description}")
+            if english:
+                parts.append(f"{name} comes as {description}.")
+            else:
+                parts.append(f"{name} بيجي {description}.")
         elif category:
-            parts.append(f"{name} من قسم {category}.")
+            if english:
+                parts.append(f"{name} is listed under {category}.")
+            else:
+                parts.append(f"{name} من قسم {category}.")
         else:
             parts.append(name)
 
     if asks_availability:
         if available is False:
-            parts.append(f"{name} مش متوفر حاليًا.")
+            parts.append(
+                f"{name} is not available right now."
+                if english else f"{name} مش متوفر حاليًا."
+            )
         elif available is True:
-            parts.append(f"{name} متوفر.")
+            parts.append(
+                f"{name} is available."
+                if english else f"{name} متوفر."
+            )
 
     if asks_price:
         if not price:
-            return None
+            if english:
+                return (
+                    f"Let me check the current price for {name}. I can connect you "
+                    "with the team to confirm the most accurate price 🙏"
+                )
+            return (
+                f"خليني أتأكدلك من السعر الحالي لـ {name}، "
+                "وبحوّلك للفريق يعطيك السعر الأدق 🙏"
+            )
         if parts:
-            parts[-1] = parts[-1].rstrip(".") + f" وسعره {price}."
+            joiner = " and its price is" if english else " وسعره"
+            parts[-1] = parts[-1].rstrip(".") + f"{joiner} {price}."
         else:
-            parts.append(f"{name} سعره {price}.")
+            if english:
+                if available is True:
+                    parts.append(f"Yes, {name} is available and its price is {price}.")
+                else:
+                    parts.append(f"{name} price is {price}.")
+            else:
+                if available is True:
+                    parts.append(f"أكيد، {name} متوفر وسعره {price}.")
+                else:
+                    parts.append(f"أكيد، {name} سعره {price}.")
 
     if asks_image:
         if item.get("image_url"):
-            parts.append("وبقدر أبعثلك صورته كمان.")
+            if asks_send_image and not (asks_details or asks_price or asks_availability):
+                brand = _catalog_item_brand(item) or business_name
+                if english:
+                    if brand:
+                        parts.append(f"Of course 😊 here is the {name} image from {brand}.")
+                    else:
+                        parts.append(f"Of course 😊 here is the {name} image.")
+                else:
+                    if brand:
+                        parts.append(f"أكيد 😍 هاي صورة {name} من {brand}.")
+                    else:
+                        parts.append(f"أكيد، هاي صورة {name}.")
+            elif english:
+                parts.append("I can send you the product image if you’d like.")
+            else:
+                parts.append("إذا بتحب، بقدر أبعثلك صورته عشان تشوفه أوضح 😍")
         else:
-            parts.append("ما عندي صورة محفوظة له حاليًا.")
+            parts.append(
+                "The product image is not clear in the catalog right now."
+                if english else "صورة المنتج مش واضحة عندي هسه."
+            )
+
+    if asks_price and item.get("image_url") and not asks_image:
+        parts.append(
+            "I can also send you its image or help you compare another option."
+            if english else "إذا بتحب، بقدر أبعثلك صورته أو أساعدك تختار خيار ثاني كمان."
+        )
 
     return " ".join(part for part in parts if part).strip() or None
+
+
+def _try_static_recommendation_reply(
+    customer_message: str,
+    retrieved_data: dict,
+    *,
+    current_turn_keys: list[str] | None = None,
+    conversation_language: str | None = None,
+) -> str | None:
+    if not _RECOMMENDATION_REQUEST_RE.search(customer_message or ""):
+        return None
+
+    candidates = [
+        candidate["item"]
+        for candidate in _iter_catalog_items(
+            retrieved_data,
+            current_turn_keys=current_turn_keys,
+        )
+        if candidate["item"].get("available") is not False
+    ]
+    if not candidates:
+        return None
+
+    def score(item: dict) -> float:
+        metadata = _item_metadata(item)
+        value = 0.0
+        if metadata.get("recommended") is True or metadata.get("featured") is True:
+            value += 5.0
+        preference = _extract_customer_preference(customer_message) or ""
+        haystack = _catalog_reply_normalise(
+            " ".join(
+                str(part or "")
+                for part in (
+                    item.get("name"),
+                    item.get("category"),
+                    item.get("description"),
+                    " ".join(str(v) for v in metadata.values() if isinstance(v, str)),
+                )
+            )
+        )
+        if preference == "fruity/refreshing" and any(
+            term in haystack for term in ("fruit", "fruity", "فواكه", "منعش", "refresh")
+        ):
+            value += 3.0
+        if preference == "rich/creamy" and any(
+            term in haystack for term in ("rich", "creamy", "chocolate", "غني", "شوكولاته", "شوكولاتة")
+        ):
+            value += 3.0
+        if item.get("image_url"):
+            value += 0.5
+        return value
+
+    item = sorted(candidates, key=score, reverse=True)[0]
+    name = str(item.get("name") or "").strip()
+    if not name:
+        return None
+
+    language = conversation_language or _detect_text_language(customer_message)
+    english = _is_english_context(language, customer_message)
+    reason = _catalog_item_recommendation_reason(item, "en" if english else "ar")
+    has_image = bool(item.get("image_url"))
+
+    if english:
+        if reason:
+            reply = f"If it’s your first time, I’d start with {name} because {reason}."
+        else:
+            reply = f"If it’s your first time, I’d start with {name}."
+        if has_image:
+            reply += " I can send you the product image too."
+        reply += " Do you prefer something refreshing, or something richer?"
+        return reply
+
+    if reason:
+        reply = f"إذا أول مرة بتجربنا، بنصحك تبدأ بـ {name} لأنه {reason}."
+    else:
+        reply = f"إذا أول مرة بتجربنا، بنصحك تبدأ بـ {name} لأنه خيار حلو من الموجود عندنا."
+    if has_image:
+        reply += " وإذا بتحب، بقدر أبعثلك صورة المنتج كمان."
+    reply += " بتحب شيء منعش وخفيف، ولا بدك خيار أغنى بالطعم؟"
+    return reply
 
 
 def _tool_result_key(name: str, args: dict | None, *, prefix: str = "") -> str:
@@ -1445,7 +1887,7 @@ async def _run_pre_llm_retrieval(
         result = await execute_db_function(
             call.name,
             call.args,
-            user.id,
+            _model_id(user),
             db,
             session_id=session_id,
         )
@@ -1508,12 +1950,71 @@ async def _generate_reply(
     else:
         text_content = str(content)
 
+    from services.router import detect_message_intents
+
+    conversation_context = await _prepare_turn_context(session_id, db, text_content)
+    current_language = conversation_context.get("current_language")
+    message_intents = detect_message_intents(text_content)
+    human_handoff_enabled = await effective_human_handoff_enabled(db)
+
+    def direct_trace(reason: str, *, intent: str = "general") -> dict:
+        return {
+            "intent": intent,
+            "intents": [intent],
+            "message_intents": message_intents,
+            "conversation_context": conversation_context,
+            "router_text": text_content[:500],
+            "allowed_tools": [],
+            "tool_calls": [],
+            "tool_rounds": 0,
+            "max_tool_rounds": MAX_TOOL_ROUNDS,
+            "human_handoff_enabled": human_handoff_enabled,
+            "prompt_overrides": [],
+            "local_llm_enabled": False,
+            "model": "deterministic",
+            "finish_reason": reason,
+            "retrieved_keys": [],
+            "static_fast_path": True,
+        }
+
+    language_switch = _detect_language_switch(text_content)
+    if language_switch:
+        return (
+            _language_switch_reply(language_switch, user.business_name),
+            {"conversation_context:language": {"current_language": language_switch}},
+            direct_trace("language_switch"),
+        )
+
+    if "OUT_OF_SCOPE" in message_intents:
+        return (
+            _out_of_scope_reply(current_language, user.business_name),
+            {"conversation_context:out_of_scope": {"redirected": True}},
+            direct_trace("out_of_scope"),
+        )
+
+    if "HUMAN_HANDOFF" in message_intents:
+        if human_handoff_enabled:
+            trace = direct_trace("direct_handoff_requested", intent="support")
+            trace["direct_handoff_requested"] = True
+            return (
+                _handoff_reply(current_language),
+                {"conversation_context:handoff": {"requested": True}},
+                trace,
+            )
+        return (
+            _handoff_disabled_fallback(text_content),
+            {"conversation_context:handoff": {"requested": True, "enabled": False}},
+            direct_trace("handoff_disabled", intent="support"),
+        )
+
     static_reply = await _try_static_business_reply(user, session_id, text_content, db)
     if static_reply is not None:
         reply, retrieved_data = static_reply
         return reply, retrieved_data, {
             "intent": "support",
             "intents": ["support"],
+            "message_intents": message_intents,
+            "conversation_context": conversation_context,
             "router_text": text_content[:500],
             "allowed_tools": ["get_business_info"],
             "tool_calls": [
@@ -1528,7 +2029,7 @@ async def _generate_reply(
             ],
             "tool_rounds": 0,
             "max_tool_rounds": MAX_TOOL_ROUNDS,
-            "human_handoff_enabled": await effective_human_handoff_enabled(db),
+            "human_handoff_enabled": human_handoff_enabled,
             "prompt_overrides": [],
             "local_llm_enabled": False,
             "model": "deterministic",
@@ -1538,14 +2039,15 @@ async def _generate_reply(
         }
 
     history = await get_session_history(session_id, db, limit=HISTORY_LIMIT)
-    style_samples = await get_style_samples(user.id, db)
-    prompt_overrides = await get_client_prompt_overrides(user.id, db)
-    persona_settings = await get_effective_persona_config(user.id, db, user.ai_persona)
+    user_id = _model_id(user)
+    style_samples = await get_style_samples(user_id, db)
+    prompt_overrides = await get_client_prompt_overrides(user_id, db)
+    persona_settings = await get_effective_persona_config(user_id, db, user.ai_persona)
     assistant_profile = assistant_profile_data(user.ai_persona, persona_settings)
 
     # Fetch active workflows
     stmt_wf = select(BusinessWorkflow).where(
-        BusinessWorkflow.user_id == user.id,
+        BusinessWorkflow.user_id == user_id,
         BusinessWorkflow.is_active.is_(True)
     )
     workflows = list((await db.execute(stmt_wf)).scalars().all())
@@ -1556,7 +2058,6 @@ async def _generate_reply(
     api_key = await effective_openai_key(db)
     model = await effective_model(db)
     master_system_prompt = await effective_master_system_prompt(db)
-    human_handoff_enabled = await effective_human_handoff_enabled(db)
     client = _client_for(api_key)
     
     intent = await get_intent_for_message(text_content, db, history=history)
@@ -1568,6 +2069,8 @@ async def _generate_reply(
     trace: dict = {
         "intent": intent,
         "intents": intents,
+        "message_intents": message_intents,
+        "conversation_context": conversation_context,
         "router_text": text_content[:500],
         "allowed_tools": _tool_names(allowed_tools),
         "tool_calls": [],
@@ -1644,13 +2147,40 @@ async def _generate_reply(
         retrieved_data,
         history,
         current_turn_keys=pre_llm_keys,
+        conversation_language=current_language,
+        business_name=user.business_name,
     )
     if static_catalog_reply:
+        remembered_item = _best_catalog_item_for_turn(
+            text_content,
+            retrieved_data,
+            history,
+            current_turn_keys=pre_llm_keys,
+        )
+        await _remember_catalog_context(
+            session_id,
+            db,
+            remembered_item,
+            customer_message=text_content,
+        )
         trace["static_fast_path"] = True
         trace["static_catalog_fast_path"] = True
         trace["finish_reason"] = "static_catalog_fast_path"
         trace["retrieved_keys"] = list(retrieved_data.keys())
         return static_catalog_reply, retrieved_data, trace
+
+    static_recommendation_reply = _try_static_recommendation_reply(
+        text_content,
+        retrieved_data,
+        current_turn_keys=pre_llm_keys,
+        conversation_language=current_language,
+    )
+    if static_recommendation_reply:
+        trace["static_fast_path"] = True
+        trace["static_recommendation_fast_path"] = True
+        trace["finish_reason"] = "static_recommendation_fast_path"
+        trace["retrieved_keys"] = list(retrieved_data.keys())
+        return static_recommendation_reply, retrieved_data, trace
 
     messages: list[dict] = [
         {
@@ -1666,8 +2196,11 @@ async def _generate_reply(
                 persona_settings=persona_settings,
             ),
         },
-        *history,
     ]
+    context_message = _conversation_context_message(conversation_context)
+    if context_message is not None:
+        messages.append(context_message)
+    messages.extend(history)
     if pre_retrieved_message is not None:
         messages.append(pre_retrieved_message)
     messages.append({"role": "user", "content": content})
@@ -1703,7 +2236,7 @@ async def _generate_reply(
             except json.JSONDecodeError:
                 func_args = {}
             result = await execute_db_function(
-                tool_call.function.name, func_args, user.id, db,
+                tool_call.function.name, func_args, user_id, db,
                 session_id=session_id,
             )
             # Store tool result for verification grounding
@@ -1739,10 +2272,22 @@ async def _generate_reply(
             response=response,
         )
 
-    draft = response.choices[0].message.content or "I don't have that information."
+    draft = response.choices[0].message.content or "خليني أتأكدلك من المعلومة الأدق، وبحوّلك للفريق يساعدك أكثر 🙏"
     trace["tool_rounds"] = rounds
     trace["finish_reason"] = response.choices[0].finish_reason
     trace["retrieved_keys"] = list(retrieved_data.keys())
+    remembered_item = _best_catalog_item_for_turn(
+        text_content,
+        retrieved_data,
+        history,
+        current_turn_keys=pre_llm_keys,
+    )
+    await _remember_catalog_context(
+        session_id,
+        db,
+        remembered_item,
+        customer_message=text_content,
+    )
     return draft, retrieved_data, trace
 
 async def generate_preview_reply(
@@ -1812,7 +2357,7 @@ async def _retrieve_supplemental_data(
         result = await execute_db_function(
             call.name,
             call.args,
-            user.id,
+            _model_id(user),
             db,
             session_id=session_id,
         )
@@ -1845,8 +2390,8 @@ async def _generate_grounded_retry_reply(
             "content": (
                 "You are a grounded retry writer for a business customer-support "
                 "chatbot. Answer the customer ONLY from the provided JSON data. "
-                "If the data does not contain the answer, say you do not have "
-                "that information or ask for clarification. If catalog data says "
+                "If the data does not contain the answer, say the information is "
+                "not clear right now and offer to check or ask one clarification. If catalog data says "
                 "no item matched, do not mention unrelated products. Keep the "
                 "answer compact but complete: use one warm line for simple "
                 "questions, 2-4 short lines for product or policy details, and "
@@ -1895,11 +2440,59 @@ async def _verify_and_finalize(
 
     Actions: sent, modified, blocked, handoff, clarification
     """
-    user_id = user.id
+    user_id = _model_id(user)
     ai_trace = dict(ai_trace or {})
     ai_trace.setdefault("verification", {})
     ai_trace.setdefault("fact_guard", {})
     ai_trace.setdefault("repair", {"attempted": False})
+
+    if ai_trace.get("direct_handoff_requested"):
+        handoff_created = False
+        try:
+            from services.handoff_service import create_handoff
+            async with db.begin_nested():
+                await create_handoff(
+                    session_id=session_id,
+                    user_id=user_id,
+                    reason="Customer explicitly requested a human handoff",
+                    db=db,
+                    priority="normal",
+                    ai_summary=f"Customer: {customer_message[:200]}",
+                    ai_suggested_reply=draft_answer,
+                    commit=False,
+                )
+            handoff_created = True
+        except Exception:
+            logger.exception("Failed to create direct handoff session")
+
+        result = VerificationResult(
+            verdict=HUMAN_HANDOFF_REQUIRED,
+            risk_score=0.0,
+            reasons=["Customer explicitly requested a human handoff"],
+            safe_response=draft_answer,
+        )
+        ai_trace["verification"]["initial"] = {
+            "verdict": result.verdict,
+            "risk_score": result.risk_score,
+            "reasons": result.reasons,
+            "flagged_claims": result.flagged_claims,
+            "skipped_llm": True,
+        }
+        ai_trace["final"] = {
+            "action": "handoff" if handoff_created else "blocked",
+            "verdict": result.verdict,
+            "risk_score": result.risk_score,
+            "answer_length": len(draft_answer or ""),
+        }
+        if handoff_created:
+            return draft_answer, "handoff", result
+        fallback = SAFE_RESPONSES["verification_unavailable"]
+        return fallback, "blocked", VerificationResult(
+            verdict=ASK_CLARIFICATION,
+            risk_score=0.8,
+            reasons=["Human handoff creation failed; safe response used instead"],
+            safe_response=fallback,
+        )
 
     if ai_trace.get("static_fast_path"):
         static_reason = (
@@ -2027,7 +2620,7 @@ async def _verify_and_finalize(
             )
         return SAFE_RESPONSES.get(
             "handoff",
-            "لحظة من فضلك، رح أحولك لزميلي ليقدر يساعدك بشكل أفضل.",
+            "أكيد، ولا يهمك 🙏 رح أحوّلك لموظف من الفريق يساعدك بشكل أدق.",
         ), "handoff", VerificationResult(
             verdict=HUMAN_HANDOFF_REQUIRED,
             risk_score=1.0,
@@ -2217,7 +2810,7 @@ async def _verify_and_finalize(
         except Exception:
             logger.exception("Failed to create handoff session")
         final_reply = result.safe_response or SAFE_RESPONSES.get(
-            "handoff", "لحظة من فضلك، رح أحولك لزميلي ليقدر يساعدك بشكل أفضل."
+            "handoff", "أكيد، ولا يهمك 🙏 رح أحوّلك لموظف من الفريق يساعدك بشكل أدق."
         )
         action = "handoff"
         if not handoff_created:
@@ -2447,7 +3040,7 @@ async def process_message(
     force_voice: bool = False,
     voice_output_format: str | None = None,
 ) -> dict:
-    user_id = user.id
+    user_id = _model_id(user)
     ai_persona = user.ai_persona
     if not getattr(user, "ai_auto_reply_enabled", True):
         await save_message(session_id, "user", user_message, media_type, media_url, db, commit=False)
@@ -2716,7 +3309,7 @@ async def process_pending(session_id: uuid.UUID, db: AsyncSession) -> dict | Non
     user = await db.get(User, session_user_id)
     if user is None or not user.is_active:
         return None
-    user_id = user.id
+    user_id = _model_id(user)
     ai_persona = user.ai_persona
 
     if not getattr(user, "ai_auto_reply_enabled", True):

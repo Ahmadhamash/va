@@ -55,6 +55,13 @@ _DETAIL_TERMS = (
     "\u0648\u0631\u062c\u064a\u0646\u064a", "\u062a\u0648\u0631\u062c\u064a\u0646\u064a",
     "details", "describe", "what is in", "looks", "look like",
 )
+_RECOMMENDATION_TERMS = (
+    "\u0628\u062a\u0646\u0635\u062d\u0646\u064a", "\u062a\u0646\u0635\u062d\u0646\u064a",
+    "\u0634\u0648 \u0628\u062a\u0646\u0635\u062d", "\u0634\u0648 \u062a\u0646\u0635\u062d",
+    "\u0627\u0648\u0644 \u0645\u0631\u0629", "\u0623\u0648\u0644 \u0645\u0631\u0629",
+    "\u0631\u0634\u062d", "\u0627\u0642\u062a\u0631\u062d", "\u0646\u0635\u064a\u062d\u0629",
+    "recommend", "suggest", "first time", "what should i try",
+)
 _PAYMENT_TERMS = (
     "\u062f\u0641\u0639", "\u0627\u062f\u0641\u0639", "\u0627\u0644\u062f\u0641\u0639",
     "\u062a\u0642\u0633\u064a\u0637", "\u0643\u0627\u0634", "\u0643\u0644\u064a\u0643",
@@ -129,6 +136,7 @@ _CATALOG_QUERY_STOPWORDS = {
     "\u0627\u0631\u064a\u062f", "\u0627\u0628\u063a\u0649", "\u0639\u0627\u064a\u0632",
     "\u0639\u0627\u0648\u0632", "do", "you", "have", "is", "there",
     "available", "availability", "price", "cost", "please",
+    "recommend", "recommendation", "suggest", "suggestion", "first", "time",
 }
 
 
@@ -218,7 +226,10 @@ def supplemental_tool_plan(customer_message: str, intent: str) -> list[ToolCallP
         return _dedupe(calls)
 
     if intent == "sales":
-        calls.append(ToolCallPlan("get_catalog", {"query": _catalog_query(customer_message)}))
+        catalog_args = {"query": _catalog_query(customer_message)}
+        if _has_any(text, _RECOMMENDATION_TERMS):
+            catalog_args = {"query": "", "include_details": True}
+        calls.append(ToolCallPlan("get_catalog", catalog_args))
         if _has_any(text, _OFFER_TERMS):
             calls.append(ToolCallPlan("get_offers", {}))
         if _has_any(text, _PACKAGE_TERMS):

@@ -1,5 +1,8 @@
 from models import User
 from services.ai_chat import (
+    _handoff_reply,
+    _language_switch_reply,
+    _out_of_scope_reply,
     _prepare_image_attachment_reply,
     _reply_image_url,
     _strip_sent_image_url,
@@ -48,6 +51,31 @@ def test_prompt_disables_human_handoff_promises():
     assert "Human handoff is DISABLED" in prompt
     assert "never promise that a human will take over" in prompt
     assert "**escalate_to_human**: Call this when" not in prompt
+
+
+def test_direct_language_switch_reply_is_english_and_sales_oriented():
+    reply = _language_switch_reply("en", "Icy Bites")
+
+    assert reply.startswith("Yes, of course")
+    assert "available products" in reply
+    assert "recommendations" in reply
+
+
+def test_direct_handoff_reply_uses_warm_jordanian_tone():
+    reply = _handoff_reply("ar")
+
+    assert "\u0623\u0643\u064a\u062f" in reply
+    assert "\u0648\u0644\u0627 \u064a\u0647\u0645\u0643" in reply
+    assert "\u0645\u0648\u0638\u0641" in reply
+    assert "\u0633\u0623\u062d\u0648\u0651\u0644\u0643" not in reply
+
+
+def test_out_of_scope_redirect_is_light_and_brand_friendly():
+    reply = _out_of_scope_reply("ar", "Icy Bites")
+
+    assert "Icy Bites" in reply
+    assert "\u0623\u062d\u0644\u0649" in reply
+    assert "\u0639\u0630\u0631\u064b\u0627" not in reply
 
 
 def test_prompt_override_appends_to_protected_intent_section():

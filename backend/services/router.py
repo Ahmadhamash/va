@@ -10,6 +10,18 @@ BUSINESS_INTENTS = ("sales", "support", "booking")
 VALID_ROUTER_INTENTS = {"sales", "support", "booking", "general"}
 UNCERTAIN_INTENT = "uncertain"
 
+DETAILED_INTENTS = {
+    "ASK_PRICE",
+    "ASK_AVAILABILITY",
+    "ASK_RECOMMENDATION",
+    "ASK_IMAGES",
+    "ASK_PRODUCT_LOOK",
+    "ASK_DELIVERY",
+    "HUMAN_HANDOFF",
+    "OUT_OF_SCOPE",
+    "LANGUAGE_SWITCH",
+}
+
 ROUTER_PROMPT = """
 You are a highly efficient message router for an e-commerce / service business chatbot.
 Your ONLY job is to read the customer's message and classify their intent into exactly ONE of these four categories:
@@ -102,6 +114,62 @@ _SALES_TERMS = (
     "products", "offer", "discount", "deal", "size", "color",
     "food", "foods", "dessert", "desserts", "ice cream", "flavor",
     "flavors", "box", "boxes", "gathering", "family box",
+    "recommend", "recommendation", "suggest", "suggestion",
+)
+
+_PRICE_TERMS = (
+    "\u0633\u0639\u0631", "\u0627\u0644\u0633\u0639\u0631", "\u0628\u0643\u0645",
+    "\u0643\u0645 \u0633\u0639\u0631", "\u0642\u062f\u064a\u0634", "\u062d\u0642\u0647",
+    "\u062d\u0642\u0647\u0627", "price", "cost", "how much",
+)
+_AVAILABILITY_TERMS = (
+    "\u0645\u062a\u0648\u0641\u0631", "\u0645\u062a\u0648\u0641\u0631\u0629",
+    "\u0645\u0648\u062c\u0648\u062f", "\u0645\u0648\u062c\u0648\u062f\u0629",
+    "\u0639\u0646\u062f\u0643\u0645", "\u0639\u0646\u062f\u0643\u0648",
+    "available", "in stock", "do you have",
+)
+_RECOMMENDATION_TERMS = (
+    "\u0628\u062a\u0646\u0635\u062d\u0646\u064a", "\u062a\u0646\u0635\u062d\u0646\u064a",
+    "\u0634\u0648 \u0628\u062a\u0646\u0635\u062d", "\u0634\u0648 \u062a\u0646\u0635\u062d",
+    "\u0627\u0648\u0644 \u0645\u0631\u0629", "\u0623\u0648\u0644 \u0645\u0631\u0629",
+    "\u0631\u0634\u062d", "\u0627\u0642\u062a\u0631\u062d", "\u0646\u0635\u064a\u062d\u0629",
+    "recommend", "suggest", "first time", "what should i try",
+)
+_DELIVERY_TERMS = (
+    "\u062a\u0648\u0635\u064a\u0644", "\u062f\u064a\u0644\u064a\u0641\u0631\u064a",
+    "\u0634\u062d\u0646", "\u0627\u0633\u062a\u0644\u0627\u0645",
+    "delivery", "shipping", "pickup", "deliver",
+)
+_IMAGE_TERMS = (
+    "\u0635\u0648\u0631\u0629", "\u0635\u0648\u0631\u0647", "\u0635\u0648\u0631",
+    "\u0627\u0628\u0639\u062a\u0644\u064a", "\u0627\u0628\u0639\u062b\u0644\u064a",
+    "\u0627\u0631\u0633\u0644\u064a", "image", "photo", "picture", "pic",
+)
+_LOOK_TERMS = (
+    "\u0634\u0643\u0644\u0647", "\u0634\u0643\u0644\u0647\u0627", "\u0643\u064a\u0641 \u0634\u0643\u0644",
+    "\u0628\u064a\u062c\u064a", "\u0628\u062a\u0637\u0644\u0639", "\u062a\u0637\u0644\u0639",
+    "look like", "looks like", "what does", "describe",
+)
+_HUMAN_HANDOFF_TERMS = (
+    "\u0645\u0648\u0638\u0641", "\u0627\u0646\u0633\u0627\u0646", "\u0628\u0634\u0631",
+    "\u0645\u0646 \u0627\u0644\u0641\u0631\u064a\u0642", "\u0627\u062d\u0643\u064a \u0645\u0639",
+    "\u0623\u062d\u0643\u064a \u0645\u0639", "\u062d\u0648\u0644\u0646\u064a",
+    "\u062d\u0648\u0651\u0644\u0646\u064a", "human", "agent", "employee",
+    "representative", "talk to someone", "speak to someone",
+)
+_LANGUAGE_SWITCH_TERMS = (
+    "can you speak english", "do you speak english", "english please",
+    "answer in english", "reply in english", "speak english",
+    "in english", "\u0628\u0627\u0644\u0627\u0646\u062c\u0644\u064a\u0632\u064a",
+    "\u0627\u0646\u062c\u0644\u064a\u0632\u064a", "\u0628\u0627\u0644\u0639\u0631\u0628\u064a",
+    "\u0639\u0631\u0628\u064a", "arabic please", "answer in arabic",
+)
+_OUT_OF_SCOPE_TERMS = (
+    "\u0631\u0627\u064a\u0643 \u0628\u0627\u0644\u0633\u064a\u0627\u0633\u0629",
+    "\u0631\u0623\u064a\u0643 \u0628\u0627\u0644\u0633\u064a\u0627\u0633\u0629",
+    "\u0634\u0648 \u0631\u0627\u064a\u0643 \u0628\u0627\u0644\u0633\u064a\u0627\u0633\u0629",
+    "\u0634\u0648 \u0631\u0623\u064a\u0643 \u0628\u0627\u0644\u0633\u064a\u0627\u0633\u0629",
+    "politics", "political opinion", "election", "president",
 )
 
 _FOLLOWUP_TERMS = (
@@ -142,7 +210,7 @@ def heuristic_intent_for_message(customer_message: str) -> str | None:
         return "support"
     if _contains_any(text, _SUPPORT_TERMS):
         return "support"
-    if _contains_any(text, _SALES_TERMS):
+    if _contains_any(text, _SALES_TERMS + _RECOMMENDATION_TERMS + _IMAGE_TERMS + _LOOK_TERMS):
         return "sales"
     return None
 
@@ -158,9 +226,37 @@ def heuristic_intents_for_message(customer_message: str) -> list[str]:
         intents.append("booking")
     if _contains_any(text, _SUPPORT_TERMS):
         intents.append("support")
-    if _contains_any(text, _SALES_TERMS):
+    if _contains_any(text, _SALES_TERMS + _RECOMMENDATION_TERMS + _IMAGE_TERMS + _LOOK_TERMS):
         intents.append("sales")
     return intents or ["general"]
+
+
+def detect_message_intents(customer_message: str) -> list[str]:
+    """Return deterministic fine-grained intents for behavior and trace data."""
+    text = _normalise_message(customer_message)
+    if not text:
+        return []
+
+    intents: list[str] = []
+    checks = (
+        ("LANGUAGE_SWITCH", _LANGUAGE_SWITCH_TERMS),
+        ("HUMAN_HANDOFF", _HUMAN_HANDOFF_TERMS),
+        ("OUT_OF_SCOPE", _OUT_OF_SCOPE_TERMS),
+        ("ASK_PRICE", _PRICE_TERMS),
+        ("ASK_AVAILABILITY", _AVAILABILITY_TERMS),
+        ("ASK_RECOMMENDATION", _RECOMMENDATION_TERMS),
+        ("ASK_IMAGES", _IMAGE_TERMS),
+        ("ASK_PRODUCT_LOOK", _LOOK_TERMS),
+        ("ASK_DELIVERY", _DELIVERY_TERMS),
+    )
+    for intent, terms in checks:
+        if terms and _contains_any(text, terms):
+            intents.append(intent)
+    if "ASK_PRODUCT_LOOK" in intents and "ASK_IMAGES" not in intents:
+        # Product appearance is image-adjacent, but keeping both labels helps
+        # downstream behavior distinguish "send photo" from "describe it".
+        intents.append("ASK_IMAGES")
+    return intents
 
 
 def expanded_intents_for_message(

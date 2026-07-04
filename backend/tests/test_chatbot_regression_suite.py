@@ -11,6 +11,7 @@ from services.ai_chat import (
     _prepare_image_attachment_reply,
     _reply_image_url,
     _try_static_catalog_reply,
+    _try_static_recommendation_reply,
 )
 
 
@@ -300,6 +301,66 @@ def test_chatbot_catalog_detail_and_image_followup_stays_grounded():
     assert "\u0645\u0634 \u0645\u0628\u064a\u0646" not in final_reply
     assert "\u0645\u0627 \u0639\u0646\u062f\u064a \u0635\u0648\u0631\u0629" not in final_reply
     _assert_natural_reply(final_reply)
+
+
+def test_chatbot_recommendation_uses_catalog_and_asks_preference():
+    retrieved_data = {
+        "get_catalog:{\"include_details\": true, \"query\": \"\"}": {
+            "matched": True,
+            "overview_only": False,
+            "recommendation_context": True,
+            "items": [
+                {
+                    "name": "Mix Fruit",
+                    "category": "Frozen dessert",
+                    "available": True,
+                    "image_url": "https://example.com/mix.jpg",
+                    "metadata": {
+                        "brand": "Icy Bites",
+                        "recommendation_reason_ar": "\u0645\u0646 \u0627\u0644\u062e\u064a\u0627\u0631\u0627\u062a \u0627\u0644\u0644\u0637\u064a\u0641\u0629 \u0648\u0627\u0644\u0645\u0646\u0639\u0634\u0629",
+                    },
+                }
+            ],
+        }
+    }
+
+    reply = _try_static_recommendation_reply(
+        "\u0634\u0648 \u0628\u062a\u0646\u0635\u062d\u0646\u064a\u061f \u0623\u0648\u0644 \u0645\u0631\u0629 \u0628\u062c\u0631\u0628\u0643\u0645",
+        retrieved_data,
+        current_turn_keys=["get_catalog:{\"include_details\": true, \"query\": \"\"}"],
+        conversation_language="ar",
+    )
+
+    assert reply is not None
+    assert "Mix Fruit" in reply
+    assert "\u0628\u0646\u0635\u062d\u0643" in reply
+    assert "\u0627\u0644\u0645\u0646\u0639\u0634\u0629" in reply
+    assert "\u0628\u062a\u062d\u0628" in reply
+
+
+def test_icy_bites_image_caption_uses_brand_metadata():
+    retrieved_data = {
+        "get_catalog:{\"query\": \"mix fruit\"}": {
+            "matched": True,
+            "overview_only": False,
+            "items": [
+                {
+                    "name": "Mix Fruit",
+                    "image_url": "https://example.com/mix.jpg",
+                    "metadata": {"brand": "Icy Bites"},
+                }
+            ],
+        }
+    }
+
+    final_reply = _prepare_image_attachment_reply(
+        "\u0627\u0628\u0639\u062a\u0644\u064a \u0635\u0648\u0631\u062a\u0647",
+        retrieved_data,
+        "\u0648\u0628\u0642\u062f\u0631 \u0623\u0628\u0639\u062b\u0644\u0643 \u0635\u0648\u0631\u062a\u0647 \u0643\u0645\u0627\u0646.",
+        "https://example.com/mix.jpg",
+    )
+
+    assert final_reply == "\u0623\u0643\u064a\u062f \U0001F60D \u0647\u0627\u064a \u0635\u0648\u0631\u0629 Mix Fruit \u0645\u0646 Icy Bites."
 
 
 @pytest.mark.parametrize("channel", ("messenger", "instagram"))
