@@ -3,6 +3,7 @@ import logging
 import os
 import re
 import uuid
+from datetime import datetime, timezone
 from time import monotonic
 from openai import APIError
 from sqlalchemy import func, inspect, select, update
@@ -46,6 +47,10 @@ logger = logging.getLogger("ai_chat")
 HISTORY_LIMIT = 20
 MAX_TOOL_ROUNDS = 5
 OPENAI_TIMEOUT_SECONDS = 30.0
+MAX_CONSECUTIVE_AI_FAILURES = 3
+AI_FAILURE_COUNT_KEY = "consecutive_ai_failures"
+AI_FAILURE_REASON_KEY = "last_ai_failure_reason"
+AI_FAILURE_AUTO_HANDOFF_KEY = "auto_handoff_after_ai_failures"
 NO_CREDIT_REPLY = "الخدمة متوقفة مؤقتا لأن رصيد رسائل الذكاء الاصطناعي انتهى."
 SERVICE_UNAVAILABLE_REPLY = "الخدمة مش متاحة حاليا، حاول بعد شوي."
 RETRIEVAL_ERROR_REPLY = "خليني أتأكدلك من المعلومة الأدق، وبحوّلك للفريق يساعدك أكثر 🙏"
@@ -433,6 +438,104 @@ def _fallback_values(*keys: str) -> set[str]:
 
 def _is_error_reply(reply: str | None) -> bool:
     return bool(reply and reply in _fallback_values(*_ERROR_FALLBACK_KEYS))
+
+
+def _utcnow_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _coerce_failure_count(value: object) -> int:
+    try:
+        count = int(value or 0)
+    except (TypeError, ValueError):
+        return 0
+    return max(count, 0)
+
+
+async def _reset_ai_failure_counter(
+    session_id: uuid.UUID,
+    db: AsyncSession,
+) -> None:
+    session = await db.get(ChatSession, session_id)
+    if session is None:
+        return
+    metadata = dict(session.metadata_ or {})
+    changed = False
+    for key in (
+        AI_FAILURE_COUNT_KEY,
+        AI_FAILURE_REASON_KEY,
+        AI_FAILURE_AUTO_HANDOFF_KEY,
+        "last_ai_failure_at",
+    ):
+        if key in metadata:
+            metadata.pop(key, None)
+            changed = True
+    if not changed:
+        return
+    session.metadata_ = metadata
+    db.add(session)
+    await db.flush()
+
+
+async def _record_ai_failure(
+    session_id: uuid.UUID,
+    user: User,
+    db: AsyncSession,
+    *,
+    reason: str,
+    fallback_key: str,
+    language: str | None,
+) -> tuple[str, str]:
+    """Track system failures and auto-escalate after repeated failures."""
+    fallback_reply = get_fallback(fallback_key, language)
+    session = await db.get(ChatSession, session_id)
+    if session is None:
+        return fallback_reply, "blocked"
+
+    metadata = dict(session.metadata_ or {})
+    count = _coerce_failure_count(metadata.get(AI_FAILURE_COUNT_KEY)) + 1
+    metadata[AI_FAILURE_COUNT_KEY] = count
+    metadata[AI_FAILURE_REASON_KEY] = reason
+    metadata["last_ai_failure_at"] = _utcnow_iso()
+    session.metadata_ = metadata
+    db.add(session)
+    await db.flush()
+
+    if count < MAX_CONSECUTIVE_AI_FAILURES or session.is_escalated:
+        return fallback_reply, "blocked"
+
+    try:
+        from services.handoff_service import create_handoff
+
+        handoff_reason = f"AI failed {count} times consecutively"
+        async with db.begin_nested():
+            await create_handoff(
+                session_id=session_id,
+                user_id=_model_id(user),
+                reason=handoff_reason,
+                db=db,
+                reason_details=reason,
+                priority="high",
+                ai_summary=(
+                    "Automatic handoff after repeated AI/system failures.\n"
+                    f"Last failure: {reason}"
+                ),
+                ai_suggested_reply=fallback_reply,
+                commit=False,
+            )
+        metadata = dict(session.metadata_ or {})
+        metadata[AI_FAILURE_AUTO_HANDOFF_KEY] = {
+            "count": count,
+            "reason": reason,
+            "created_at": _utcnow_iso(),
+        }
+        session.metadata_ = metadata
+        db.add(session)
+        await db.flush()
+        return _handoff_reply(language), "handoff"
+    except Exception:
+        logger.exception("Failed to create auto handoff after repeated AI failures")
+        return fallback_reply, "blocked"
 
 
 def _language_name(language: str | None) -> str:
@@ -3808,6 +3911,7 @@ async def process_message(
                 db,
                 commit=False,
             )
+            await _reset_ai_failure_counter(session_id, db)
             await db.commit()
             return {
                 "reply": cached_reply,
@@ -3839,6 +3943,7 @@ async def process_message(
         if automation_reply or automation_paused:
             inbound_msg.processed = True
             if automation_reply:
+                await _reset_ai_failure_counter(session_id, db)
                 await db.commit()
                 return {
                     "reply": automation_reply,
@@ -3860,22 +3965,38 @@ async def process_message(
     except APIError:
         logger.exception("OpenAI API error")
         inbound_msg.processed = True
-        reply = get_fallback("service_unavailable", fallback_language)
+        reply, failure_action = await _record_ai_failure(
+            session_id,
+            user,
+            db,
+            reason="OpenAI API error",
+            fallback_key="service_unavailable",
+            language=fallback_language,
+        )
         await save_message(session_id, "assistant", reply, "text", None, db, commit=False)
         await db.commit()
         return {
             "reply": reply,
             "transcription": transcription,
+            "action": failure_action,
         }
     except Exception:  # noqa: BLE001
         logger.exception("Unexpected error in process_message")
         inbound_msg.processed = True
-        reply = get_fallback("retrieval_error", fallback_language)
+        reply, failure_action = await _record_ai_failure(
+            session_id,
+            user,
+            db,
+            reason="Unexpected error in process_message",
+            fallback_key="retrieval_error",
+            language=fallback_language,
+        )
         await save_message(session_id, "assistant", reply, "text", None, db, commit=False)
         await db.commit()
         return {
             "reply": reply,
             "transcription": transcription,
+            "action": failure_action,
         }
 
     # ── Answer Verification (anti-hallucination) ──
@@ -3899,6 +4020,8 @@ async def process_message(
             reply_image_url,
         )
     _store_cached_reply(user_id, customer_text, reply, retrieved_data, action)
+    if action not in {"blocked", "handoff"} and not _is_error_reply(reply):
+        await _reset_ai_failure_counter(session_id, db)
 
     # ── Run post-AI automations ──
     session = await db.get(ChatSession, session_id)
@@ -4085,6 +4208,8 @@ async def process_pending(session_id: uuid.UUID, db: AsyncSession) -> dict | Non
     if automation_reply or automation_paused:
         for m in pending:
             m.processed = True
+        if automation_reply:
+            await _reset_ai_failure_counter(session_id, db)
         await db.commit()
         reply = automation_reply or get_fallback("ai_paused", fallback_language)
         return {
@@ -4173,6 +4298,8 @@ async def process_pending(session_id: uuid.UUID, db: AsyncSession) -> dict | Non
                     reply_image_url,
                 )
             _store_cached_reply(user_id, customer_text, reply, retrieved_data, action)
+            if action not in {"blocked", "handoff"} and not _is_error_reply(reply):
+                await _reset_ai_failure_counter(session_id, db)
 
             # ── Run post-AI automations ──
             await _run_post_ai_automations(
@@ -4187,13 +4314,30 @@ async def process_pending(session_id: uuid.UUID, db: AsyncSession) -> dict | Non
             )
         except APIError:
             logger.exception("OpenAI API error (worker)")
-            reply = get_fallback("service_unavailable", fallback_language)
+            reply, action = await _record_ai_failure(
+                session_id,
+                user,
+                db,
+                reason="OpenAI API error (worker)",
+                fallback_key="service_unavailable",
+                language=fallback_language,
+            )
         except Exception:  # noqa: BLE001
             logger.exception("worker reply failed")
-            reply = get_fallback("retrieval_error", fallback_language)
+            reply, action = await _record_ai_failure(
+                session_id,
+                user,
+                db,
+                reason="Worker reply failed",
+                fallback_key="retrieval_error",
+                language=fallback_language,
+            )
 
     for m in pending:
         m.processed = True
+
+    if action not in {"blocked", "handoff"} and not _is_error_reply(reply):
+        await _reset_ai_failure_counter(session_id, db)
 
     await db.execute(
         update(User)

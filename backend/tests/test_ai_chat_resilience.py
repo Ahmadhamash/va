@@ -22,9 +22,14 @@ from services.answer_verifier import (
     VerificationResult,
 )
 from services.ai_chat import (
+    AI_FAILURE_AUTO_HANDOFF_KEY,
+    AI_FAILURE_COUNT_KEY,
+    AI_FAILURE_REASON_KEY,
     AI_PAUSED_REPLY,
+    MAX_CONSECUTIVE_AI_FAILURES,
     _get_cached_reply,
     _generate_reply,
+    _reset_ai_failure_counter,
     _run_post_ai_automations,
     _run_pre_ai_automations,
     _response_cache,
@@ -143,6 +148,80 @@ async def test_preview_reply_failure_does_not_leak_exception(db_session, monkeyp
     assert reply == get_fallback("preview_error", "en")
     assert "sk-leaked" not in reply
     assert not reply.startswith("Error:")
+
+
+@pytest.mark.asyncio
+async def test_repeated_ai_failures_auto_escalate_session(db_session, monkeypatch):
+    user = _user(ai_credit_balance=20)
+    user_id = user.id
+    session_id = uuid.uuid4()
+    session = ChatSession(id=session_id, user_id=user.id, channel="web")
+    db_session.add_all([user, session])
+    await db_session.flush()
+
+    async def failing_generate_reply(*_args, **_kwargs):
+        raise RuntimeError("simulated internal failure")
+
+    monkeypatch.setattr("services.ai_chat._generate_reply", failing_generate_reply)
+
+    result = None
+    for idx in range(MAX_CONSECUTIVE_AI_FAILURES):
+        fresh_user = await db_session.get(User, user_id)
+        result = await process_message(
+            f"Hello, failure test {idx}",
+            fresh_user,
+            session_id,
+            db_session,
+        )
+
+    assert result is not None
+    assert result["action"] == "handoff"
+    assert "connect you with the team" in result["reply"].lower()
+
+    refreshed_session = await db_session.get(ChatSession, session_id)
+    assert refreshed_session.is_escalated is True
+    metadata = refreshed_session.metadata_
+    assert metadata[AI_FAILURE_COUNT_KEY] == MAX_CONSECUTIVE_AI_FAILURES
+    assert metadata[AI_FAILURE_REASON_KEY] == "Unexpected error in process_message"
+    assert metadata[AI_FAILURE_AUTO_HANDOFF_KEY]["count"] == MAX_CONSECUTIVE_AI_FAILURES
+
+    handoff = (
+        await db_session.execute(
+            select(HandoffSession).where(HandoffSession.session_id == session_id)
+        )
+    ).scalar_one()
+    assert handoff.priority == "high"
+    assert "AI failed" in handoff.reason
+
+
+@pytest.mark.asyncio
+async def test_ai_failure_counter_reset_clears_metadata(db_session):
+    user = _user()
+    session_id = uuid.uuid4()
+    session = ChatSession(
+        id=session_id,
+        user_id=user.id,
+        channel="web",
+        metadata_={
+            AI_FAILURE_COUNT_KEY: 2,
+            AI_FAILURE_REASON_KEY: "old failure",
+            AI_FAILURE_AUTO_HANDOFF_KEY: {"count": 2},
+            "last_ai_failure_at": "2026-07-05T00:00:00+00:00",
+            "conversation_context": {"current_language": "en"},
+        },
+    )
+    db_session.add_all([user, session])
+    await db_session.flush()
+
+    await _reset_ai_failure_counter(session_id, db_session)
+
+    refreshed_session = await db_session.get(ChatSession, session_id)
+    metadata = refreshed_session.metadata_
+    assert AI_FAILURE_COUNT_KEY not in metadata
+    assert AI_FAILURE_REASON_KEY not in metadata
+    assert AI_FAILURE_AUTO_HANDOFF_KEY not in metadata
+    assert "last_ai_failure_at" not in metadata
+    assert metadata["conversation_context"] == {"current_language": "en"}
 
 
 def test_response_cache_is_disabled_by_default():
