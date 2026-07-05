@@ -96,6 +96,20 @@ def test_prompt_override_appends_to_protected_intent_section():
     assert "Helpful and concise." in prompt
 
 
+def test_prompt_includes_priority_ladder_and_format_only_examples():
+    user = User(business_name="Demo Store", ai_persona="Helpful and concise.")
+
+    prompt = build_system_prompt(user, intent="sales")
+
+    assert "## RULE PRIORITY LADDER" in prompt
+    assert "Tier 1: Safety, tenant isolation, database/tool grounding" in prompt
+    assert prompt.index("## RULE PRIORITY LADDER") < prompt.index("## CRITICAL RULES")
+    assert "## REFERENCE EXAMPLES \u2014 FORMAT ONLY, NOT FACTS" in prompt
+    assert "These examples show response shape and tone" in prompt
+    assert "Tool result: Sample Product, price 5 JOD" in prompt
+    assert "must never be reused as facts" in prompt
+
+
 def test_admin_persona_guidance_does_not_replace_client_persona():
     user = User(business_name="Demo Store", ai_persona="Client voice: warm Jordanian tone.")
 
@@ -150,6 +164,9 @@ def test_style_samples_are_not_ignored_in_custom_prompt_builder():
     )
 
     assert "## VOICE / STYLE" in prompt
+    assert "These examples are TONE ONLY" in prompt
+    assert "critical rules, tool/database results" in prompt
+    assert "Never let style examples add or change facts" in prompt
     assert "هلا يا غالي، منورنا" in prompt
 
 
