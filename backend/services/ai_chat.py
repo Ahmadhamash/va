@@ -60,20 +60,20 @@ MAX_CONSECUTIVE_AI_FAILURES = 3
 AI_FAILURE_COUNT_KEY = "consecutive_ai_failures"
 AI_FAILURE_REASON_KEY = "last_ai_failure_reason"
 AI_FAILURE_AUTO_HANDOFF_KEY = "auto_handoff_after_ai_failures"
-NO_CREDIT_REPLY = "الخدمة متوقفة مؤقتا لأن رصيد رسائل الذكاء الاصطناعي انتهى."
-SERVICE_UNAVAILABLE_REPLY = "الخدمة مش متاحة حاليا، حاول بعد شوي."
+NO_CREDIT_REPLY = "وصلت رسالتك، وبحوّلك للفريق يساعدك بأقرب وقت 🙏"
+SERVICE_UNAVAILABLE_REPLY = "خليني أتأكدلك من المعلومة الأدق، وبحوّلك للفريق يساعدك أكثر 🙏"
 RETRIEVAL_ERROR_REPLY = "خليني أتأكدلك من المعلومة الأدق، وبحوّلك للفريق يساعدك أكثر 🙏"
 PROMPT_INJECTION_REPLY = "ما فهمت عليك، ممكن توضحلي شو بالضبط تحتاج؟"
 AI_PAUSED_REPLY = "وصلت رسالتك، وبحوّلك للفريق يساعدك بشكل أدق 🙏"
 PREVIEW_ERROR_REPLY = "تعذر إنشاء رد تجريبي حالياً. يرجى المحاولة لاحقاً."
 FALLBACK_MESSAGES = {
     "no_credit": {
-        "ar": "الخدمة متوقفة مؤقتاً، وبحوّلك للفريق يساعدك بأقرب وقت 🙏",
-        "en": "The service is temporarily paused. I can connect you with the team to help shortly 🙏",
+        "ar": NO_CREDIT_REPLY,
+        "en": "I got your message, and I can connect you with the team to help shortly 🙏",
     },
     "service_unavailable": {
         "ar": SERVICE_UNAVAILABLE_REPLY,
-        "en": "The service is temporarily unavailable. Please try again shortly 🙏",
+        "en": "Let me check the most accurate information for you. I can also connect you with the team to confirm it 🙏",
     },
     "retrieval_error": {
         "ar": RETRIEVAL_ERROR_REPLY,

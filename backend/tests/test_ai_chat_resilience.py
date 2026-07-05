@@ -107,6 +107,17 @@ async def test_no_credit_fallback_uses_customer_language(db_session):
     assert "الذكاء الاصطناعي" not in result["reply"]
 
 
+def test_service_unavailable_fallback_is_customer_friendly():
+    arabic_reply = get_fallback("service_unavailable", "ar")
+    english_reply = get_fallback("service_unavailable", "en")
+
+    assert "الخدمة مش متاحة" not in arabic_reply
+    assert "حاول بعد شوي" not in arabic_reply
+    assert "خليني أتأكدلك" in arabic_reply
+    assert "temporarily unavailable" not in english_reply.lower()
+    assert "let me check" in english_reply.lower()
+
+
 @pytest.mark.asyncio
 async def test_preview_reply_failure_does_not_leak_exception(db_session, monkeypatch):
     async def fake_openai_key(_db):
