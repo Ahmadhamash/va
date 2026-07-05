@@ -48,6 +48,7 @@ from services.ai_tools import (
     get_tools_for_intents,
 )
 from services.ai_chat import (
+    _image_price_guard_result,
     _smalltalk_reply,
     _try_static_catalog_reply,
     _try_static_discovery_reply,
@@ -186,6 +187,12 @@ class TestRouterGuardrails:
         assert heuristic_intent_for_message("بدي اسأل عن الأسعار") == "sales"
         assert heuristic_intent_for_message("اه بدي اسأل عن اسعار المنتجات") == "sales"
         assert "ASK_PRICE" in detect_message_intents("اه بدي اسأل عن اسعار المنتجات")
+
+    def test_real_employee_request_routes_to_handoff(self):
+        intents = detect_message_intents("اعطيني موظف حقيقي احكي معه")
+
+        assert "HUMAN_HANDOFF" in intents
+        assert heuristic_intent_for_message("اعطيني موظف حقيقي احكي معه") == "support"
 
     def test_food_catalog_question_routes_to_sales_without_llm(self):
         assert heuristic_intent_for_message("\u0627\u0634 \u0639\u0646\u062f\u0643\u0645 \u0627\u0643\u0644\u061f") == "sales"
@@ -438,6 +445,27 @@ class TestSupplementalRetrievalPlan:
         assert calls[0].args["query"] == "mix fruit"
         assert "include_details" not in calls[0].args
 
+    def test_box_word_can_still_search_individual_product(self):
+        calls = supplemental_tool_plan("بوكس التوت كم سعره", "sales")
+
+        assert calls[0].name == "get_catalog"
+        assert calls[0].args["query"] == "توت"
+        assert any(call.name == "get_packages" for call in calls)
+
+    def test_compound_box_delivery_request_keeps_product_terms_only(self):
+        calls = supplemental_tool_plan(
+            "بدي بوكس فواكه مشكلة وبوكس توت وتوصيل إلى الزرقاء",
+            "sales",
+        )
+
+        assert calls[0].name == "get_catalog"
+        assert "فواكه" in calls[0].args["query"]
+        assert "توت" in calls[0].args["query"]
+        assert "بوكس" not in calls[0].args["query"]
+        assert "توصيل" not in calls[0].args["query"]
+        assert "زرقاء" not in calls[0].args["query"]
+        assert any(call.name == "get_packages" for call in calls)
+
     def test_food_catalog_question_uses_overview_query(self):
         calls = supplemental_tool_plan("\u0627\u0634 \u0639\u0646\u062f\u0643\u0645 \u0627\u0643\u0644\u061f", "sales")
         assert calls[0].name == "get_catalog"
@@ -513,6 +541,26 @@ class TestStaticCatalogReply:
             "currency": "JOD",
             "available": True,
             "image_url": "/uploads/user/peach.jpg",
+        }
+        self.blackberry = {
+            "id": "blackberry-1",
+            "name": "\u062a\u0648\u062a Blackberry",
+            "category": "Frozen dessert",
+            "description": "\u0645\u0646\u062a\u062c \u062a\u0648\u062a \u0641\u0631\u062f\u064a",
+            "price": 5.0,
+            "currency": "JOD",
+            "available": True,
+            "image_url": "/uploads/user/blackberry.jpg",
+        }
+        self.mix_fruit = {
+            "id": "mix-fruit-1",
+            "name": "\u0641\u0648\u0627\u0643\u0647 \u0645\u0634\u0643\u0644\u0629 Mix Fruit",
+            "category": "Frozen dessert",
+            "description": "\u0645\u0646\u062a\u062c \u0641\u0648\u0627\u0643\u0647 \u0641\u0631\u062f\u064a",
+            "price": 5.0,
+            "currency": "JOD",
+            "available": True,
+            "image_url": "/uploads/user/mix-fruit.jpg",
         }
         self.retrieved = {
             "get_catalog:{}": {
@@ -591,6 +639,108 @@ class TestStaticCatalogReply:
         assert "تفاصيل مؤكدة" in reply
         assert "صورة البوست" in reply
         assert "غير متوفر" not in reply
+
+    def test_box_product_price_prefers_matching_individual_product(self):
+        data = {
+            **self.package_data,
+            "get_catalog:{\"query\": \"توت\"}": {
+                "matched": True,
+                "overview_only": False,
+                "items": [self.blackberry],
+            },
+        }
+        reply = _try_static_discovery_reply(
+            "بوكس التوت كم سعره",
+            data,
+            [],
+            current_turn_keys=["get_catalog:{\"query\": \"توت\"}", "get_packages:{}"],
+            conversation_language="ar",
+        )
+
+        assert reply is not None
+        assert "تقصد منتج توت Blackberry" in reply
+        assert "5 دينار" in reply
+        assert "بوكسات ثانية" not in reply
+
+    def test_general_product_prices_deduplicate_catalog_items(self):
+        data = {
+            "get_catalog:{\"query\": \"\", \"include_details\": true}": {
+                "matched": True,
+                "overview_only": False,
+                "items": [self.blackberry, self.mix_fruit, self.blackberry],
+            }
+        }
+        reply = _try_static_discovery_reply(
+            "شو اسعار المنتجات",
+            data,
+            [],
+            current_turn_keys=["get_catalog:{\"query\": \"\", \"include_details\": true}"],
+            conversation_language="ar",
+        )
+
+        assert reply is not None
+        assert reply.count("توت Blackberry") == 1
+        assert "فواكه مشكلة Mix Fruit" in reply
+
+    def test_compound_box_delivery_request_summarizes_items_and_escalates(self):
+        data = {
+            "get_catalog:{\"query\": \"فواكه مشكله توت\"}": {
+                "matched": True,
+                "overview_only": False,
+                "items": [self.mix_fruit, self.blackberry],
+            },
+            "get_packages:{}": {"packages": []},
+            "get_delivery_info:{}": {"delivery_zones": []},
+        }
+        reply = _try_static_discovery_reply(
+            "بدي بوكس فواكه مشكلة وبوكس توت وتوصيل إلى الزرقاء",
+            data,
+            [],
+            current_turn_keys=[
+                "get_catalog:{\"query\": \"فواكه مشكله توت\"}",
+                "get_packages:{}",
+                "get_delivery_info:{}",
+            ],
+            conversation_language="ar",
+        )
+
+        assert reply is not None
+        assert "طلبك" in reply
+        assert "فواكه مشكلة Mix Fruit" in reply
+        assert "توت Blackberry" in reply
+        assert "الزرقاء" in reply
+        assert "بوكسات كاملة" in reply
+
+    def test_image_only_price_list_is_blocked_when_product_is_unclear(self):
+        result = _image_price_guard_result(
+            "The customer sent an image. Only answer with product prices if the image clearly resolves to exactly one catalog product.",
+            {
+                "get_catalog:{\"query\": \"\", \"include_details\": true}": {
+                    "matched": True,
+                    "overview_only": False,
+                    "items": [self.blackberry, self.mix_fruit],
+                }
+            },
+            "توت Blackberry — سعره 5 دينار\nفواكه مشكلة Mix Fruit — سعره 5 دينار",
+        )
+
+        assert result is not None
+        assert "الصورة مش واضحة" in result.safe_response
+
+    def test_image_only_single_product_price_is_allowed(self):
+        result = _image_price_guard_result(
+            "The customer sent an image. Only answer with product prices if the image clearly resolves to exactly one catalog product.",
+            {
+                "get_catalog:{\"query\": \"توت\"}": {
+                    "matched": True,
+                    "overview_only": False,
+                    "items": [self.blackberry],
+                }
+            },
+            "هذا واضح إنه توت Blackberry، سعره 5 دينار.",
+        )
+
+        assert result is None
 
     def test_direct_price_and_image_question_uses_exact_catalog_price(self):
         reply = _try_static_catalog_reply(

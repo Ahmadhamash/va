@@ -156,7 +156,11 @@ _HUMAN_HANDOFF_TERMS = (
     "\u0645\u0648\u0638\u0641", "\u0627\u0646\u0633\u0627\u0646", "\u0628\u0634\u0631",
     "\u0645\u0646 \u0627\u0644\u0641\u0631\u064a\u0642", "\u0627\u062d\u0643\u064a \u0645\u0639",
     "\u0623\u062d\u0643\u064a \u0645\u0639", "\u062d\u0648\u0644\u0646\u064a",
-    "\u062d\u0648\u0651\u0644\u0646\u064a", "human", "agent", "employee",
+    "\u062d\u0648\u0651\u0644\u0646\u064a", "\u062d\u0642\u064a\u0642\u064a",
+    "\u0645\u0648\u0638\u0641 \u062d\u0642\u064a\u0642\u064a",
+    "\u0627\u0639\u0637\u064a\u0646\u064a \u0645\u0648\u0638\u0641",
+    "\u0634\u062e\u0635 \u062d\u0642\u064a\u0642\u064a",
+    "human", "real human", "real person", "agent", "employee",
     "representative", "talk to someone", "speak to someone",
 )
 _LANGUAGE_SWITCH_TERMS = (
@@ -292,6 +296,8 @@ def heuristic_intent_for_message(customer_message: str) -> str | None:
 
     if _contains_any(text, _BOOKING_TERMS):
         return "booking"
+    if _contains_any(text, _HUMAN_HANDOFF_TERMS):
+        return "support"
     if _PLACE_SALES_RE.search(text):
         return "support"
     if _contains_any(text, _SUPPORT_TERMS):
@@ -313,7 +319,7 @@ def heuristic_intents_for_message(customer_message: str) -> list[str]:
     intents: list[str] = []
     if _contains_any(text, _BOOKING_TERMS):
         intents.append("booking")
-    if _contains_any(text, _SUPPORT_TERMS):
+    if _contains_any(text, _SUPPORT_TERMS + _HUMAN_HANDOFF_TERMS):
         intents.append("support")
     if _contains_any(text, _SALES_TERMS + _RECOMMENDATION_TERMS + _IMAGE_TERMS + _LOOK_TERMS):
         intents.append("sales")

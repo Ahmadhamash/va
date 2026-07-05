@@ -403,6 +403,16 @@ async def _prepare_turn_context(
     if current_language in {"ar", "en"}:
         context["current_language"] = current_language
 
+    try:
+        topics = _static_business_topics(customer_message)
+        if "delivery" in topics:
+            if _static_requested_place(customer_message):
+                context.pop("awaiting_delivery_area", None)
+            else:
+                context["awaiting_delivery_area"] = True
+    except Exception:
+        logger.debug("Could not update delivery area context", exc_info=True)
+
     preference = _extract_customer_preference(customer_message)
     if preference:
         context["customer_preference"] = preference
@@ -412,6 +422,25 @@ async def _prepare_turn_context(
     db.add(session)
     await db.flush()
     return context
+
+
+async def _clear_conversation_context_flag(
+    session_id: uuid.UUID,
+    db: AsyncSession,
+    key: str,
+) -> None:
+    session = await db.get(ChatSession, session_id)
+    if session is None:
+        return
+    metadata = dict(session.metadata_ or {})
+    context = dict(metadata.get("conversation_context") or {})
+    if key not in context:
+        return
+    context.pop(key, None)
+    metadata["conversation_context"] = context
+    session.metadata_ = metadata
+    db.add(session)
+    await db.flush()
 
 
 def _conversation_context_message(context: dict) -> dict | None:
@@ -999,6 +1028,19 @@ async def _try_static_business_reply(
     if not any(topic_lines.values()):
         if (requested_place or place_terms) and any(topic in {"location", "delivery"} for topic in topics):
             place_label = requested_place[1] if requested_place else place_terms[0]
+            if requested_place and place_terms:
+                base_terms = {
+                    _normalise_static_text(requested_place[0]),
+                    _normalise_static_text(requested_place[1]),
+                }
+                extra_terms = [term for term in place_terms if term not in base_terms]
+                if extra_terms:
+                    place_label = f"{place_label} {' '.join(extra_terms)}"
+            if "delivery" in topics and "location" not in topics:
+                return (
+                    f"ما عندي تأكيد لتوصيل {place_label} حالياً، بخلي الفريق يتأكدلك 🙏",
+                    retrieved_data,
+                )
             missing_bits = []
             if "location" in topics:
                 missing_bits.append(
@@ -1012,6 +1054,11 @@ async def _try_static_business_reply(
             return (
                 f"\u0627\u0644\u0645\u0648\u062c\u0648\u062f \u0639\u0646\u062f\u064a \u0647\u0644\u0623 \u0645\u0627 \u0641\u064a\u0647 \u0645\u0639\u0644\u0648\u0645\u0629 \u0645\u0624\u0643\u062f\u0629 \u0639\u0646 {subject}\n"
                 "\u0627\u0628\u0639\u062a\u0644\u064a \u0645\u0646\u0637\u0642\u062a\u0643 \u0628\u0627\u0644\u0636\u0628\u0637 \u0648\u0628\u0634\u0648\u0641\u0644\u0643",
+                retrieved_data,
+            )
+        if topics == ["delivery"]:
+            return (
+                "أكيد، لأي منطقة بدك التوصيل؟",
                 retrieved_data,
             )
         return (
@@ -1263,6 +1310,60 @@ def _prepare_image_attachment_reply(
             language=_detect_text_language(customer_message),
         )
     return cleaned
+
+
+def _is_image_only_customer_message(customer_message: str | None) -> bool:
+    text = (customer_message or "").casefold()
+    return "customer sent an image" in text or "sent an image" in text
+
+
+def _reply_mentions_price(reply: str | None) -> bool:
+    return bool(_PRICE_REQUEST_RE.search(reply or "")) or bool(
+        re.search(r"\b\d+(?:\.\d+)?\s*(?:jod|jd|دينار|دنانير)\b", reply or "", re.I)
+    )
+
+
+def _unique_catalog_items_from_data(retrieved_data: dict) -> list[dict]:
+    items: list[dict] = []
+    seen: set[str] = set()
+    for value in retrieved_data.values():
+        if not isinstance(value, dict):
+            continue
+        if value.get("overview_only") or value.get("matched") is False:
+            continue
+        raw_items = value.get("items")
+        if not isinstance(raw_items, list):
+            continue
+        for item in raw_items:
+            if not isinstance(item, dict) or not item.get("name"):
+                continue
+            identity = str(item.get("id") or item.get("name")).strip().casefold()
+            if identity in seen:
+                continue
+            seen.add(identity)
+            items.append(item)
+    return items
+
+
+def _image_price_guard_result(
+    customer_message: str,
+    retrieved_data: dict,
+    draft_answer: str,
+) -> VerificationResult | None:
+    if not _is_image_only_customer_message(customer_message):
+        return None
+    if not _reply_mentions_price(draft_answer):
+        return None
+    if len(_unique_catalog_items_from_data(retrieved_data)) == 1:
+        return None
+    return VerificationResult(
+        verdict=ASK_CLARIFICATION,
+        risk_score=0.65,
+        reasons=["Image-only message did not resolve to exactly one catalog product"],
+        safe_response=(
+            "الصورة مش واضحة عندي كمنتج محدد من منتجاتنا. ابعتلي صورة أوضح للمنتج أو اسمه، وبساعدك بالسعر."
+        ),
+    )
 
 
 async def _run_pre_ai_automations(
@@ -1681,10 +1782,15 @@ def _format_named_price(name: str, price: str | None, *, english: bool) -> str:
 
 def _catalog_price_lines(items: list[dict], *, english: bool, limit: int = 8) -> list[str]:
     lines: list[str] = []
+    seen: set[str] = set()
     for item in items:
         name = str(item.get("name") or "").strip()
         if not name:
             continue
+        identity = str(item.get("id") or name).strip().casefold()
+        if identity in seen:
+            continue
+        seen.add(identity)
         price = _format_catalog_price(item.get("price"), item.get("currency"))
         if price:
             lines.append(_format_named_price(name, price, english=english))
@@ -1695,12 +1801,41 @@ def _catalog_price_lines(items: list[dict], *, english: bool, limit: int = 8) ->
 
 def _package_price_lines(packages: list[dict], *, english: bool, limit: int = 8) -> list[str]:
     lines: list[str] = []
+    seen: set[str] = set()
     for package in packages:
         name = str(package.get("name") or "").strip()
         if not name:
             continue
+        identity = name.casefold()
+        if identity in seen:
+            continue
+        seen.add(identity)
         price = _format_catalog_price(package.get("price"), package.get("currency"))
+        if not price:
+            continue
         lines.append(_format_named_price(name, price, english=english))
+        if len(lines) >= limit:
+            break
+    return lines
+
+
+def _package_missing_price_lines(packages: list[dict], *, english: bool, limit: int = 3) -> list[str]:
+    lines: list[str] = []
+    seen: set[str] = set()
+    for package in packages:
+        name = str(package.get("name") or "").strip()
+        if not name:
+            continue
+        identity = name.casefold()
+        if identity in seen:
+            continue
+        seen.add(identity)
+        if _format_catalog_price(package.get("price"), package.get("currency")):
+            continue
+        lines.append(
+            f"I have information about {name}, but its price is not added right now."
+            if english else f"عندي معلومة عن {name}، لكن السعر غير مضاف عندي حالياً."
+        )
         if len(lines) >= limit:
             break
     return lines
@@ -1788,6 +1923,73 @@ def _best_catalog_item_for_turn(
     return best_item if best_score >= 3.0 else None
 
 
+def _try_static_mixed_order_reply(
+    customer_message: str,
+    retrieved_data: dict,
+    *,
+    current_turn_keys: list[str] | None = None,
+    conversation_language: str | None = None,
+) -> str | None:
+    text = customer_message or ""
+    topics = _static_business_topics(text)
+    if "delivery" not in topics or not _PACKAGE_REQUEST_RE.search(text):
+        return None
+
+    language = conversation_language or _detect_text_language(text)
+    english = _is_english_context(language, text)
+    place = _static_requested_place(text)
+    place_label = place[1] if place else None
+
+    current_keys = set(current_turn_keys or [])
+    catalog_items = [
+        candidate["item"]
+        for candidate in _iter_catalog_items(
+            retrieved_data,
+            current_turn_keys=current_turn_keys,
+        )
+        if candidate["item"].get("available") is not False
+        and (not current_keys or candidate.get("current_turn"))
+    ]
+    if not catalog_items:
+        catalog_items = _unique_catalog_items_from_data(retrieved_data)
+    if not catalog_items:
+        return None
+
+    names: list[str] = []
+    price_lines: list[str] = []
+    seen: set[str] = set()
+    for item in catalog_items[:6]:
+        name = str(item.get("name") or "").strip()
+        if not name:
+            continue
+        identity = str(item.get("id") or name).strip().casefold()
+        if identity in seen:
+            continue
+        seen.add(identity)
+        names.append(name)
+        price = _format_catalog_price(item.get("price"), item.get("currency"))
+        if price:
+            price_lines.append(_format_named_price(name, price, english=english))
+
+    if not names:
+        return None
+
+    if english:
+        delivery_part = f" and delivery to {place_label}" if place_label else " and delivery"
+        reply = f"Got it. Your request: {' + '.join(names)}{delivery_part}."
+        if price_lines:
+            reply += "\nIf you mean the individual products, these are the confirmed prices:\n" + "\n".join(price_lines)
+        reply += "\nIf you mean full boxes or the delivery fee, I don’t have confirmed details right now, so I’ll have the team complete it with you."
+        return reply
+
+    delivery_part = f" والتوصيل لـ {place_label}" if place_label else " ومعهم توصيل"
+    reply = f"تمام، طلبك: {' + '.join(names)}{delivery_part}."
+    if price_lines:
+        reply += "\nإذا قصدك المنتجات الفردية، الأسعار المؤكدة عندي:\n" + "\n".join(price_lines)
+    reply += "\nأما إذا قصدك بوكسات كاملة أو سعر التوصيل، مش مؤكدين عندي حالياً، فبحوّلك للفريق يكمل معك."
+    return reply
+
+
 def _try_static_discovery_reply(
     customer_message: str,
     retrieved_data: dict,
@@ -1826,6 +2028,39 @@ def _try_static_discovery_reply(
         retrieved_data,
         current_turn_keys,
     )
+    mixed_order_reply = _try_static_mixed_order_reply(
+        text,
+        retrieved_data,
+        current_turn_keys=current_turn_keys,
+        conversation_language=conversation_language,
+    )
+    if mixed_order_reply:
+        return mixed_order_reply
+
+    matched_catalog_item = _best_catalog_item_for_turn(
+        text,
+        retrieved_data,
+        history,
+        current_turn_keys=current_turn_keys,
+    )
+
+    if asks_packages and package_reference and not matched_reference and matched_catalog_item:
+        name = str(matched_catalog_item.get("name") or "").strip()
+        price = _format_catalog_price(
+            matched_catalog_item.get("price"),
+            matched_catalog_item.get("currency"),
+        )
+        if name and price:
+            if english:
+                return (
+                    f"Do you mean the {name} product? Its price is {price}. "
+                    "If you mean a larger box for gatherings, I don’t have a confirmed box price right now, "
+                    "so I can connect you with the team to confirm it."
+                )
+            return (
+                f"تقصد منتج {name}؟ سعره {price}. "
+                "إذا قصدك بوكس كامل للتجمعات، السعر مش ظاهر عندي حالياً وبحوّلك للفريق يتأكدلك."
+            )
 
     if (
         asks_packages
@@ -1848,10 +2083,13 @@ def _try_static_discovery_reply(
 
     if asks_packages:
         package_lines = _package_price_lines(packages, english=english)
+        missing_package_lines = _package_missing_price_lines(packages, english=english)
         if package_lines:
             joined = "\n".join(package_lines)
             if english:
                 reply = f"Based on the information I have right now, these are the packages I can see:\n{joined}"
+                if missing_package_lines:
+                    reply += "\n" + "\n".join(missing_package_lines)
                 if asks_more or len(packages) <= 1:
                     reply += (
                         "\nI don’t have confirmed details for other packages right now. "
@@ -1859,12 +2097,24 @@ def _try_static_discovery_reply(
                     )
                 return reply
             reply = f"حسب المعلومات المتوفرة عندي حالياً، المتوفر عندي من البوكسات:\n{joined}"
+            if missing_package_lines:
+                reply += "\n" + "\n".join(missing_package_lines)
             if asks_more or len(packages) <= 1:
                 reply += (
                     "\nما عندي معلومات مؤكدة عن بوكسات ثانية حالياً. إذا شفت بوكس ثاني على إنستغرام "
                     "ابعتلي اسمه أو صورة المنشور وبخلي الفريق يتأكدلك."
                 )
             return reply
+
+        if missing_package_lines:
+            joined = "\n".join(missing_package_lines)
+            if english:
+                return (
+                    f"{joined}\nI can connect you with the team to confirm the correct price 🙏"
+                )
+            return (
+                f"{joined}\nبحوّلك للفريق يعطوك السعر الصحيح 🙏"
+            )
 
         if english:
             return (
@@ -2270,18 +2520,13 @@ async def _generate_reply(
         )
 
     if "HUMAN_HANDOFF" in message_intents:
-        if human_handoff_enabled:
-            trace = direct_trace("direct_handoff_requested", intent="support")
-            trace["direct_handoff_requested"] = True
-            return (
-                _handoff_reply(current_language),
-                {"conversation_context:handoff": {"requested": True}},
-                trace,
-            )
+        trace = direct_trace("direct_handoff_requested", intent="support")
+        trace["direct_handoff_requested"] = True
+        trace["human_handoff_setting_disabled"] = not human_handoff_enabled
         return (
-            _handoff_disabled_fallback(text_content),
-            {"conversation_context:handoff": {"requested": True, "enabled": False}},
-            direct_trace("handoff_disabled", intent="support"),
+            _handoff_reply(current_language),
+            {"conversation_context:handoff": {"requested": True}},
+            trace,
         )
 
     if is_smalltalk_message(text_content):
@@ -2290,6 +2535,29 @@ async def _generate_reply(
             {"conversation_context:smalltalk": {"handled": True}},
             direct_trace("smalltalk"),
         )
+
+    if (
+        conversation_context.get("awaiting_delivery_area")
+        and text_content.strip()
+        and not message_intents
+    ):
+        delivery_followup = await _try_static_business_reply(
+            user,
+            session_id,
+            f"توصيل {text_content}",
+            db,
+        )
+        if delivery_followup is not None:
+            await _clear_conversation_context_flag(
+                session_id,
+                db,
+                "awaiting_delivery_area",
+            )
+            reply, retrieved_data = delivery_followup
+            trace = direct_trace("delivery_area_followup", intent="support")
+            trace["allowed_tools"] = ["get_business_info"]
+            trace["retrieved_keys"] = list(retrieved_data.keys())
+            return reply, retrieved_data, trace
 
     static_reply = await _try_static_business_reply(user, session_id, text_content, db)
     if static_reply is not None:
@@ -2819,6 +3087,28 @@ async def _verify_and_finalize(
             "answer_length": len(draft_answer or ""),
         }
         return draft_answer, "sent", result
+
+    image_guard = _image_price_guard_result(
+        customer_message,
+        retrieved_data,
+        draft_answer,
+    )
+    if image_guard is not None:
+        final_reply = image_guard.safe_response or SAFE_RESPONSES["uncertain"]
+        ai_trace["verification"]["initial"] = {
+            "verdict": image_guard.verdict,
+            "risk_score": image_guard.risk_score,
+            "reasons": image_guard.reasons,
+            "flagged_claims": image_guard.flagged_claims,
+            "skipped_llm": True,
+        }
+        ai_trace["final"] = {
+            "action": "clarification",
+            "verdict": image_guard.verdict,
+            "risk_score": image_guard.risk_score,
+            "answer_length": len(final_reply or ""),
+        }
+        return final_reply, "clarification", image_guard
 
     api_key = await effective_openai_key(db)
     human_handoff_enabled = await effective_human_handoff_enabled(db)
@@ -3377,8 +3667,9 @@ async def process_message(
                     "The customer sent an image. First classify it as one of: "
                     "product photo, payment receipt, error screenshot, delivery/order evidence, or other. "
                     "Only if it is a product photo, identify the product and call get_catalog. "
+                    "Do not provide prices or a price list unless the image clearly matches exactly one catalog product. "
                     "For receipts, screenshots, complaints, or unclear evidence, do not search the catalog; "
-                    "ask a short clarifying question before continuing."
+                    "ask for a clearer product image or the product name before continuing."
                 ),
             },
             {
@@ -3508,6 +3799,11 @@ async def process_message(
 
     # ── Answer Verification (anti-hallucination) ──
     customer_text = user_message if isinstance(user_message, str) else str(content)
+    if media_type == "image" and not (customer_text or "").strip():
+        customer_text = (
+            "The customer sent an image. Only answer with product prices if the image "
+            "clearly resolves to exactly one catalog product."
+        )
     reply, action, result = await _verify_and_finalize(
         draft_reply, customer_text, retrieved_data,
         user, session_id, db,
@@ -3728,8 +4024,9 @@ async def process_pending(session_id: uuid.UUID, db: AsyncSession) -> dict | Non
                     "The customer sent an image. First classify it as one of: "
                     "product photo, payment receipt, error screenshot, delivery/order evidence, or other. "
                     "Only if it is a product photo, identify the product and call get_catalog. "
+                    "Do not provide prices or a price list unless the image clearly matches exactly one catalog product. "
                     "For receipts, screenshots, complaints, or unclear evidence, do not search the catalog; "
-                    "ask a short clarifying question before continuing."
+                    "ask for a clearer product image or the product name before continuing."
                 ),
             },
         ]
@@ -3774,6 +4071,11 @@ async def process_pending(session_id: uuid.UUID, db: AsyncSession) -> dict | Non
 
             # ── Answer Verification (anti-hallucination) ──
             customer_text = combined_text or str(content)
+            if image_urls and not (combined_text or "").strip():
+                customer_text = (
+                    "The customer sent an image. Only answer with product prices if the image "
+                    "clearly resolves to exactly one catalog product."
+                )
             reply, action, result = await _verify_and_finalize(
                 draft_reply, customer_text, retrieved_data,
                 user, session_id, db,

@@ -562,10 +562,31 @@ _SEARCH_STOPWORDS = {
     "\u0627\u0628\u063a\u0649", "\u0639\u0627\u064a\u0632", "\u0645\u0646\u062a\u062c",
     "\u0645\u0646\u062a\u062c\u0627\u062a", "\u0627\u0644\u0645\u0646\u062a\u062c",
     "\u0627\u0644\u0645\u0646\u062a\u062c\u0627\u062a",
+    "\u0628\u0648\u0643\u0633", "\u0628\u0648\u0643\u0633\u0627\u062a",
+    "\u0627\u0644\u0628\u0648\u0643\u0633", "\u0628\u0643\u062c",
+    "\u0628\u0643\u062c\u0627\u062a", "\u0628\u0627\u0643\u062c",
+    "\u0628\u0627\u0643\u062c\u0627\u062a", "\u062d\u0632\u0645\u0647",
+    "\u062d\u0632\u0645\u0629", "\u0628\u0627\u0642\u0647", "\u0628\u0627\u0642\u0629",
+    "\u0643\u0648\u0645\u0628\u0648",
+    "\u062a\u0648\u0635\u064a\u0644", "\u062f\u064a\u0644\u064a\u0641\u0631\u064a",
+    "\u0634\u062d\u0646", "\u0627\u0644\u0649", "\u0625\u0644\u0649", "\u0627\u0644\u064a",
     "\u0634\u0648", "\u0627\u0634", "\u0627\u064a\u0634", "\u0645\u0627\u0630\u0627",
     "\u0634\u0646\u0648", "\u0627\u064a\u0647",
     "price", "cost", "available", "availability", "stock", "product",
-    "products", "do", "you", "have", "is", "the", "a", "an", "for",
+    "products", "box", "boxes", "bundle", "bundles", "package", "packages",
+    "combo", "delivery", "shipping", "deliver", "to",
+    "do", "you", "have", "is", "the", "a", "an", "for",
+    "\u0639\u0645\u0627\u0646", "\u0627\u0631\u0628\u062f", "\u0625\u0631\u0628\u062f",
+    "\u0627\u0644\u0632\u0631\u0642\u0627\u0621", "\u0632\u0631\u0642\u0627\u0621",
+    "\u0632\u0631\u0642\u0627", "\u0627\u0644\u0633\u0644\u0637", "\u0633\u0644\u0637",
+    "\u0627\u0644\u0643\u0631\u0643", "\u0643\u0631\u0643",
+    "\u0627\u0644\u0639\u0642\u0628\u0629", "\u0639\u0642\u0628\u0629",
+    "\u0627\u0644\u0645\u0641\u0631\u0642", "\u0645\u0641\u0631\u0642",
+    "\u062c\u0631\u0634", "\u0639\u062c\u0644\u0648\u0646",
+    "\u0645\u0627\u062f\u0628\u0627", "\u0627\u0644\u0637\u0641\u064a\u0644\u0629",
+    "\u0637\u0641\u064a\u0644\u0629", "\u0645\u0639\u0627\u0646",
+    "amman", "irbid", "zarqa", "salt", "karak", "aqaba",
+    "mafraq", "jerash", "ajloun", "madaba", "tafileh", "maan",
 }
 
 _SEARCH_SYNONYM_GROUPS = (
@@ -703,6 +724,8 @@ def _tokens(query: str) -> list[str]:
     out: list[str] = []
     for token in raw:
         normalised = _strip_arabic_article(_normalise_search_text(token))
+        if normalised.startswith("\u0648") and len(normalised) > 2:
+            normalised = normalised[1:]
         if len(normalised) < 2 or normalised in _SEARCH_STOPWORDS:
             continue
         out.append(normalised)
