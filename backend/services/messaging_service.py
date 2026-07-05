@@ -15,7 +15,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
 
 from models import ChannelIntegration, ChatSession, User
-from services.ai_chat import process_message, save_message
+from services.ai_chat import (
+    fallback_language_for_text,
+    get_fallback,
+    process_message,
+    save_message,
+)
 from services.file_service import save_external_file_bytes
 from services.queue_service import schedule_session
 
@@ -234,8 +239,9 @@ async def sync_reply_result(
     """Synchronous AI result for request/response channel integrations."""
     client = await _client_for(integration, db)
     if client is None:
+        language = fallback_language_for_text(text)
         return {
-            "reply": "This assistant is currently unavailable.",
+            "reply": get_fallback("service_unavailable", language),
             "audio_url": None,
             "action": "unavailable",
         }

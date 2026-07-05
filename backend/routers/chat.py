@@ -1,4 +1,5 @@
 import uuid
+import logging
 from datetime import datetime, timezone
 
 from fastapi import (
@@ -37,7 +38,9 @@ from services.file_service import save_upload
 router = APIRouter(prefix="/chat", tags=["chat"])
 
 _AUDIO_FALLBACK = "Couldn't process audio, please type your message"
+_STREAM_ERROR_REPLY = "حدث خطأ مؤقت، يرجى المحاولة مرة أخرى."
 _CONVERSATION_STAFF_ROLES = {"admin", "support_agent"}
+logger = logging.getLogger("chat")
 
 
 class PreviewRequest(BaseModel):
@@ -51,6 +54,13 @@ class SessionNotesUpdate(BaseModel):
 
 class AutoReplyUpdate(BaseModel):
     enabled: bool
+
+
+def _stream_error_event() -> dict:
+    return {
+        "event": "error",
+        "data": json.dumps({"detail": _STREAM_ERROR_REPLY}, ensure_ascii=False),
+    }
 
 
 def _utcnow_iso() -> str:
@@ -257,8 +267,9 @@ async def send_message_stream(
             if audio_url:
                 yield {"event": "audio", "data": json.dumps({"url": audio_url})}
                 
-        except Exception as e:
-            yield {"event": "error", "data": json.dumps({"detail": str(e)})}
+        except Exception:
+            logger.exception("SSE stream error")
+            yield _stream_error_event()
         finally:
             yield {"event": "done", "data": ""}
 

@@ -51,6 +51,34 @@ SERVICE_UNAVAILABLE_REPLY = "الخدمة مش متاحة حاليا، حاول 
 RETRIEVAL_ERROR_REPLY = "خليني أتأكدلك من المعلومة الأدق، وبحوّلك للفريق يساعدك أكثر 🙏"
 PROMPT_INJECTION_REPLY = "ما فهمت عليك، ممكن توضحلي شو بالضبط تحتاج؟"
 AI_PAUSED_REPLY = "وصلت رسالتك، وبحوّلك للفريق يساعدك بشكل أدق 🙏"
+PREVIEW_ERROR_REPLY = "تعذر إنشاء رد تجريبي حالياً. يرجى المحاولة لاحقاً."
+FALLBACK_MESSAGES = {
+    "no_credit": {
+        "ar": "الخدمة متوقفة مؤقتاً، وبحوّلك للفريق يساعدك بأقرب وقت 🙏",
+        "en": "The service is temporarily paused. I can connect you with the team to help shortly 🙏",
+    },
+    "service_unavailable": {
+        "ar": SERVICE_UNAVAILABLE_REPLY,
+        "en": "The service is temporarily unavailable. Please try again shortly 🙏",
+    },
+    "retrieval_error": {
+        "ar": RETRIEVAL_ERROR_REPLY,
+        "en": "Let me verify the most accurate information for you. I can also connect you with the team to confirm it 🙏",
+    },
+    "ai_paused": {
+        "ar": AI_PAUSED_REPLY,
+        "en": "I got your message, and I'll connect you with the team so they can help more accurately 🙏",
+    },
+    "prompt_injection": {
+        "ar": PROMPT_INJECTION_REPLY,
+        "en": "I want to make sure I help with the right thing. Could you clarify what you need?",
+    },
+    "preview_error": {
+        "ar": PREVIEW_ERROR_REPLY,
+        "en": "I couldn't generate a preview reply right now. Please try again shortly.",
+    },
+}
+_ERROR_FALLBACK_KEYS = ("service_unavailable", "retrieval_error")
 RESPONSE_CACHE_TTL_SECONDS = 300
 RESPONSE_CACHE_ENABLED = os.getenv("AI_RESPONSE_CACHE_ENABLED", "false").strip().lower() in {
     "1",
@@ -361,6 +389,50 @@ def _is_english_context(language: str | None, customer_message: str | None = Non
     return language == "en" or (
         language is None and _detect_text_language(customer_message) == "en"
     )
+
+
+def get_fallback(key: str, language: str | None = "ar") -> str:
+    messages = FALLBACK_MESSAGES.get(key)
+    if not messages:
+        return FALLBACK_MESSAGES["retrieval_error"]["ar"]
+    lang = language if language in {"ar", "en"} else "ar"
+    return messages.get(lang) or messages["ar"]
+
+
+def fallback_language_for_text(text: str | None, default: str | None = "ar") -> str:
+    explicit_language = _detect_language_switch(text)
+    if explicit_language in {"ar", "en"}:
+        return explicit_language
+    message_language = _detect_text_language(text)
+    if message_language in {"ar", "en"}:
+        return message_language
+    return default if default in {"ar", "en"} else "ar"
+
+
+async def _fallback_language_for_session(
+    session_id: uuid.UUID,
+    db: AsyncSession,
+    customer_message: str | None = None,
+) -> str:
+    session = await db.get(ChatSession, session_id)
+    session_language = None
+    if session is not None:
+        metadata = dict(session.metadata_ or {})
+        context = dict(metadata.get("conversation_context") or {})
+        session_language = context.get("current_language")
+    return fallback_language_for_text(customer_message, session_language or "ar")
+
+
+def _fallback_values(*keys: str) -> set[str]:
+    values: set[str] = set()
+    for key in keys:
+        for value in FALLBACK_MESSAGES.get(key, {}).values():
+            values.add(value)
+    return values
+
+
+def _is_error_reply(reply: str | None) -> bool:
+    return bool(reply and reply in _fallback_values(*_ERROR_FALLBACK_KEYS))
 
 
 def _language_name(language: str | None) -> str:
@@ -2894,9 +2966,9 @@ async def generate_preview_reply(
             max_tokens=400,
         )
         return response.choices[0].message.content or "No response generated."
-    except Exception as e:
+    except Exception:
         logger.exception("Preview reply failed")
-        return f"Error: {e}"
+        return get_fallback("preview_error", fallback_language_for_text(message))
 
 
 async def _retrieve_supplemental_data(
@@ -3631,20 +3703,23 @@ async def process_message(
 ) -> dict:
     user_id = _model_id(user)
     ai_persona = user.ai_persona
+    fallback_language = await _fallback_language_for_session(session_id, db, user_message)
     if not getattr(user, "ai_auto_reply_enabled", True):
+        reply = get_fallback("ai_paused", fallback_language)
         await save_message(session_id, "user", user_message, media_type, media_url, db, commit=False)
-        await save_message(session_id, "assistant", AI_PAUSED_REPLY, "text", None, db, commit=False)
+        await save_message(session_id, "assistant", reply, "text", None, db, commit=False)
         await db.commit()
         return {
-            "reply": AI_PAUSED_REPLY,
+            "reply": reply,
             "transcription": None,
         }
     if getattr(user, 'ai_credit_balance', 0) <= 0:
+        reply = get_fallback("no_credit", fallback_language)
         await save_message(session_id, "user", user_message, media_type, media_url, db, commit=False)
-        await save_message(session_id, "assistant", NO_CREDIT_REPLY, "text", None, db, commit=False)
+        await save_message(session_id, "assistant", reply, "text", None, db, commit=False)
         await db.commit()
         return {
-            "reply": NO_CREDIT_REPLY,
+            "reply": reply,
             "transcription": None
         }
 
@@ -3654,6 +3729,9 @@ async def process_message(
         try:
             user_message = (await transcribe_audio(media_url, db)).strip()
             transcription = user_message
+            fallback_language = await _fallback_language_for_session(
+                session_id, db, user_message
+            )
         except Exception as exc:  # noqa: BLE001
             logger.exception("transcription failed")
             raise TranscriptionError(str(exc)) from exc
@@ -3681,7 +3759,7 @@ async def process_message(
         content = user_message
 
     if user_message and is_prompt_injection(user_message):
-        reply = PROMPT_INJECTION_REPLY
+        reply = get_fallback("prompt_injection", fallback_language)
         await save_message(session_id, "user", user_message, media_type, media_url, db, commit=False)
         await save_message(session_id, "assistant", reply, "text", None, db, commit=False)
         await db.commit()
@@ -3768,9 +3846,10 @@ async def process_message(
                     "action": "automation",
                     "automation_results": automation_results,
                 }
+            reply = get_fallback("ai_paused", fallback_language)
             await db.commit()
             return {
-                "reply": AI_PAUSED_REPLY,
+                "reply": reply,
                 "transcription": transcription,
                 "action": "automation_paused",
                 "automation_results": automation_results,
@@ -3781,19 +3860,21 @@ async def process_message(
     except APIError:
         logger.exception("OpenAI API error")
         inbound_msg.processed = True
-        await save_message(session_id, "assistant", SERVICE_UNAVAILABLE_REPLY, "text", None, db, commit=False)
+        reply = get_fallback("service_unavailable", fallback_language)
+        await save_message(session_id, "assistant", reply, "text", None, db, commit=False)
         await db.commit()
         return {
-            "reply": SERVICE_UNAVAILABLE_REPLY,
+            "reply": reply,
             "transcription": transcription,
         }
     except Exception:  # noqa: BLE001
         logger.exception("Unexpected error in process_message")
         inbound_msg.processed = True
-        await save_message(session_id, "assistant", RETRIEVAL_ERROR_REPLY, "text", None, db, commit=False)
+        reply = get_fallback("retrieval_error", fallback_language)
+        await save_message(session_id, "assistant", reply, "text", None, db, commit=False)
         await db.commit()
         return {
-            "reply": RETRIEVAL_ERROR_REPLY,
+            "reply": reply,
             "transcription": transcription,
         }
 
@@ -3846,8 +3927,7 @@ async def process_message(
     if reply_image_url:
         reply_media_type = "image"
         reply_media_url = reply_image_url
-    ERROR_REPLIES = (SERVICE_UNAVAILABLE_REPLY, RETRIEVAL_ERROR_REPLY)
-    if reply and reply not in ERROR_REPLIES:
+    if reply and not _is_error_reply(reply):
         should_voice, voice, speed, voice_config, tts_provider, audio_format = await _determine_voice_mode(
             user_id,
             db,
@@ -3906,8 +3986,10 @@ async def process_pending(session_id: uuid.UUID, db: AsyncSession) -> dict | Non
         return None
     user_id = _model_id(user)
     ai_persona = user.ai_persona
+    fallback_language = await _fallback_language_for_session(session_id, db)
 
     if not getattr(user, "ai_auto_reply_enabled", True):
+        reply = get_fallback("ai_paused", fallback_language)
         stmt = (
             select(Message)
             .where(Message.session_id == session_id, Message.processed.is_(False))
@@ -3916,10 +3998,10 @@ async def process_pending(session_id: uuid.UUID, db: AsyncSession) -> dict | Non
         pending_to_mark = list((await db.execute(stmt)).scalars().all())
         for m in pending_to_mark:
             m.processed = True
-        await save_message(session_id, "assistant", AI_PAUSED_REPLY, "text", None, db, commit=False)
+        await save_message(session_id, "assistant", reply, "text", None, db, commit=False)
         await db.commit()
         return {
-            "reply": AI_PAUSED_REPLY,
+            "reply": reply,
             "channel": session_channel,
             "external_user_id": session_external_user_id,
             "user_id": str(user_id),
@@ -3944,7 +4026,7 @@ async def process_pending(session_id: uuid.UUID, db: AsyncSession) -> dict | Non
     if getattr(user, "ai_credit_balance", 0) <= 0:
         for m in pending:
             m.processed = True
-        reply = NO_CREDIT_REPLY
+        reply = get_fallback("no_credit", fallback_language)
         await save_message(session_id, "assistant", reply, "text", None, db, commit=False)
         await db.commit()
         return {
@@ -3984,6 +4066,7 @@ async def process_pending(session_id: uuid.UUID, db: AsyncSession) -> dict | Non
                 text_parts.append(m.content)
 
     combined_text = "\n".join(text_parts).strip()
+    fallback_language = fallback_language_for_text(combined_text, fallback_language)
 
     if not combined_text and not image_urls:
         for m in pending:
@@ -4003,7 +4086,7 @@ async def process_pending(session_id: uuid.UUID, db: AsyncSession) -> dict | Non
         for m in pending:
             m.processed = True
         await db.commit()
-        reply = automation_reply or AI_PAUSED_REPLY
+        reply = automation_reply or get_fallback("ai_paused", fallback_language)
         return {
             "reply": reply,
             "channel": session_channel,
@@ -4059,7 +4142,7 @@ async def process_pending(session_id: uuid.UUID, db: AsyncSession) -> dict | Non
     reply_image_url = None
     action = "sent"
     if combined_text and is_prompt_injection(combined_text):
-        reply = PROMPT_INJECTION_REPLY
+        reply = get_fallback("prompt_injection", fallback_language)
     elif not image_urls and incoming_media_type == "text" and (
         cached_reply := _get_cached_reply(user_id, combined_text)
     ):
@@ -4104,10 +4187,10 @@ async def process_pending(session_id: uuid.UUID, db: AsyncSession) -> dict | Non
             )
         except APIError:
             logger.exception("OpenAI API error (worker)")
-            reply = SERVICE_UNAVAILABLE_REPLY
+            reply = get_fallback("service_unavailable", fallback_language)
         except Exception:  # noqa: BLE001
             logger.exception("worker reply failed")
-            reply = RETRIEVAL_ERROR_REPLY
+            reply = get_fallback("retrieval_error", fallback_language)
 
     for m in pending:
         m.processed = True
@@ -4124,8 +4207,7 @@ async def process_pending(session_id: uuid.UUID, db: AsyncSession) -> dict | Non
     if reply_image_url:
         reply_media_type = "image"
         reply_media_url = reply_image_url
-    ERROR_REPLIES = (SERVICE_UNAVAILABLE_REPLY, RETRIEVAL_ERROR_REPLY)
-    if reply and reply not in ERROR_REPLIES:
+    if reply and not _is_error_reply(reply):
         should_voice, voice, speed, voice_config, tts_provider, audio_format = await _determine_voice_mode(
             user_id,
             db,

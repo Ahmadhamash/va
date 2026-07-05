@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import settings
 from database import get_db
-from models import ChatSession, Message, User, VoiceSettings
+from models import ChannelIntegration, ChatSession, Message, User, VoiceSettings
 from services.messaging_service import (
     enqueue_inbound,
     get_integration,
@@ -20,7 +20,7 @@ from services.messaging_service import (
     verify_meta_signature,
 )
 from services.file_service import signed_upload_url
-from services.queue_service import schedule_session
+from services.queue_service import get_pool, schedule_session
 from services.ratelimit import limiter
 from services.webhook_security import (
     configured_secret,
@@ -51,6 +51,20 @@ MANYCHAT_EMPTY_INPUT_REPLY = (
     "\u0627\u0628\u0639\u062a\u0644\u064a \u0633\u0624\u0627\u0644\u0643 \u0643\u062a\u0627\u0628\u0629 "
     "\u0648\u0628\u0633\u0627\u0639\u062f\u0643."
 )
+DEAD_LETTER_INBOUND_KEY = "dead_letter:inbound"
+DEAD_LETTER_MAX_ITEMS = 1000
+_DEAD_LETTER_REDACTED = "[redacted]"
+_DEAD_LETTER_SENSITIVE_KEYS = {
+    "access_token",
+    "app_secret",
+    "authorization",
+    "credentials",
+    "password",
+    "secret",
+    "token",
+    "verify_token",
+    "webhook_secret",
+}
 
 
 def _require_configured_secret(
@@ -120,6 +134,68 @@ def _require_hmac_signature(
             public_id[-8:],
         )
         raise HTTPException(status_code=403, detail="Bad signature")
+
+
+def _redact_dead_letter_payload(value):
+    if isinstance(value, dict):
+        redacted = {}
+        for key, item in value.items():
+            key_text = str(key).lower()
+            if (
+                key_text in _DEAD_LETTER_SENSITIVE_KEYS
+                or key_text.endswith("_secret")
+                or key_text.endswith("_token")
+            ):
+                redacted[key] = _DEAD_LETTER_REDACTED
+            else:
+                redacted[key] = _redact_dead_letter_payload(item)
+        return redacted
+    if isinstance(value, list):
+        return [_redact_dead_letter_payload(item) for item in value]
+    return value
+
+
+async def _record_inbound_dead_letter(
+    *,
+    integration: ChannelIntegration,
+    source: str,
+    external_user_id: str,
+    text: str | None,
+    media_type: str = "text",
+    media_url: str | None = None,
+    payload: dict | None = None,
+    error: BaseException | None = None,
+) -> None:
+    entry = {
+        "source": source,
+        "platform": integration.platform,
+        "public_id": integration.public_id,
+        "user_id": str(integration.user_id),
+        "external_user_id": external_user_id,
+        "text": text,
+        "media_type": media_type,
+        "media_url": media_url,
+        "created_at": time.time(),
+    }
+    if payload is not None:
+        entry["payload"] = _redact_dead_letter_payload(payload)
+    if error is not None:
+        entry["error_type"] = type(error).__name__
+        entry["error_message"] = str(error)[:300]
+
+    try:
+        pool = await get_pool()
+        encoded = json.dumps(entry, ensure_ascii=False, default=str)
+        await pool.lpush(DEAD_LETTER_INBOUND_KEY, encoded)
+        await pool.ltrim(DEAD_LETTER_INBOUND_KEY, 0, DEAD_LETTER_MAX_ITEMS - 1)
+    except Exception:  # noqa: BLE001
+        logger.critical(
+            "dead letter capture failed: source=%s public_id_suffix=%s sender_suffix=%s",
+            source,
+            integration.public_id[-8:],
+            external_user_id[-6:],
+            exc_info=True,
+        )
 
 
 # ─── Meta (Messenger + Instagram) ────────────────────────────────────────────
@@ -202,8 +278,18 @@ async def meta_receive(
                     integration, sender_id, text, db,
                     media_type=media_type, media_url=media_url,
                 )
-            except Exception:  # noqa: BLE001
+            except Exception as exc:  # noqa: BLE001
                 logger.exception("meta inbound enqueue failed")
+                await _record_inbound_dead_letter(
+                    integration=integration,
+                    source="meta",
+                    external_user_id=sender_id,
+                    text=text,
+                    media_type=media_type,
+                    media_url=media_url,
+                    payload={"event": event, "message": message},
+                    error=exc,
+                )
 
     return {"status": "ok"}
 
@@ -280,8 +366,18 @@ async def whatsapp_receive(
                 media_type=msg.message_type,
                 media_url=msg.media_url or msg.media_id,
             )
-        except Exception:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001
             logger.exception("WhatsApp inbound enqueue failed")
+            await _record_inbound_dead_letter(
+                integration=integration,
+                source="whatsapp",
+                external_user_id=msg.external_user_id,
+                text=msg.text,
+                media_type=msg.message_type,
+                media_url=msg.media_url or msg.media_id,
+                payload=msg.raw_payload,
+                error=exc,
+            )
 
     return {"status": "ok"}
 

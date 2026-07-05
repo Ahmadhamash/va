@@ -63,6 +63,11 @@ from services.router import (
 )
 from services.fact_guard import check_humanizer_preserved_facts
 from services.retrieval_plan import supplemental_tool_plan
+from routers.chat import _stream_error_event
+from routers.webhooks import (
+    DEAD_LETTER_INBOUND_KEY,
+    _record_inbound_dead_letter,
+)
 from models import (
     HandoffSession, PlatformSupportAgent, ChatSession, User, VoiceSettings,
     AIVerificationLog,
@@ -72,6 +77,63 @@ from models import (
 # ═══════════════════════════════════════════════════════════════════════
 # 1. HALLUCINATED PRICE IS BLOCKED
 # ═══════════════════════════════════════════════════════════════════════
+def test_sse_error_event_does_not_expose_raw_exception():
+    event = _stream_error_event()
+    data = json.loads(event["data"])
+
+    assert event["event"] == "error"
+    assert "detail" in data
+    assert "sk-" not in data["detail"]
+    assert "Traceback" not in data["detail"]
+    assert "Exception" not in data["detail"]
+
+
+@pytest.mark.asyncio
+async def test_inbound_dead_letter_capture_redacts_sensitive_payload(monkeypatch):
+    captured = {}
+
+    class FakePool:
+        async def lpush(self, key, value):
+            captured["key"] = key
+            captured["value"] = value
+
+        async def ltrim(self, key, start, end):
+            captured["trim"] = (key, start, end)
+
+    async def fake_get_pool():
+        return FakePool()
+
+    monkeypatch.setattr("routers.webhooks.get_pool", fake_get_pool)
+    integration = SimpleNamespace(
+        platform="instagram",
+        public_id="pub_dead_letter_12345678",
+        user_id=uuid.uuid4(),
+    )
+
+    await _record_inbound_dead_letter(
+        integration=integration,
+        source="meta",
+        external_user_id="customer-123456",
+        text="hi",
+        media_type="text",
+        payload={
+            "message": {"text": "hi"},
+            "credentials": {"access_token": "secret-token"},
+            "nested": {"webhook_secret": "secret"},
+        },
+        error=RuntimeError("queue down"),
+    )
+
+    entry = json.loads(captured["value"])
+    assert captured["key"] == DEAD_LETTER_INBOUND_KEY
+    assert captured["trim"] == (DEAD_LETTER_INBOUND_KEY, 0, 999)
+    assert entry["platform"] == "instagram"
+    assert entry["external_user_id"] == "customer-123456"
+    assert entry["error_type"] == "RuntimeError"
+    assert entry["payload"]["credentials"] == "[redacted]"
+    assert entry["payload"]["nested"]["webhook_secret"] == "[redacted]"
+
+
 class TestHallucinatedPriceBlocked:
     def setup_method(self):
         self.verifier = AnswerVerifier(api_key="sk-test")

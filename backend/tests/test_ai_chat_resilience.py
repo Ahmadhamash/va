@@ -30,6 +30,8 @@ from services.ai_chat import (
     _response_cache,
     _store_cached_reply,
     _verify_and_finalize,
+    generate_preview_reply,
+    get_fallback,
     process_message,
     process_pending,
     save_message,
@@ -73,6 +75,74 @@ class RecordingOpenAIClient:
     async def _create(self, **kwargs):
         self.calls.append(kwargs)
         return _fake_chat_response()
+
+
+@pytest.mark.asyncio
+async def test_no_credit_fallback_uses_customer_language(db_session):
+    user = _user(ai_credit_balance=0)
+    session_id = uuid.uuid4()
+    session = ChatSession(id=session_id, user_id=user.id, channel="web")
+    db_session.add_all([user, session])
+    await db_session.flush()
+
+    result = await process_message(
+        "Can you speak English?",
+        user,
+        session_id,
+        db_session,
+    )
+
+    assert result["reply"] == get_fallback("no_credit", "en")
+    assert "الذكاء الاصطناعي" not in result["reply"]
+
+
+@pytest.mark.asyncio
+async def test_preview_reply_failure_does_not_leak_exception(db_session, monkeypatch):
+    async def fake_openai_key(_db):
+        return "sk-test"
+
+    async def fake_model(_db):
+        return "gpt-test"
+
+    async def fake_master_prompt(_db):
+        return None
+
+    async def fake_handoff_enabled(_db):
+        return True
+
+    class FailingPreviewClient:
+        def __init__(self):
+            self.chat = SimpleNamespace(
+                completions=SimpleNamespace(create=self._create)
+            )
+
+        async def _create(self, **_kwargs):
+            raise RuntimeError("raw secret sk-leaked-from-preview")
+
+    monkeypatch.setattr("services.ai_chat.effective_openai_key", fake_openai_key)
+    monkeypatch.setattr("services.ai_chat.effective_model", fake_model)
+    monkeypatch.setattr(
+        "services.ai_chat.effective_master_system_prompt",
+        fake_master_prompt,
+    )
+    monkeypatch.setattr(
+        "services.ai_chat.effective_human_handoff_enabled",
+        fake_handoff_enabled,
+    )
+    monkeypatch.setattr(
+        "services.ai_chat._client_for",
+        lambda _api_key: FailingPreviewClient(),
+    )
+
+    reply = await generate_preview_reply(
+        "Friendly store assistant",
+        "Please answer in English",
+        db_session,
+    )
+
+    assert reply == get_fallback("preview_error", "en")
+    assert "sk-leaked" not in reply
+    assert not reply.startswith("Error:")
 
 
 def test_response_cache_is_disabled_by_default():
