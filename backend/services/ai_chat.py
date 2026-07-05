@@ -47,6 +47,15 @@ logger = logging.getLogger("ai_chat")
 HISTORY_LIMIT = 20
 MAX_TOOL_ROUNDS = 5
 OPENAI_TIMEOUT_SECONDS = 30.0
+CONTEXT_CHAR_BUDGET = 42000
+PRE_RETRIEVED_CONTEXT_CHAR_LIMIT = 10000
+CONVERSATION_SUMMARY_KEY = "conversation_summary"
+CONVERSATION_SUMMARY_MESSAGE_COUNT_KEY = "conversation_summary_message_count"
+CONVERSATION_SUMMARY_UPDATED_AT_KEY = "conversation_summary_updated_at"
+CONVERSATION_SUMMARY_TRIGGER_MESSAGES = HISTORY_LIMIT + 8
+CONVERSATION_SUMMARY_SOURCE_LIMIT = 80
+CONVERSATION_SUMMARY_MAX_LINES = 14
+CONVERSATION_SUMMARY_LINE_CHARS = 220
 MAX_CONSECUTIVE_AI_FAILURES = 3
 AI_FAILURE_COUNT_KEY = "consecutive_ai_failures"
 AI_FAILURE_REASON_KEY = "last_ai_failure_reason"
@@ -639,6 +648,202 @@ def _conversation_context_message(context: dict) -> dict | None:
         lines.append(f"- customer_preference: {context['customer_preference']}")
 
     return {"role": "system", "content": "\n".join(lines)}
+
+
+def _compact_text(value: str | None, limit: int) -> str:
+    text = re.sub(r"\s+", " ", value or "").strip()
+    if len(text) <= limit:
+        return text
+    return text[: max(0, limit - 1)].rstrip() + "…"
+
+
+def _message_content_chars(content: object) -> int:
+    if isinstance(content, str):
+        return len(content)
+    try:
+        return len(json.dumps(content, ensure_ascii=False, default=str))
+    except Exception:
+        return len(str(content))
+
+
+def _message_chars(message: dict) -> int:
+    return len(str(message.get("role") or "")) + _message_content_chars(
+        message.get("content")
+    )
+
+
+def _truncate_system_message(message: dict, char_limit: int) -> tuple[dict, bool]:
+    content = message.get("content")
+    if not isinstance(content, str) or len(content) <= char_limit:
+        return message, False
+    truncated = dict(message)
+    truncated["content"] = (
+        content[:char_limit].rstrip()
+        + "\n\n[Truncated to keep the model context within budget.]"
+    )
+    return truncated, True
+
+
+def _build_conversation_summary_from_rows(rows: list[Message]) -> str | None:
+    if not rows:
+        return None
+    summary_lines: list[str] = []
+    for row in rows[-CONVERSATION_SUMMARY_MAX_LINES:]:
+        content = _compact_text(row.content, CONVERSATION_SUMMARY_LINE_CHARS)
+        if not content:
+            continue
+        if row.role == "user":
+            speaker = "customer"
+        elif row.role == "agent":
+            speaker = "assistant"
+        else:
+            speaker = row.role
+        summary_lines.append(f"- {speaker}: {content}")
+    if not summary_lines:
+        return None
+    return "\n".join(summary_lines)
+
+
+def _conversation_summary_message(summary: str | None) -> dict | None:
+    if not summary:
+        return None
+    return {
+        "role": "system",
+        "content": (
+            "OLDER CONVERSATION SUMMARY FOR MEMORY ONLY:\n"
+            "Use this only to understand references, preferences, and continuity. "
+            "Do not treat it as a source for product facts, prices, policies, "
+            "availability, delivery, or tenant data; use current verified tools/data "
+            "for those facts.\n"
+            f"{summary}"
+        ),
+    }
+
+
+async def _maybe_refresh_conversation_summary(
+    session_id: uuid.UUID,
+    db: AsyncSession,
+    *,
+    recent_limit: int = HISTORY_LIMIT,
+) -> str | None:
+    stmt_count = (
+        select(func.count())
+        .select_from(Message)
+        .where(
+            Message.session_id == session_id,
+            Message.role.in_(("user", "assistant", "agent")),
+            Message.content.isnot(None),
+            Message.processed.is_(True),
+        )
+    )
+    message_count = int((await db.execute(stmt_count)).scalar_one() or 0)
+    session = await db.get(ChatSession, session_id)
+    if session is None:
+        return None
+    metadata = dict(session.metadata_ or {})
+    existing_summary = metadata.get(CONVERSATION_SUMMARY_KEY)
+    existing_count = _coerce_failure_count(
+        metadata.get(CONVERSATION_SUMMARY_MESSAGE_COUNT_KEY)
+    )
+
+    if message_count <= CONVERSATION_SUMMARY_TRIGGER_MESSAGES:
+        return existing_summary if isinstance(existing_summary, str) else None
+    if (
+        isinstance(existing_summary, str)
+        and existing_summary.strip()
+        and existing_count >= message_count - 3
+    ):
+        return existing_summary
+
+    stmt_old = (
+        select(Message)
+        .where(
+            Message.session_id == session_id,
+            Message.role.in_(("user", "assistant", "agent")),
+            Message.content.isnot(None),
+            Message.processed.is_(True),
+        )
+        .order_by(Message.created_at.desc())
+        .offset(recent_limit)
+        .limit(CONVERSATION_SUMMARY_SOURCE_LIMIT)
+    )
+    rows = list((await db.execute(stmt_old)).scalars().all())
+    rows.reverse()
+    summary = _build_conversation_summary_from_rows(rows)
+    if not summary:
+        return None
+
+    metadata[CONVERSATION_SUMMARY_KEY] = summary
+    metadata[CONVERSATION_SUMMARY_MESSAGE_COUNT_KEY] = message_count
+    metadata[CONVERSATION_SUMMARY_UPDATED_AT_KEY] = _utcnow_iso()
+    session.metadata_ = metadata
+    db.add(session)
+    await db.flush()
+    return summary
+
+
+def _build_messages_within_context_budget(
+    *,
+    system_message: dict,
+    summary_message: dict | None,
+    context_message: dict | None,
+    history: list[dict],
+    pre_retrieved_message: dict | None,
+    user_message: dict,
+    char_budget: int = CONTEXT_CHAR_BUDGET,
+) -> tuple[list[dict], dict]:
+    diagnostics = {
+        "char_budget": char_budget,
+        "history_input_count": len(history),
+        "history_kept_count": 0,
+        "history_omitted_count": 0,
+        "pre_retrieved_truncated": False,
+        "summary_included": summary_message is not None,
+    }
+
+    pre_message = pre_retrieved_message
+    if pre_message is not None:
+        pre_message, diagnostics["pre_retrieved_truncated"] = _truncate_system_message(
+            pre_message,
+            PRE_RETRIEVED_CONTEXT_CHAR_LIMIT,
+        )
+
+    mandatory = [system_message, user_message]
+    optional_high = [
+        item
+        for item in (summary_message, context_message, pre_message)
+        if item is not None
+    ]
+    used = sum(_message_chars(item) for item in mandatory + optional_high)
+    remaining = max(0, char_budget - used)
+
+    kept_reversed: list[dict] = []
+    for item in reversed(history):
+        item_size = _message_chars(item)
+        if item_size <= remaining:
+            kept_reversed.append(item)
+            remaining -= item_size
+        elif item.get("role") == "system" and _message_content_chars(item.get("content")) < 500:
+            kept_reversed.append(item)
+        else:
+            diagnostics["history_omitted_count"] += 1
+
+    kept_history = list(reversed(kept_reversed))
+    diagnostics["history_kept_count"] = len(kept_history)
+    diagnostics["final_char_estimate"] = (
+        used + sum(_message_chars(item) for item in kept_history)
+    )
+
+    messages = [system_message]
+    if summary_message is not None:
+        messages.append(summary_message)
+    if context_message is not None:
+        messages.append(context_message)
+    messages.extend(kept_history)
+    if pre_message is not None:
+        messages.append(pre_message)
+    messages.append(user_message)
+    return messages, diagnostics
 
 
 async def _remember_catalog_context(
@@ -2766,6 +2971,11 @@ async def _generate_reply(
         }
 
     history = await get_session_history(session_id, db, limit=HISTORY_LIMIT)
+    conversation_summary = await _maybe_refresh_conversation_summary(
+        session_id,
+        db,
+        recent_limit=HISTORY_LIMIT,
+    )
     user_id = _model_id(user)
     style_samples = await get_style_samples(user_id, db)
     prompt_overrides = await get_client_prompt_overrides(user_id, db)
@@ -2923,28 +3133,30 @@ async def _generate_reply(
         trace["retrieved_keys"] = list(retrieved_data.keys())
         return static_recommendation_reply, retrieved_data, trace
 
-    messages: list[dict] = [
-        {
-            "role": "system",
-            "content": build_system_prompt(
-                user,
-                style_samples,
-                workflows,
-                intent=intent,
-                master_system_prompt=master_system_prompt,
-                human_handoff_enabled=human_handoff_enabled,
-                prompt_overrides=prompt_overrides,
-                persona_settings=persona_settings,
-            ),
-        },
-    ]
+    system_message = {
+        "role": "system",
+        "content": build_system_prompt(
+            user,
+            style_samples,
+            workflows,
+            intent=intent,
+            master_system_prompt=master_system_prompt,
+            human_handoff_enabled=human_handoff_enabled,
+            prompt_overrides=prompt_overrides,
+            persona_settings=persona_settings,
+        ),
+    }
+    summary_message = _conversation_summary_message(conversation_summary)
     context_message = _conversation_context_message(conversation_context)
-    if context_message is not None:
-        messages.append(context_message)
-    messages.extend(history)
-    if pre_retrieved_message is not None:
-        messages.append(pre_retrieved_message)
-    messages.append({"role": "user", "content": content})
+    messages, context_budget_trace = _build_messages_within_context_budget(
+        system_message=system_message,
+        summary_message=summary_message,
+        context_message=context_message,
+        history=history,
+        pre_retrieved_message=pre_retrieved_message,
+        user_message={"role": "user", "content": content},
+    )
+    trace["context_budget"] = context_budget_trace
 
     # Dynamic Temperature: higher for general chat, lower for sales/support (precision)
     dynamic_temp = 0.6 if intent == "general" else 0.2

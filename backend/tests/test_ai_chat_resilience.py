@@ -25,10 +25,16 @@ from services.ai_chat import (
     AI_FAILURE_AUTO_HANDOFF_KEY,
     AI_FAILURE_COUNT_KEY,
     AI_FAILURE_REASON_KEY,
+    CONTEXT_CHAR_BUDGET,
+    CONVERSATION_SUMMARY_KEY,
+    CONVERSATION_SUMMARY_MESSAGE_COUNT_KEY,
     AI_PAUSED_REPLY,
     MAX_CONSECUTIVE_AI_FAILURES,
+    _build_messages_within_context_budget,
+    _conversation_summary_message,
     _get_cached_reply,
     _generate_reply,
+    _maybe_refresh_conversation_summary,
     _reset_ai_failure_counter,
     _run_post_ai_automations,
     _run_pre_ai_automations,
@@ -222,6 +228,66 @@ async def test_ai_failure_counter_reset_clears_metadata(db_session):
     assert AI_FAILURE_AUTO_HANDOFF_KEY not in metadata
     assert "last_ai_failure_at" not in metadata
     assert metadata["conversation_context"] == {"current_language": "en"}
+
+
+@pytest.mark.asyncio
+async def test_conversation_summary_is_stored_for_long_sessions(db_session):
+    user = _user()
+    session_id = uuid.uuid4()
+    session = ChatSession(id=session_id, user_id=user.id, channel="web")
+    db_session.add_all([user, session])
+    await db_session.flush()
+
+    for idx in range(34):
+        db_session.add(
+            Message(
+                session_id=session_id,
+                role="user" if idx % 2 == 0 else "assistant",
+                content=f"long-running context message {idx}",
+                media_type="text",
+                processed=True,
+            )
+        )
+    await db_session.flush()
+
+    summary = await _maybe_refresh_conversation_summary(session_id, db_session)
+
+    assert summary is not None
+    assert "long-running context message" in summary
+    refreshed_session = await db_session.get(ChatSession, session_id)
+    metadata = refreshed_session.metadata_
+    assert metadata[CONVERSATION_SUMMARY_KEY] == summary
+    assert metadata[CONVERSATION_SUMMARY_MESSAGE_COUNT_KEY] == 34
+
+    summary_message = _conversation_summary_message(summary)
+    assert summary_message is not None
+    assert "MEMORY ONLY" in summary_message["content"]
+    assert "Do not treat it as a source for product facts" in summary_message["content"]
+
+
+def test_context_budget_trims_old_history_and_large_pre_retrieved_data():
+    history = [
+        {"role": "user" if idx % 2 == 0 else "assistant", "content": f"{idx}-" + "h" * 700}
+        for idx in range(20)
+    ]
+    pre_retrieved = {"role": "system", "content": "p" * 15000}
+
+    messages, diagnostics = _build_messages_within_context_budget(
+        system_message={"role": "system", "content": "system rules"},
+        summary_message=_conversation_summary_message("older memory"),
+        context_message={"role": "system", "content": "current_language: English"},
+        history=history,
+        pre_retrieved_message=pre_retrieved,
+        user_message={"role": "user", "content": "current customer message"},
+        char_budget=CONTEXT_CHAR_BUDGET // 3,
+    )
+
+    assert messages[0]["role"] == "system"
+    assert messages[-1]["content"] == "current customer message"
+    assert diagnostics["pre_retrieved_truncated"] is True
+    assert diagnostics["history_omitted_count"] > 0
+    assert diagnostics["history_kept_count"] < len(history)
+    assert "[Truncated to keep the model context within budget.]" in messages[-2]["content"]
 
 
 def test_response_cache_is_disabled_by_default():
